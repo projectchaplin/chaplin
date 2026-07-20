@@ -63,7 +63,7 @@ export default function HomePage() {
             {/* Copy */}
             <div className="lg:col-span-2">
               <p className="accent-text text-xs uppercase tracking-[0.3em] mb-4 font-semibold">
-                A Casting Marketplace for AI Characters with Live Voice
+                Create. Cast. Own.
               </p>
               <h1 className="marquee-title text-5xl sm:text-6xl leading-none mb-5">
                 EVERY CHARACTER
@@ -71,8 +71,8 @@ export default function HomePage() {
                 HAS AN AUDIENCE
               </h1>
               <p className="text-sm sm:text-base text-grey mb-7 max-w-md">
-                Build characters. Cast them into stories. Let every performance
-                become the showreel for the next one.
+                Create a character once. Cast it into any story. Earn every
+                time it performs.
               </p>
               <div className="flex flex-wrap items-center gap-3 mb-5">
                 <Link

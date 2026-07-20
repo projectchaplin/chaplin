@@ -55,6 +55,16 @@ export default function CharacterProfilePage() {
               className="object-cover object-[68%_center]"
               priority
             />
+            {character.videoUrl && (
+              <video
+                src={character.videoUrl}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
             <div className="absolute inset-0 bg-gradient-to-r from-black/92 via-black/55 sm:via-black/45 to-transparent" />
             <Link
               href="/characters"
@@ -63,7 +73,7 @@ export default function CharacterProfilePage() {
               <IconArrowLeft className="w-4 h-4" />
               Shelf
             </Link>
-            <div className="absolute inset-0 flex flex-col justify-center gap-2 p-5 sm:p-8 max-w-[75%] sm:max-w-[52%]">
+            <div className="absolute inset-0 flex flex-col justify-end gap-2 p-5 sm:p-8 pt-16 max-w-[75%] sm:max-w-[52%]">
               <h1 className="reel-title text-2xl sm:text-4xl leading-tight text-ink">
                 {character.name}
               </h1>

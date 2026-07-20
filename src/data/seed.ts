@@ -42,6 +42,7 @@ type SeedCharacter = Pick<
   | "avatarHue"
   | "imageUrl"
   | "bannerUrl"
+  | "videoUrl"
   | "licenseType"
   | "royaltyRate"
   | "createdAt"
@@ -112,6 +113,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     avatarHue: 300,
     imageUrl: "/characters/c-selene-avatar.webp",
     bannerUrl: "/characters/c-selene-banner.webp",
+    videoUrl: "/characters/c-selene-video.mp4",
     licenseType: "approval",
     royaltyRate: 60,
     createdAt: "2026-05-05T08:20:00Z",
