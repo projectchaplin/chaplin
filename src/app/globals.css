@@ -4,18 +4,20 @@
   Token names kept from the earlier silent-film theme (ink/paper/line/grey/accent)
   so every existing bg-paper / text-ink / border-line / poster-card usage across
   the app repaints automatically. Values now point the other way: --paper is the
-  dark app background, --ink is the light foreground text. --accent is the solid
-  hot-pink (for borders/small text); --accent-gradient (pink to cyan) is the
-  signature look used on buttons, headings, and rings.
+  dark app background, --ink is the light foreground text. Brand palette: Blue
+  Green #07D2BE, Fuchsia #F24E70, Mint #B4F8C8, Black #0F1300. --accent is the
+  solid Fuchsia (for borders/small text); --accent-gradient (Fuchsia to Blue
+  Green) is the signature look used on buttons, headings, and rings; Mint is
+  the lighter hover tint.
 */
 :root {
   --ink: #f5f2ec;
   --ink-soft: #cfc9bd;
-  --paper: #0a0a0d;
-  --paper-dim: #17171c;
-  --accent: #ff0864;
-  --accent-light: #ff4d8f;
-  --accent-glow: rgba(255, 8, 100, 0.35);
+  --paper: #0f1300;
+  --paper-dim: #1a2110;
+  --accent: #f24e70;
+  --accent-light: #b4f8c8;
+  --accent-glow: rgba(242, 78, 112, 0.35);
   --line: rgba(255, 255, 255, 0.12);
   --grey: #a9a49a;
   --grey-light: #726d64;
@@ -23,8 +25,8 @@
   --background: var(--paper);
   --foreground: var(--ink);
 
-  --accent-1: #ff0864;
-  --accent-2: #22d3d3;
+  --accent-1: #f24e70;
+  --accent-2: #07d2be;
   --accent-gradient: linear-gradient(135deg, var(--accent-1), var(--accent-2));
 }
 
@@ -74,9 +76,9 @@ body {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(600px circle at 15% 0%, rgba(255, 8, 100, 0.16), transparent 60%),
-    radial-gradient(600px circle at 85% 10%, rgba(34, 211, 211, 0.14), transparent 60%),
-    radial-gradient(700px circle at 50% 100%, rgba(255, 8, 100, 0.06), transparent 60%);
+    radial-gradient(600px circle at 15% 0%, rgba(242, 78, 112, 0.16), transparent 60%),
+    radial-gradient(600px circle at 85% 10%, rgba(7, 210, 190, 0.14), transparent 60%),
+    radial-gradient(700px circle at 50% 100%, rgba(180, 248, 200, 0.05), transparent 60%);
 }
 
 .marquee-title {

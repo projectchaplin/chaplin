@@ -11,7 +11,7 @@ import type {
   LicenseType,
 } from "@/lib/types";
 
-const STORAGE_KEY = "chaplin:v5";
+const STORAGE_KEY = "chaplin:v6";
 
 export type NewCharacterInput = Pick<
   Character,
