@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useChaplinStore } from "@/lib/store";
 import {
@@ -35,6 +36,9 @@ export default function HomePage() {
     ? [...restChars.slice(0, 4), featured, ...restChars.slice(4)]
     : world.characters;
   const liveAvatars = world.characters.slice(0, 6);
+
+  const [activeGridId, setActiveGridId] = useState<string | null>(null);
+  const currentFeaturedId = activeGridId ?? featured?.id;
 
   const STATS = [
     { label: "Characters on the shelf", value: `${world.characters.length}` },
@@ -109,11 +113,19 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Character grid */}
+            {/* Character grid: hover (or first tap on touch) makes any tile the big one */}
             <div className="lg:col-span-3">
-              <div className="grid grid-cols-4 auto-rows-[64px] sm:auto-rows-[84px] gap-2 grid-flow-dense">
+              <div
+                className="grid grid-cols-4 auto-rows-[64px] sm:auto-rows-[84px] gap-2 grid-flow-dense"
+                onMouseLeave={() => setActiveGridId(null)}
+              >
                 {gridChars.map((c) => (
-                  <HeroGridCard key={c.id} character={c} featured={c.id === featured?.id} />
+                  <HeroGridCard
+                    key={c.id}
+                    character={c}
+                    active={c.id === currentFeaturedId}
+                    onActivate={() => setActiveGridId(c.id)}
+                  />
                 ))}
               </div>
             </div>

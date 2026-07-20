@@ -5,21 +5,35 @@ import { ARCHETYPE_LABEL, ARCHETYPE_HUE, hsl } from "@/lib/format";
 
 export default function HeroGridCard({
   character,
-  featured = false,
+  active = false,
+  onActivate,
 }: {
   character: Character;
-  featured?: boolean;
+  active?: boolean;
+  onActivate?: () => void;
 }) {
   const hue = ARCHETYPE_HUE[character.archetype];
+
+  function handleClick(e: React.MouseEvent) {
+    // First interaction (no hover on touch devices) previews instead of navigating;
+    // once this tile is already the active/expanded one, let the click go through.
+    if (!active) {
+      e.preventDefault();
+      onActivate?.();
+    }
+  }
 
   return (
     <Link
       href={`/characters/${character.id}`}
-      className={`group relative overflow-hidden rounded-lg block ${
-        featured ? "col-span-2 row-span-2" : ""
+      onMouseEnter={onActivate}
+      onFocus={onActivate}
+      onClick={handleClick}
+      className={`group relative overflow-hidden rounded-lg block transition-[grid-column,grid-row] ${
+        active ? "col-span-2 row-span-2" : ""
       }`}
       style={
-        featured
+        active
           ? { boxShadow: "0 0 0 2px var(--accent), 0 0 36px var(--accent-glow)" }
           : { boxShadow: "0 0 0 1px var(--line)" }
       }
@@ -30,7 +44,7 @@ export default function HeroGridCard({
             src={character.imageUrl}
             alt={character.name}
             fill
-            sizes={featured ? "260px" : "130px"}
+            sizes="(max-width: 640px) 150px, 260px"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
@@ -46,7 +60,7 @@ export default function HeroGridCard({
       <div className="absolute bottom-0 left-0 right-0 p-1.5 sm:p-2">
         <p
           className={`marquee-title uppercase text-ink line-clamp-2 ${
-            featured
+            active
               ? "text-lg sm:text-xl leading-tight"
               : "text-[7.5px] sm:text-[9px] leading-[1.15] tracking-tight"
           }`}
@@ -54,7 +68,7 @@ export default function HeroGridCard({
           {character.name}
         </p>
         <p
-          className={`text-ink/60 truncate ${featured ? "text-xs mt-0.5" : "text-[7px] sm:text-[8px]"}`}
+          className={`text-ink/60 truncate ${active ? "text-xs mt-0.5" : "text-[7px] sm:text-[8px]"}`}
         >
           {ARCHETYPE_LABEL[character.archetype]}
         </p>
