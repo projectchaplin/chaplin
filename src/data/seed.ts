@@ -43,6 +43,7 @@ type SeedCharacter = Pick<
   | "imageUrl"
   | "bannerUrl"
   | "videoUrl"
+  | "galleryUrls"
   | "licenseType"
   | "royaltyRate"
   | "createdAt"
@@ -114,6 +115,13 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     imageUrl: "/characters/c-selene-avatar.webp",
     bannerUrl: "/characters/c-selene-banner.webp",
     videoUrl: "/characters/c-selene-video.mp4",
+    galleryUrls: [
+      "/characters/gallery/c-selene-gallery-1.webp",
+      "/characters/gallery/c-selene-gallery-2.webp",
+      "/characters/gallery/c-selene-gallery-3.webp",
+      "/characters/gallery/c-selene-gallery-4.webp",
+      "/characters/gallery/c-selene-gallery-5.webp",
+    ],
     licenseType: "approval",
     royaltyRate: 60,
     createdAt: "2026-05-05T08:20:00Z",

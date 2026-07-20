@@ -9,6 +9,8 @@ import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
 import VoicePlayButton from "@/components/VoicePlayButton";
 import EarningsSparkline from "@/components/EarningsSparkline";
+import CharacterGallery from "@/components/CharacterGallery";
+import DeveloperAccessCard from "@/components/DeveloperAccessCard";
 import { IconArrowLeft } from "@/components/Icons";
 import {
   ARCHETYPE_HUE,
@@ -176,6 +178,10 @@ export default function CharacterProfilePage() {
             <p className="text-sm leading-relaxed">{character.personality}</p>
           </section>
 
+          {character.galleryUrls && character.galleryUrls.length > 0 && (
+            <CharacterGallery name={character.name} images={character.galleryUrls} />
+          )}
+
           <section className="poster-card rounded-md p-5 flex flex-col gap-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-grey">
               Sound profile
@@ -260,6 +266,8 @@ export default function CharacterProfilePage() {
             </h2>
             <EarningsSparkline entries={ledger} />
           </section>
+
+          <DeveloperAccessCard character={character} />
 
           <Link
             href={`/studio/write?cast=${character.id}`}

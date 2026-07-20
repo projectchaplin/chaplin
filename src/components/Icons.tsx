@@ -18,6 +18,34 @@ export function IconArrowLeft({ className }: IconProps) {
   );
 }
 
+export function IconLock({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="5" y="11" width="14" height="9" rx="1.5" />
+      <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+    </svg>
+  );
+}
+
+export function IconPlug({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M9 3v5M15 3v5M7 8h10l-1 4a5 5 0 0 1-5 4 5 5 0 0 1-5-4Z" />
+      <path d="M12 16v5" />
+    </svg>
+  );
+}
+
+export function IconDownload({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
 export function IconHome({ className }: IconProps) {
   return (
     <svg {...base} className={className}>

@@ -45,6 +45,7 @@ export interface Character {
   imageUrl?: string;
   bannerUrl?: string; // wide cast-photo with negative space, used on the profile hero
   videoUrl?: string; // looping performance clip, shown once a tile is highlighted or on the profile hero
+  galleryUrls?: string[]; // extra stills shown in a small gallery on the profile page
   licenseType: LicenseType;
   royaltyRate: number; // fee per casting, in mock currency units (0 if open)
   createdAt: string; // ISO date
