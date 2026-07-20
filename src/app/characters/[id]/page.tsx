@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useChaplinStore } from "@/lib/store";
 import { getCharacter, getUser, resumeForCharacter, ledgerForCharacter } from "@/lib/selectors";
 import Avatar from "@/components/Avatar";
@@ -46,48 +47,101 @@ export default function CharacterProfilePage() {
       </Link>
 
       {/* Casting card header */}
-      <div className="poster-card rounded-md p-6 mt-3 flex flex-col md:flex-row gap-6">
-        <span className="accent-ring shrink-0 self-start">
-          <Avatar hue={character.avatarHue} label={character.name} src={character.imageUrl} size={96} />
-        </span>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <h1 className="reel-title text-3xl">{character.name}</h1>
-            {maker && (
-              <span className="text-xs text-grey">
-                made by{" "}
-                <Link href="/studio" className="text-accent hover:underline">
-                  {maker.name}
-                </Link>
-              </span>
-            )}
+      {character.bannerUrl ? (
+        <div className="poster-card rounded-md overflow-hidden mt-3">
+          <div className="relative w-full aspect-[4/3] sm:aspect-[12/5]">
+            <Image
+              src={character.bannerUrl}
+              alt={character.name}
+              fill
+              sizes="(max-width: 768px) 100vw, 768px"
+              className="object-cover object-[68%_center]"
+              priority
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/92 via-black/55 sm:via-black/45 to-transparent" />
+            <div className="absolute inset-0 flex flex-col justify-center gap-2 p-5 sm:p-8 max-w-[75%] sm:max-w-[52%]">
+              <h1 className="reel-title text-2xl sm:text-4xl leading-tight text-ink">
+                {character.name}
+              </h1>
+              {maker && (
+                <span className="text-xs text-ink/70">
+                  made by{" "}
+                  <Link href="/studio" className="text-accent hover:underline">
+                    {maker.name}
+                  </Link>
+                </span>
+              )}
+              <p className="italic text-ink/80 text-sm sm:text-base leading-snug">
+                &ldquo;{character.tagline}&rdquo;
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
+                <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
+              </div>
+              <div className="mt-2">
+                <VoicePlayButton durationSec={4} label={`Hear ${character.name.split(" ")[0]}`} compact />
+              </div>
+            </div>
           </div>
-          <p className="italic text-grey mb-3">&ldquo;{character.tagline}&rdquo;</p>
-
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
-            <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
+          <div className="grid grid-cols-3 divide-x divide-line border-t border-line">
+            <div className="p-3 sm:p-4 text-center">
+              <p className="text-lg sm:text-xl font-semibold">{character.stats.castings}</p>
+              <p className="text-[10px] sm:text-[11px] text-grey uppercase tracking-wide">Castings</p>
+            </div>
+            <div className="p-3 sm:p-4 text-center">
+              <p className="text-lg sm:text-xl font-semibold">{compactNumber(character.stats.fans)}</p>
+              <p className="text-[10px] sm:text-[11px] text-grey uppercase tracking-wide">Fans</p>
+            </div>
+            <div className="p-3 sm:p-4 text-center">
+              <p className="text-lg sm:text-xl font-semibold text-accent">{money(character.stats.earnings)}</p>
+              <p className="text-[10px] sm:text-[11px] text-grey uppercase tracking-wide">Lifetime earnings</p>
+            </div>
           </div>
-
-          <VoicePlayButton durationSec={4} label={`Hear ${character.name.split(" ")[0]}`} />
         </div>
+      ) : (
+        <div className="poster-card rounded-md p-6 mt-3 flex flex-col md:flex-row gap-6">
+          <span className="accent-ring shrink-0 self-start">
+            <Avatar hue={character.avatarHue} label={character.name} src={character.imageUrl} size={96} />
+          </span>
 
-        <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40">
-          <div>
-            <p className="text-xl font-semibold">{character.stats.castings}</p>
-            <p className="text-[11px] text-grey uppercase tracking-wide">Castings</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h1 className="reel-title text-3xl">{character.name}</h1>
+              {maker && (
+                <span className="text-xs text-grey">
+                  made by{" "}
+                  <Link href="/studio" className="text-accent hover:underline">
+                    {maker.name}
+                  </Link>
+                </span>
+              )}
+            </div>
+            <p className="italic text-grey mb-3">&ldquo;{character.tagline}&rdquo;</p>
+
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
+              <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
+            </div>
+
+            <VoicePlayButton durationSec={4} label={`Hear ${character.name.split(" ")[0]}`} />
           </div>
-          <div>
-            <p className="text-xl font-semibold">{compactNumber(character.stats.fans)}</p>
-            <p className="text-[11px] text-grey uppercase tracking-wide">Fans</p>
-          </div>
-          <div>
-            <p className="text-xl font-semibold text-accent">{money(character.stats.earnings)}</p>
-            <p className="text-[11px] text-grey uppercase tracking-wide">Lifetime earnings</p>
+
+          <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40">
+            <div>
+              <p className="text-xl font-semibold">{character.stats.castings}</p>
+              <p className="text-[11px] text-grey uppercase tracking-wide">Castings</p>
+            </div>
+            <div>
+              <p className="text-xl font-semibold">{compactNumber(character.stats.fans)}</p>
+              <p className="text-[11px] text-grey uppercase tracking-wide">Fans</p>
+            </div>
+            <div>
+              <p className="text-xl font-semibold text-accent">{money(character.stats.earnings)}</p>
+              <p className="text-[11px] text-grey uppercase tracking-wide">Lifetime earnings</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         {/* Left: personality, voice, license terms */}
