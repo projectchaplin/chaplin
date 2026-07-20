@@ -57,7 +57,7 @@ export default function HomePage() {
               <h1 className="marquee-title text-5xl sm:text-6xl leading-none mb-5">
                 EVERY CHARACTER
                 <br />
-                HAS A CAREER
+                HAS AN AUDIENCE
               </h1>
               <p className="text-sm sm:text-base text-grey mb-7 max-w-md">
                 Build characters. Cast them into stories. Let every performance

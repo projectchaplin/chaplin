@@ -5,10 +5,11 @@
   so every existing bg-paper / text-ink / border-line / poster-card usage across
   the app repaints automatically. Values now point the other way: --paper is the
   dark app background, --ink is the light foreground text. Brand palette: Blue
-  Green #07D2BE, Fuchsia #F24E70, Mint #B4F8C8, Black #0F1300. --accent is the
-  solid Fuchsia (for borders/small text); --accent-gradient (Fuchsia to Blue
-  Green) is the signature look used on buttons, headings, and rings; Mint is
-  the lighter hover tint.
+  Green #07D2BE, Fuchsia #F24E70, Mint #B4F8C8, Black #0F1300. Solid Fuchsia
+  (--accent) does the heavy lifting: buttons, active states, highlighted text.
+  The gradient (--accent-gradient, Fuchsia to Blue Green) is reserved for a
+  couple of deliberate decorative spots only (avatar rings, the logo rule),
+  not blended in everywhere. --accent-light (Mint) is the hover tint.
 */
 :root {
   --ink: #f5f2ec;
@@ -16,18 +17,16 @@
   --paper: #0f1300;
   --paper-dim: #1a2110;
   --accent: #f24e70;
+  --accent-secondary: #07d2be;
   --accent-light: #b4f8c8;
   --accent-glow: rgba(242, 78, 112, 0.35);
+  --accent-gradient: linear-gradient(135deg, var(--accent), var(--accent-secondary));
   --line: rgba(255, 255, 255, 0.12);
   --grey: #a9a49a;
   --grey-light: #726d64;
 
   --background: var(--paper);
   --foreground: var(--ink);
-
-  --accent-1: #f24e70;
-  --accent-2: #07d2be;
-  --accent-gradient: linear-gradient(135deg, var(--accent-1), var(--accent-2));
 }
 
 @theme inline {
@@ -36,6 +35,7 @@
   --color-paper: var(--paper);
   --color-paper-dim: var(--paper-dim);
   --color-accent: var(--accent);
+  --color-accent-secondary: var(--accent-secondary);
   --color-accent-light: var(--accent-light);
   --color-line: var(--line);
   --color-grey: var(--grey);
@@ -113,10 +113,7 @@ body {
 }
 
 .accent-text {
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 
 .accent-ring {
@@ -132,7 +129,7 @@ body {
 }
 
 .accent-btn {
-  background: var(--accent-gradient);
+  background: var(--accent);
   color: #fff;
 }
 

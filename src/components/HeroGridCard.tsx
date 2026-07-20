@@ -43,15 +43,19 @@ export default function HeroGridCard({
         )}
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-2">
+      <div className="absolute bottom-0 left-0 right-0 p-1.5 sm:p-2">
         <p
-          className={`marquee-title uppercase leading-tight text-ink truncate ${
-            featured ? "text-lg sm:text-xl" : "text-[10px] sm:text-[11px]"
+          className={`marquee-title uppercase text-ink line-clamp-2 ${
+            featured
+              ? "text-lg sm:text-xl leading-tight"
+              : "text-[7.5px] sm:text-[9px] leading-[1.15] tracking-tight"
           }`}
         >
           {character.name}
         </p>
-        <p className={`text-ink/60 truncate ${featured ? "text-xs" : "text-[9px]"}`}>
+        <p
+          className={`text-ink/60 truncate ${featured ? "text-xs mt-0.5" : "text-[7px] sm:text-[8px]"}`}
+        >
           {ARCHETYPE_LABEL[character.archetype]}
         </p>
       </div>

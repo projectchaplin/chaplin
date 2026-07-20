@@ -269,6 +269,7 @@ const SEED_STORIES: Omit<Story, "views">[] = [
     title: "The Vault of Rukmini Thakur",
     logline: "A master thief's last job goes sideways when her own crew starts asking questions.",
     coverHue: 340,
+    posterUrl: "/posters/s-vault-01.webp",
     createdAt: "2026-05-15T09:00:00Z",
     scenes: [
       scene("s-vault-1", "A rain-slicked rooftop above the Chandni Chowk jewellers", [
@@ -289,6 +290,7 @@ const SEED_STORIES: Omit<Story, "views">[] = [
     title: "Chai With the Haveli Echo",
     logline: "An old locksmith accepts an invitation he should have refused.",
     coverHue: 260,
+    posterUrl: "/posters/s-tea-01.webp",
     createdAt: "2026-05-16T11:30:00Z",
     scenes: [
       scene("s-tea-1", "A haveli sitting room lined with mirrors", [
@@ -308,6 +310,7 @@ const SEED_STORIES: Omit<Story, "views">[] = [
     title: "Meher's Last Reel",
     logline: "A jewel thief's final score is a debt owed to a man she never should have trusted.",
     coverHue: 300,
+    posterUrl: "/posters/s-lastreel-01.webp",
     createdAt: "2026-05-17T14:15:00Z",
     scenes: [
       scene("s-lastreel-1", "A moonlit haveli courtyard, empty but for two", [
@@ -327,6 +330,7 @@ const SEED_STORIES: Omit<Story, "views">[] = [
     title: "Malti Amma and Rani Chauhan",
     logline: "A deserter and a mithai-shop owner discover the same guild wronged them both.",
     coverHue: 45,
+    posterUrl: "/posters/s-vosksable-01.webp",
     createdAt: "2026-05-18T10:45:00Z",
     scenes: [
       scene("s-vosksable-1", "A mithai shop kitchen, besan and firelight", [

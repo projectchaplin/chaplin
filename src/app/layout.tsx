@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Poppins, Playfair_Display, Inter } from "next/font/google";
+import "lenis/dist/lenis.css";
 import "./globals.css";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
+import SmoothScroll from "@/components/SmoothScroll";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -38,6 +40,7 @@ export default function RootLayout({
       className={`${poppins.variable} ${playfair.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-paper text-ink">
+        <SmoothScroll />
         <div className="ambient-glow" />
         <div className="grain" />
         <Header />
@@ -47,7 +50,7 @@ export default function RootLayout({
             <span className="marquee-title text-sm tracking-widest text-ink">
               PROJECT CHAPLIN
             </span>
-            <span>A casting marketplace for AI characters. Every performer has a career.</span>
+            <span>A casting marketplace for AI characters. Every performer has an audience.</span>
           </div>
         </footer>
         <BottomNav />

@@ -30,7 +30,7 @@ export default function BottomNav() {
                 className="flex items-center justify-center w-9 h-9 rounded-full transition-all"
                 style={
                   active
-                    ? { background: "var(--accent-gradient)" }
+                    ? { background: "var(--accent)" }
                     : { background: "transparent" }
                 }
               >
