@@ -19,7 +19,7 @@ export default function CharacterCard({
       href={`/characters/${character.id}`}
       className="group poster-card rounded-md overflow-hidden flex flex-col h-full"
     >
-      <div className="relative aspect-[4/3] shrink-0 overflow-hidden">
+      <div className="relative aspect-[6/5] shrink-0 overflow-hidden">
         {image ? (
           <Image
             src={image}
