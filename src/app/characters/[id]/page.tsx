@@ -45,6 +45,14 @@ export default function CharacterProfilePage() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-10 w-full">
+      <Link
+        href="/characters"
+        className="inline-flex items-center gap-1.5 pl-2.5 pr-4 py-2 rounded-full poster-card text-sm font-semibold hover:text-accent transition-colors mb-3"
+      >
+        <IconArrowLeft className="w-4 h-4" />
+        Shelf
+      </Link>
+
       {/* Casting card header */}
       {character.bannerUrl ? (
         <div className="poster-card rounded-md overflow-hidden">
@@ -68,14 +76,7 @@ export default function CharacterProfilePage() {
               />
             )}
             <div className="absolute inset-0 bg-gradient-to-r from-black/92 via-black/55 sm:via-black/45 to-transparent" />
-            <Link
-              href="/characters"
-              className="absolute top-4 left-4 z-20 inline-flex items-center gap-1.5 pl-2.5 pr-4 py-2 rounded-full bg-black/55 backdrop-blur-md border border-white/20 text-ink text-sm font-semibold hover:bg-black/75 hover:border-white/40 transition-colors"
-            >
-              <IconArrowLeft className="w-4 h-4" />
-              Shelf
-            </Link>
-            <div className="absolute inset-0 flex flex-col justify-end gap-2 p-5 sm:p-8 pt-16 max-w-[75%] sm:max-w-[52%]">
+            <div className="absolute inset-0 flex flex-col justify-end gap-2 p-5 sm:p-8 max-w-[75%] sm:max-w-[52%]">
               <h1 className="reel-title text-2xl sm:text-4xl leading-tight text-ink">
                 {character.name}
               </h1>
@@ -115,57 +116,48 @@ export default function CharacterProfilePage() {
           </div>
         </div>
       ) : (
-        <>
-          <Link
-            href="/characters"
-            className="inline-flex items-center gap-1.5 pl-2.5 pr-4 py-2 rounded-full poster-card text-sm font-semibold hover:text-accent transition-colors mb-3"
-          >
-            <IconArrowLeft className="w-4 h-4" />
-            Shelf
-          </Link>
-          <div className="poster-card rounded-md p-6 flex flex-col md:flex-row gap-6">
-            <span className="accent-ring shrink-0 self-start">
-              <Avatar hue={character.avatarHue} label={character.name} src={character.imageUrl} size={96} />
-            </span>
+        <div className="poster-card rounded-md p-6 flex flex-col md:flex-row gap-6">
+          <span className="accent-ring shrink-0 self-start">
+            <Avatar hue={character.avatarHue} label={character.name} src={character.imageUrl} size={96} />
+          </span>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h1 className="reel-title text-3xl">{character.name}</h1>
-                {maker && (
-                  <span className="text-xs text-grey">
-                    made by{" "}
-                    <Link href="/studio" className="text-accent hover:underline">
-                      {maker.name}
-                    </Link>
-                  </span>
-                )}
-              </div>
-              <p className="italic text-grey mb-3">&ldquo;{character.tagline}&rdquo;</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h1 className="reel-title text-3xl">{character.name}</h1>
+              {maker && (
+                <span className="text-xs text-grey">
+                  made by{" "}
+                  <Link href="/studio" className="text-accent hover:underline">
+                    {maker.name}
+                  </Link>
+                </span>
+              )}
+            </div>
+            <p className="italic text-grey mb-3">&ldquo;{character.tagline}&rdquo;</p>
 
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
-                <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
-              </div>
-
-              <VoicePlayButton durationSec={4} label={`Hear ${character.name.split(" ")[0]}`} />
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
+              <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
             </div>
 
-            <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40">
-              <div>
-                <p className="text-xl font-semibold">{character.stats.castings}</p>
-                <p className="text-[11px] text-grey uppercase tracking-wide">Castings</p>
-              </div>
-              <div>
-                <p className="text-xl font-semibold">{compactNumber(character.stats.fans)}</p>
-                <p className="text-[11px] text-grey uppercase tracking-wide">Fans</p>
-              </div>
-              <div>
-                <p className="text-xl font-semibold text-accent">{money(character.stats.earnings)}</p>
-                <p className="text-[11px] text-grey uppercase tracking-wide">Lifetime earnings</p>
-              </div>
+            <VoicePlayButton durationSec={4} label={`Hear ${character.name.split(" ")[0]}`} />
+          </div>
+
+          <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40">
+            <div>
+              <p className="text-xl font-semibold">{character.stats.castings}</p>
+              <p className="text-[11px] text-grey uppercase tracking-wide">Castings</p>
+            </div>
+            <div>
+              <p className="text-xl font-semibold">{compactNumber(character.stats.fans)}</p>
+              <p className="text-[11px] text-grey uppercase tracking-wide">Fans</p>
+            </div>
+            <div>
+              <p className="text-xl font-semibold text-accent">{money(character.stats.earnings)}</p>
+              <p className="text-[11px] text-grey uppercase tracking-wide">Lifetime earnings</p>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
