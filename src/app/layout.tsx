@@ -50,7 +50,7 @@ export default function RootLayout({
             <span className="marquee-title text-sm tracking-widest text-ink">
               PROJECT CHAPLIN
             </span>
-            <span>A casting marketplace for AI characters. Every performer has an audience.</span>
+            <span>A casting marketplace for AI characters. Every character, every audience.</span>
           </div>
         </footer>
         <BottomNav />

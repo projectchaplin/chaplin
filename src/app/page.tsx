@@ -68,7 +68,7 @@ export default function HomePage() {
               <h1 className="marquee-title text-5xl sm:text-6xl leading-none mb-5">
                 EVERY CHARACTER
                 <br />
-                HAS AN AUDIENCE
+                EVERY AUDIENCE
               </h1>
               <p className="text-sm sm:text-base text-grey mb-7 max-w-md">
                 Create a character once. Cast it into any story. Earn every
