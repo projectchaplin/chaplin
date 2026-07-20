@@ -15,9 +15,13 @@ export default function HeroGridCard({
   const hue = ARCHETYPE_HUE[character.archetype];
 
   function handleClick(e: React.MouseEvent) {
-    // First interaction (no hover on touch devices) previews instead of navigating;
-    // once this tile is already the active/expanded one, let the click go through.
-    if (!active) {
+    // Devices with real hover (mouse/trackpad) always navigate on click, since
+    // hovering already previewed the tile. Touch-only devices never fire our
+    // onMouseEnter, so there a first tap should preview instead of navigating,
+    // and only a second tap (on the now-active tile) goes through.
+    const canHover =
+      typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
+    if (!canHover && !active) {
       e.preventDefault();
       onActivate?.();
     }

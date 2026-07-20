@@ -40,6 +40,13 @@ export default function HomePage() {
   const [activeGridId, setActiveGridId] = useState<string | null>(null);
   const currentFeaturedId = activeGridId ?? featured?.id;
 
+  // The featured tile eats 4 cells (2x2) instead of 1, so a 4-column grid can
+  // land short of a full row. Fill the remainder with CTA tiles instead of
+  // leaving a gap.
+  const gridColumns = 4;
+  const occupiedCells = gridChars.length + 3; // +3 because the featured tile costs 4, not 1
+  const fillerCount = (gridColumns - (occupiedCells % gridColumns)) % gridColumns;
+
   const STATS = [
     { label: "Characters on the shelf", value: `${world.characters.length}` },
     { label: "Stories performed", value: `${world.stories.length}` },
@@ -126,6 +133,18 @@ export default function HomePage() {
                     active={c.id === currentFeaturedId}
                     onActivate={() => setActiveGridId(c.id)}
                   />
+                ))}
+                {Array.from({ length: fillerCount }).map((_, i) => (
+                  <Link
+                    key={`filler-${i}`}
+                    href="/characters/new"
+                    className="rounded-lg border border-dashed border-line flex flex-col items-center justify-center gap-1 text-grey hover:border-accent hover:text-accent transition-colors p-2 text-center"
+                  >
+                    <span className="text-lg leading-none">+</span>
+                    <span className="text-[8px] sm:text-[9px] leading-tight">
+                      Create a Character
+                    </span>
+                  </Link>
                 ))}
               </div>
             </div>
