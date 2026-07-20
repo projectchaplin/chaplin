@@ -9,6 +9,15 @@ const base = {
   strokeLinejoin: "round" as const,
 };
 
+export function IconArrowLeft({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M19 12H5" />
+      <path d="M11 18 5 12l6-6" />
+    </svg>
+  );
+}
+
 export function IconHome({ className }: IconProps) {
   return (
     <svg {...base} className={className}>

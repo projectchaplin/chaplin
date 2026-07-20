@@ -123,7 +123,7 @@ export default function HomePage() {
             {/* Character grid: hover (or first tap on touch) makes any tile the big one */}
             <div className="lg:col-span-3">
               <div
-                className="grid grid-cols-4 auto-rows-[70px] sm:auto-rows-[92px] gap-2 grid-flow-dense"
+                className="grid grid-cols-4 auto-rows-[76px] sm:auto-rows-[92px] lg:auto-rows-[112px] gap-2 grid-flow-dense"
                 onMouseLeave={() => setActiveGridId(null)}
               >
                 {gridChars.map((c) => (
