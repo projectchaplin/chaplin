@@ -34,19 +34,20 @@ export default function HeroGridCard({
     <motion.div
       layout
       transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative overflow-hidden rounded-lg ${active ? "col-span-2 row-span-2" : ""}`}
+      className={`relative rounded-lg ${active ? "col-span-2 row-span-2" : ""}`}
       style={
         active
-          ? { boxShadow: "0 0 0 2px var(--accent), 0 0 36px var(--accent-glow)" }
+          ? { boxShadow: "0 0 36px var(--accent-secondary-glow)" }
           : { boxShadow: "0 0 0 1px var(--line)" }
       }
     >
+      {active && <span className="hero-active-border" aria-hidden />}
       <Link
         href={`/characters/${character.id}`}
         onMouseEnter={onActivate}
         onFocus={onActivate}
         onClick={handleClick}
-        className="group absolute inset-0 block"
+        className="group absolute inset-0 block overflow-hidden rounded-lg"
       >
         <div className="absolute inset-0">
           {character.imageUrl ? (
