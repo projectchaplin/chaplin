@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 export default function Carousel({ children }: { children: React.ReactNode }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const drag = useRef({ isDown: false, startX: 0, startScroll: 0, moved: false });
 
   function scrollByAmount(dir: 1 | -1) {
     const el = trackRef.current;
@@ -12,11 +13,51 @@ export default function Carousel({ children }: { children: React.ReactNode }) {
     el.scrollBy({ left: dir * amount, behavior: "smooth" });
   }
 
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+
+    function onPointerDown(e: PointerEvent) {
+      if (e.pointerType === "touch") return; // native touch scroll already works
+      drag.current.isDown = true;
+      drag.current.moved = false;
+      drag.current.startX = e.clientX;
+      drag.current.startScroll = el!.scrollLeft;
+    }
+    function onPointerMove(e: PointerEvent) {
+      if (!drag.current.isDown) return;
+      const dx = e.clientX - drag.current.startX;
+      if (Math.abs(dx) > 4) drag.current.moved = true;
+      el!.scrollLeft = drag.current.startScroll - dx;
+    }
+    function endDrag() {
+      drag.current.isDown = false;
+    }
+    function onClickCapture(e: MouseEvent) {
+      if (drag.current.moved) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+
+    el.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", endDrag);
+    el.addEventListener("click", onClickCapture, true);
+
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", endDrag);
+      el.removeEventListener("click", onClickCapture, true);
+    };
+  }, []);
+
   return (
     <div className="relative group/carousel">
       <div
         ref={trackRef}
-        className="flex gap-3 sm:gap-4 overflow-x-auto scroll-smooth snap-x snap-mandatory no-scrollbar pb-2 -mx-1 px-1"
+        className="flex gap-3 sm:gap-4 overflow-x-auto scroll-smooth snap-x snap-mandatory no-scrollbar pb-2 -mx-1 px-1 cursor-grab active:cursor-grabbing select-none"
       >
         {children}
       </div>

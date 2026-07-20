@@ -350,7 +350,7 @@ const SEED_STORIES: Omit<Story, "views">[] = [
     title: "The Second Audition",
     logline: "Rukmini Thakur takes a job in a very different kind of story, and it still isn't clean.",
     coverHue: 340,
-    backdropUrl: "/unsplash/c-vesper-v2-0xhgaixfcmc.webp",
+    posterUrl: "/posters/s-audition-01.webp",
     createdAt: "2026-05-20T09:20:00Z",
     scenes: [
       scene("s-audition-1", "A Chor Bazaar pawnshop that only opens after midnight", [
