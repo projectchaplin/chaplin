@@ -63,7 +63,7 @@ export default function HomePage() {
             {/* Copy */}
             <div className="lg:col-span-2">
               <p className="accent-text text-xs uppercase tracking-[0.3em] mb-4 font-semibold">
-                A Casting Marketplace for AI Characters
+                A Casting Marketplace for AI Characters with Live Voice
               </p>
               <h1 className="marquee-title text-5xl sm:text-6xl leading-none mb-5">
                 EVERY CHARACTER
