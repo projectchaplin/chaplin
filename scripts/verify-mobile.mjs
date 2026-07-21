@@ -194,6 +194,25 @@ async function main() {
     await cdp.navigate(`${baseUrl}/`);
     const caster = await pageState(cdp, ["CASTING FOR", "AI ACTORS", "Browse AI Characters", "Create a Casting"]);
     checks.push(result("Caster homepage at 390px", caster.required && !caster.overflow, pageDetail(caster)));
+    let homeBroll = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      homeBroll = await cdp.evaluate(`(() => {
+        const reel = document.querySelector("[data-home-broll]");
+        const activeCard = reel?.closest("div.relative");
+        const video = activeCard?.querySelector("video");
+        return reel ? {
+          videoSource: video?.currentSrc || video?.src || null,
+          soundControl: Boolean(reel.querySelector('button[aria-label*="B-roll with sound"]')),
+        } : null;
+      })()`);
+      if (homeBroll?.videoSource?.startsWith("https://")) break;
+      await sleep(250);
+    }
+    checks.push(result(
+      "Homepage uses persisted B-roll",
+      homeBroll?.videoSource?.startsWith("https://"),
+      homeBroll?.videoSource ? "active tile playing Supabase CDN video" : "active tile has no persisted video"
+    ));
 
     const makerClicked = await cdp.evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find((item) => item.innerText.includes("MAKER"));
