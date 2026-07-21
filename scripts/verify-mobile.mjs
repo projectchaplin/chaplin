@@ -253,7 +253,7 @@ async function main() {
       return true;
     })()`);
     await sleep(500);
-    const brand = await pageState(cdp, ["CHOOSE AN AI ACTOR", "FOR YOUR NEXT AD OR REEL", "Browse Brand-Ready AI Actors", "Create an Ad or Reel"]);
+    const brand = await pageState(cdp, ["AI ACTORS FOR", "YOUR NEXT AD OR REEL", "Browse Brand-Ready AI Actors", "Create an Ad or Reel"]);
     checks.push(result("Brand homepage at 390px", brandClicked && brand.required && !brand.overflow, pageDetail(brand)));
 
     const makerClicked = await cdp.evaluate(`(() => {

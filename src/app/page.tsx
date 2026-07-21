@@ -47,9 +47,9 @@ export default function HomePage() {
         eyebrow: "AI actors for campaigns.",
         heading: (
           <>
-            CHOOSE AN AI ACTOR
+            AI ACTORS FOR
             <br />
-            FOR YOUR NEXT AD OR REEL
+            YOUR NEXT AD OR REEL
           </>
         ),
         description:
