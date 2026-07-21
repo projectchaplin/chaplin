@@ -19,11 +19,13 @@ async function mediaCheck(name, asset, expectedType) {
 }
 
 async function main() {
-  const [adminResponse, stateResponse] = await Promise.all([
+  const [adminResponse, logsResponse, stateResponse] = await Promise.all([
     fetch(`${baseUrl}/admin`),
+    fetch(`${baseUrl}/admin/logs`),
     fetch(`${baseUrl}/api/generate?characterId=${encodeURIComponent(characterId)}`),
   ]);
   const adminHtml = await adminResponse.text();
+  const logsHtml = await logsResponse.text();
   if (!stateResponse.ok) throw new Error(`Production state returned ${stateResponse.status}`);
   const state = await stateResponse.json();
   const assets = state.production?.assets ?? [];
@@ -34,8 +36,8 @@ async function main() {
   const results = [
     check("Admin control room", adminResponse.ok && adminHtml.includes("ADMIN CONTROL ROOM"), `${adminResponse.status}`),
     check(
-      "Admin cost ledger",
-      adminHtml.includes("Generation spend") && adminHtml.includes("Complete history") && adminHtml.includes("Provider credits"),
+      "Dedicated admin logs",
+      adminHtml.includes("Open complete logs") && logsResponse.ok && logsHtml.includes("GENERATION LOGS") && logsHtml.includes("Complete history") && logsHtml.includes("Provider credits"),
       "USD · INR · normalized tokens · provider usage"
     ),
     check("Supabase connection", state.database, state.database ? "configured" : "missing"),

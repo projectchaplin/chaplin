@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconHome, IconMask, IconFilm, IconBriefcase, IconTrophy } from "@/components/Icons";
+import { IconHome, IconMask, IconFilm, IconBriefcase, IconReceipt, IconTrophy } from "@/components/Icons";
 import { useChaplinStore } from "@/lib/store";
 import type { AppRole } from "@/lib/types";
 
@@ -23,10 +23,10 @@ const TABS: Record<AppRole, Array<{ href: string; label: string; Icon: typeof Ic
   ],
   admin: [
     { href: "/admin", label: "Admin", Icon: IconBriefcase },
+    { href: "/admin/logs", label: "Logs", Icon: IconReceipt },
     { href: "/characters", label: "Actors", Icon: IconMask },
     { href: "/stories", label: "Stories", Icon: IconFilm },
     { href: "/studio", label: "Studio", Icon: IconHome },
-    { href: "/ledger", label: "Ledger", Icon: IconTrophy },
   ],
 };
 
@@ -38,7 +38,9 @@ export default function BottomNav() {
     <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-line bg-paper/80 backdrop-blur-xl">
       <div className="max-w-md mx-auto flex items-stretch justify-around px-2">
         {TABS[activeRole].map(({ href, label, Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = href === "/" || href === "/admin"
+            ? pathname === href
+            : pathname.startsWith(href);
           return (
             <Link
               key={href}

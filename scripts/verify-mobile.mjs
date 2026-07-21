@@ -311,13 +311,13 @@ async function main() {
       url: baseUrl,
       path: "/",
     });
-    await cdp.navigate(`${baseUrl}/admin`);
-    const admin = await pageState(cdp, ["ADMIN CONTROL ROOM", "Generation spend", "Recent generation activity", "seedance-1-5-pro-251215"]);
+    await cdp.navigate(`${baseUrl}/admin/logs`);
+    const admin = await pageState(cdp, ["GENERATION LOGS", "Complete history", "seedance-1-5-pro-251215"]);
     const adminHasSuccessfulSeedance = await cdp.evaluate(`(() => {
       const text = document.body.innerText.toLowerCase();
       return text.includes("seedance-1-5-pro-251215") && text.includes("succeeded");
     })()`);
-    checks.push(result("Admin Seedance log at 390px", admin.required && adminHasSuccessfulSeedance && !admin.overflow, pageDetail(admin)));
+    checks.push(result("Dedicated admin logs at 390px", admin.required && adminHasSuccessfulSeedance && !admin.overflow, pageDetail(admin)));
 
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 1440,
