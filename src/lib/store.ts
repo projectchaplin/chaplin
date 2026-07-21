@@ -31,12 +31,17 @@ export type NewCharacterInput = Pick<
 
 export interface NewSceneInput {
   setting: string;
+  objective?: string;
+  action?: string;
   lines: Array<{ characterId: string; text: string }>;
 }
 
 export interface NewStoryInput {
   title: string;
   logline: string;
+  format?: "story" | "ad" | "reel";
+  durationSeconds?: number;
+  creativeDirection?: string;
   authorId: string;
   coverHue: number;
   castCharacterIds: string[];
@@ -151,6 +156,8 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
     const scenes = input.scenes.map((sc, si) => ({
       id: `${storyId}-sc${si}`,
       setting: sc.setting,
+      objective: sc.objective,
+      action: sc.action,
       lines: sc.lines.map((ln, li) => ({
         id: `${storyId}-sc${si}-l${li}`,
         characterId: ln.characterId,
@@ -167,6 +174,9 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       authorId: input.authorId,
       title: input.title,
       logline: input.logline,
+      format: input.format,
+      durationSeconds: input.durationSeconds,
+      creativeDirection: input.creativeDirection,
       coverHue: input.coverHue,
       createdAt: timestamp,
       scenes,

@@ -80,3 +80,22 @@ dollar amount, so both are configurable and labeled as estimates in the UI.
   five-second 720p video with synchronized audio.
 
 Open `/characters/c-selene` to use the first configured pipeline for Meher Qureshi.
+
+## Claude Magic Writer
+
+The writing room at `/studio/write` can expand a short brief into a complete,
+editable story, ad, or reel: title, logline, cast, creative direction, scene
+objectives, visible action, and character-specific dialogue. The API key stays
+server-side behind `/api/write/magic`.
+
+Add these values to `.env.local` in the project root, and to the matching Vercel
+environment when deployed:
+
+```bash
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-sonnet-4-6
+```
+
+`ANTHROPIC_MODEL` is optional. When no Claude key is configured, Magic Writer
+uses its built-in structured draft engine so the button remains usable during
+setup.

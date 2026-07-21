@@ -53,6 +53,11 @@ export default function StoryPlayerPage() {
           </p>
           <h1 className="reel-title text-3xl sm:text-4xl mb-2">{story.title}</h1>
           <p className="text-grey text-sm mb-2">{story.logline}</p>
+          {(story.format || story.durationSeconds) && (
+            <p className="text-[10px] uppercase tracking-[0.16em] text-accent mb-2">
+              {story.format ?? "story"}{story.durationSeconds ? ` · ${story.durationSeconds} sec` : ""}
+            </p>
+          )}
           <p className="text-xs text-grey">
             Written by{" "}
             {author ? (
@@ -86,6 +91,13 @@ export default function StoryPlayerPage() {
         </div>
       </div>
 
+      {story.creativeDirection && (
+        <section className="poster-card rounded-md p-5 mb-8">
+          <p className="text-[10px] uppercase tracking-[0.15em] text-grey mb-1">Creative direction</p>
+          <p className="text-sm leading-relaxed">{story.creativeDirection}</p>
+        </section>
+      )}
+
       {/* Scenes */}
       <div className="flex flex-col gap-8">
         {story.scenes.map((scene, si) => (
@@ -96,6 +108,23 @@ export default function StoryPlayerPage() {
                 Scene {si + 1} · {scene.setting}
               </p>
             </div>
+
+            {(scene.objective || scene.action) && (
+              <div className="poster-card rounded-md p-4 mb-4 grid gap-3 sm:grid-cols-2">
+                {scene.objective && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-grey mb-1">Objective</p>
+                    <p className="text-xs leading-relaxed">{scene.objective}</p>
+                  </div>
+                )}
+                {scene.action && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-grey mb-1">Visible action</p>
+                    <p className="text-xs leading-relaxed">{scene.action}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-4">
               {scene.lines.map((line) => {

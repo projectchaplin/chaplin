@@ -435,6 +435,40 @@ async function main() {
       url: baseUrl,
       path: "/",
     });
+    await cdp.navigate(`${baseUrl}/studio/write?format=ad&cast=c-bramble`);
+    const writingRoom = await pageState(cdp, ["AI WRITING ROOM", "Magic Writer", "Magic: write everything"]);
+    const magicStarted = await cdp.evaluate(`(() => {
+      const adMode = document.querySelector('[data-writing-format="ad"]');
+      const button = document.querySelector('[data-action="magic-script"]');
+      if (!button || adMode?.getAttribute("aria-pressed") !== "true") return false;
+      button.click();
+      return true;
+    })()`);
+    let magicDraft = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      magicDraft = await cdp.evaluate(`(() => {
+        const settings = [...document.querySelectorAll("[data-scene-setting]")].map((field) => field.value);
+        const objectives = [...document.querySelectorAll("[data-scene-objective]")].map((field) => field.value);
+        const actions = [...document.querySelectorAll("[data-scene-action]")].map((field) => field.value);
+        return { settings, objectives, actions, text: document.body.innerText };
+      })()`);
+      if (magicDraft?.objectives?.some(Boolean) && magicDraft?.actions?.some(Boolean)) break;
+      await sleep(250);
+    }
+    const magicReady = magicStarted &&
+      magicDraft?.settings?.length >= 3 &&
+      magicDraft.settings.every((setting) => /^(INT|EXT)\./.test(setting)) &&
+      magicDraft.objectives.every(Boolean) &&
+      magicDraft.actions.every(Boolean) &&
+      magicDraft.text.includes("Publish the ad");
+    checks.push(result(
+      "Magic ad script autofill",
+      writingRoom.required && !writingRoom.overflow && magicReady,
+      magicReady
+        ? `${pageDetail(writingRoom)} · ${magicDraft.settings.length} shootable scenes · objectives · visible action · dialogue`
+        : `${pageDetail(writingRoom)} · Magic Writer did not complete the ad draft`
+    ));
+
     await cdp.navigate(`${baseUrl}/admin/logs`);
     const admin = await pageState(cdp, ["GENERATION LOGS", "Complete history", "seedance-1-5-pro-251215"]);
     const adminHasSuccessfulSeedance = await cdp.evaluate(`(() => {

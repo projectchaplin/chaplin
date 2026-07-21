@@ -75,6 +75,8 @@ export interface Line {
 export interface Scene {
   id: string;
   setting: string;
+  objective?: string;
+  action?: string;
   lines: Line[];
 }
 
@@ -83,6 +85,9 @@ export interface Story {
   authorId: string;
   title: string;
   logline: string;
+  format?: "story" | "ad" | "reel";
+  durationSeconds?: number;
+  creativeDirection?: string;
   coverHue: number; // fallback gradient when backdropUrl is unset
   backdropUrl?: string;
   posterUrl?: string; // finished portrait poster art (title baked in) shown on the story page
