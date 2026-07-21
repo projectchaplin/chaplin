@@ -3,20 +3,25 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { Character } from "@/lib/types";
+import { IconFilm, IconMicrophone, IconMusic, IconWaveform } from "@/components/Icons";
 
 type BrollState = {
   latestVideoUrl: string | null;
   latestDialogueUrl: string | null;
+  latestSfxUrl: string | null;
   latestThemeUrl: string | null;
 };
+
+type AudioMode = "scene" | "voice" | "sfx" | "theme";
 
 export default function CharacterBroll({ character }: { character: Character }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const dialogueRef = useRef<HTMLAudioElement | null>(null);
+  const sfxRef = useRef<HTMLAudioElement | null>(null);
   const themeRef = useRef<HTMLAudioElement | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [production, setProduction] = useState<BrollState | null>(null);
-  const [playingWithSound, setPlayingWithSound] = useState(false);
+  const [playingMode, setPlayingMode] = useState<AudioMode | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +56,7 @@ export default function CharacterBroll({ character }: { character: Character }) 
 
   const videoSource = production?.latestVideoUrl ?? character.videoUrl ?? null;
   const dialogueSource = production?.latestDialogueUrl ?? null;
+  const sfxSource = production?.latestSfxUrl ?? null;
   const themeSource = production?.latestThemeUrl ?? null;
   const posterSource = character.bannerUrl ?? character.imageUrl ?? null;
   const hasSound = Boolean(dialogueSource || themeSource);
@@ -58,16 +64,19 @@ export default function CharacterBroll({ character }: { character: Character }) 
   function stopSound() {
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     dialogueRef.current?.pause();
+    sfxRef.current?.pause();
     themeRef.current?.pause();
     if (videoRef.current) videoRef.current.muted = true;
-    setPlayingWithSound(false);
+    setPlayingMode(null);
   }
 
   async function playBroll() {
-    if (playingWithSound) {
+    if (playingMode === "scene") {
       stopSound();
       return;
     }
+
+    stopSound();
 
     const video = videoRef.current;
     const dialogue = dialogueRef.current;
@@ -87,9 +96,31 @@ export default function CharacterBroll({ character }: { character: Character }) 
       dialogue.volume = 1;
       await dialogue.play().catch(() => undefined);
     }
-    setPlayingWithSound(true);
+    setPlayingMode("scene");
     stopTimerRef.current = setTimeout(stopSound, 5500);
   }
+
+  async function playTrack(mode: Exclude<AudioMode, "scene">) {
+    if (playingMode === mode) {
+      stopSound();
+      return;
+    }
+
+    stopSound();
+    const audio = mode === "voice" ? dialogueRef.current : mode === "sfx" ? sfxRef.current : themeRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.volume = mode === "theme" ? 0.55 : 1;
+    await audio.play().catch(() => undefined);
+    setPlayingMode(mode);
+  }
+
+  const audioControls = [
+    { mode: "scene" as const, label: "Play full scene", icon: IconFilm, available: hasSound },
+    { mode: "voice" as const, label: `Play ${character.name.split(" ")[0]}'s voice`, icon: IconMicrophone, available: Boolean(dialogueSource) },
+    { mode: "sfx" as const, label: "Play signature SFX", icon: IconWaveform, available: Boolean(sfxSource) },
+    { mode: "theme" as const, label: "Play theme music", icon: IconMusic, available: Boolean(themeSource) },
+  ].filter((control) => control.available);
 
   return (
     <div className="absolute inset-0" data-character-broll>
@@ -123,27 +154,43 @@ export default function CharacterBroll({ character }: { character: Character }) 
           className="absolute inset-0 w-full h-full object-cover"
         />
       )}
-      {dialogueSource && <audio ref={dialogueRef} src={dialogueSource} preload="metadata" />}
-      {themeSource && <audio ref={themeRef} src={themeSource} preload="metadata" />}
+      {dialogueSource && <audio ref={dialogueRef} src={dialogueSource} preload="metadata" onEnded={() => setPlayingMode(null)} data-broll-track="voice" />}
+      {sfxSource && <audio ref={sfxRef} src={sfxSource} preload="metadata" onEnded={() => setPlayingMode(null)} data-broll-track="sfx" />}
+      {themeSource && <audio ref={themeRef} src={themeSource} preload="metadata" onEnded={() => setPlayingMode(null)} data-broll-track="theme" />}
 
       <div className="absolute inset-0 bg-gradient-to-r from-black/92 via-black/55 sm:via-black/45 to-transparent" />
-      <div className="absolute right-3 top-3 sm:right-5 sm:top-5 z-20 flex items-center gap-2">
+      <div className="absolute right-3 top-3 sm:right-5 sm:top-5 z-20">
         <span className="rounded-full border border-white/25 bg-black/35 backdrop-blur-md px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-white/75">
           B-roll · 5 sec
         </span>
-        {hasSound && (
-          <button
-            type="button"
-            onClick={playBroll}
-            aria-label={playingWithSound ? `Mute ${character.name} b-roll` : `Play ${character.name} b-roll with sound`}
-            className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold backdrop-blur-md transition-colors ${
-              playingWithSound ? "border-accent bg-accent text-white" : "border-white/35 bg-black/35 text-white hover:border-accent"
-            }`}
-          >
-            {playingWithSound ? "■ Mute" : "▶ Play with sound"}
-          </button>
-        )}
       </div>
+      {audioControls.length > 0 && (
+        <div className="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2 sm:right-5" data-broll-audio-controls>
+          {audioControls.map(({ mode, label, icon: Icon }) => {
+            const active = playingMode === mode;
+            return (
+              <div key={mode} className="group relative flex justify-end">
+                <span className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-full border border-white/15 bg-black/75 px-2.5 py-1 text-[9px] font-medium text-white opacity-0 shadow-lg backdrop-blur-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  {active ? "Pause" : label}
+                </span>
+                <button
+                  type="button"
+                  onClick={mode === "scene" ? playBroll : () => playTrack(mode)}
+                  aria-label={active ? `Pause ${label.toLowerCase()}` : label}
+                  data-audio-mode={mode}
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-all sm:h-10 sm:w-10 ${
+                    active
+                      ? "scale-105 border-accent bg-accent text-white"
+                      : "border-white/30 bg-black/45 text-white/85 hover:scale-105 hover:border-accent hover:bg-black/70 hover:text-white"
+                  }`}
+                >
+                  {active ? <span className="text-xs">Ⅱ</span> : <Icon className="h-4 w-4" />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

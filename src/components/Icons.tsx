@@ -104,3 +104,30 @@ export function IconTrophy({ className }: IconProps) {
     </svg>
   );
 }
+
+export function IconMicrophone({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="8" y="3" width="8" height="12" rx="4" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8.5 21h7" />
+    </svg>
+  );
+}
+
+export function IconMusic({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M9 18V6l10-2v12" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="16" cy="16" r="3" />
+    </svg>
+  );
+}
+
+export function IconWaveform({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M3 12h2l1.5-5 3 10 3-13 3 16 2.5-8H21" />
+    </svg>
+  );
+}

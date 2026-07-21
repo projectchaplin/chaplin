@@ -286,15 +286,15 @@ async function main() {
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
     const production = await pageState(cdp, ["AI ACTOR PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
     const heroAudio = await cdp.evaluate(`(() => {
-      const dock = document.querySelector("[data-hero-audio-player]");
-      const audio = dock?.querySelector("audio");
-      const tracks = [...(dock?.querySelectorAll("button") ?? [])].map((button) => button.textContent?.trim()).filter(Boolean);
-      return { present: Boolean(dock), source: audio?.currentSrc || audio?.getAttribute("src") || null, tracks };
+      const controls = document.querySelector("[data-broll-audio-controls]");
+      const modes = [...(controls?.querySelectorAll("[data-audio-mode]") ?? [])].map((button) => button.dataset.audioMode);
+      const voice = document.querySelector('[data-broll-track="voice"]');
+      return { present: Boolean(controls), source: voice?.currentSrc || voice?.getAttribute("src") || null, modes };
     })()`);
     checks.push(result(
-      "Profile hero audio dock",
-      heroAudio?.present && heroAudio?.source?.startsWith("https://") && heroAudio?.tracks?.includes("VOICE"),
-      heroAudio?.present ? `${heroAudio.tracks.join(" · ")} · persisted voice loaded` : "hero audio dock missing"
+      "In-video audio controls",
+      heroAudio?.present && heroAudio?.source?.startsWith("https://") && ["scene", "voice", "sfx", "theme"].every((mode) => heroAudio?.modes?.includes(mode)),
+      heroAudio?.present ? `${heroAudio.modes.join(" · ")} · persisted voice loaded` : "in-video audio controls missing"
     ));
     const brollState = await cdp.evaluate(`(() => {
       const reel = document.querySelector("[data-character-broll]");
@@ -302,14 +302,14 @@ async function main() {
       return {
         video: Boolean(reel.querySelector("video")),
         audioTracks: reel.querySelectorAll("audio").length,
-        soundControl: Boolean(reel.querySelector('button[aria-label*="b-roll with sound"]')),
+        soundControl: Boolean(reel.querySelector('[data-audio-mode="scene"]')),
         punchline: Boolean(document.querySelector("[data-broll-punchline]")),
       };
     })()`);
     checks.push(result(
       "Character B-roll intro",
       brollState?.video && brollState.audioTracks >= 2 && brollState.soundControl && brollState.punchline,
-      brollState ? `video · ${brollState.audioTracks} synchronized audio tracks · punchline` : "B-roll reel not found"
+      brollState ? `video · ${brollState.audioTracks} available audio tracks · punchline` : "B-roll reel not found"
     ));
     const sceneBefore = await cdp.evaluate(`(() => Object.fromEntries(
       [...document.querySelectorAll("[data-scene-field]")].map((field) => [field.dataset.sceneField, field.value])
