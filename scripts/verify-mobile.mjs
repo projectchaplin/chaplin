@@ -228,6 +228,32 @@ async function main() {
     const admin = await pageState(cdp, ["ADMIN CONTROL ROOM", "Video pipeline action required", "Generation spend", "Recent generation activity"]);
     checks.push(result("Admin control room at 390px", admin.required && !admin.overflow, pageDetail(admin)));
 
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: 1440,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await cdp.navigate(`${baseUrl}/`);
+    const switchPosition = await cdp.evaluate(`(() => {
+      const control = document.querySelector('[aria-label="Choose how you want to use Chaplin"]');
+      if (!control) return null;
+      const rect = control.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        viewport: window.innerWidth,
+        overflow: document.documentElement.scrollWidth > window.innerWidth,
+      };
+    })()`);
+    checks.push(result(
+      "Audience switch on desktop right",
+      switchPosition && switchPosition.left > switchPosition.viewport / 2 && !switchPosition.overflow,
+      switchPosition
+        ? `${switchPosition.left}px–${switchPosition.right}px in ${switchPosition.viewport}px viewport`
+        : "Audience switch not found"
+    ));
+
     console.table(checks);
     const failures = checks.filter((check) => !check.passed);
     if (failures.length) throw new Error(`${failures.length} mobile verification check${failures.length === 1 ? "" : "s"} failed.`);

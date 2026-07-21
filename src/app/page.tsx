@@ -94,10 +94,9 @@ export default function HomePage() {
       <section className="border-b border-line overflow-hidden">
         <div className="max-w-6xl mx-auto px-6 py-12 sm:py-16">
           <div className="grid lg:grid-cols-5 gap-10 items-center">
-            {/* Copy */}
-            <div className="lg:col-span-2 min-w-0">
+            <div className="lg:col-span-5 flex justify-end">
               <div
-                className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper-dim p-1 mb-7 w-full sm:w-[26rem] sm:ml-auto"
+                className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper-dim p-1 w-full sm:w-[26rem]"
                 aria-label="Choose how you want to use Chaplin"
               >
                 <button
@@ -119,6 +118,10 @@ export default function HomePage() {
                   <span className={`block text-[10px] mt-0.5 ${isMaker ? "text-paper/75" : "text-grey"}`}>Make and monetize</span>
                 </button>
               </div>
+            </div>
+
+            {/* Copy */}
+            <div className="lg:col-span-2 min-w-0">
               <p className="accent-text text-xs uppercase tracking-[0.3em] mb-4 font-semibold">
                 {hero.eyebrow}
               </p>
