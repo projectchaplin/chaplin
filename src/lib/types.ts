@@ -9,6 +9,8 @@ export type Archetype =
   | "love-interest"
   | "comic-relief"
   | "hero"
+  | "superhero"
+  | "horror"
   | "rebel"
   | "sidekick"
   | "outsider";

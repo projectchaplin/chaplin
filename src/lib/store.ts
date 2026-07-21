@@ -282,6 +282,16 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
               (savedUser: { id?: string }) => !currentUsers.some((current) => current.id === savedUser.id)
             ),
           ];
+          const savedCharacters = saved.characters as Character[];
+          const mergedCharacters = [
+            ...currentCharacters.map((current) => ({
+              ...current,
+              ...(savedCharacters.find((savedCharacter) => savedCharacter.id === current.id) ?? {}),
+            })),
+            ...savedCharacters.filter(
+              (savedCharacter) => !currentCharacters.some((current) => current.id === savedCharacter.id)
+            ),
+          ];
           const requestedUserId = saved.currentUserId ?? get().currentUserId;
           const requestedUser = mergedUsers.find((user) => user.id === requestedUserId);
           const savedRole = (["maker", "caster", "brand", "admin"] as AppRole[]).includes(saved.activeRole)
@@ -292,7 +302,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
             : requestedUser?.roleBadges[0] ?? get().activeRole;
           set({
             users: mergedUsers,
-            characters: saved.characters.map((character: Character) => ({
+            characters: mergedCharacters.map((character) => ({
               ...character,
               galleryUrls: character.galleryUrls
                 ? [...new Set(character.galleryUrls)]

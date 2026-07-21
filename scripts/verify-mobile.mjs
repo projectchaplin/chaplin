@@ -269,6 +269,17 @@ async function main() {
       document.cookie = "chaplin-demo-role=admin; path=/; max-age=31536000; SameSite=Lax";
       return true;
     })()`);
+    await cdp.navigate(`${baseUrl}/characters`);
+    const expandedShelf = await pageState(cdp, ["Astra Sen", "Kaali Kothi", "Superhero", "Horror"]);
+    const newActorArt = await cdp.evaluate(`(() => ({
+      astra: document.querySelector('a[href="/characters/c-astra"] img')?.getAttribute("src") ?? "",
+      horror: document.querySelector('a[href="/characters/c-kaali-kothi"] img')?.getAttribute("src") ?? "",
+    }))()`);
+    checks.push(result(
+      "Superhero and horror actors on shelf",
+      expandedShelf.required && !expandedShelf.overflow && newActorArt.astra.includes("c-astra-banner") && newActorArt.horror.includes("c-kaali-kothi-banner"),
+      expandedShelf.required ? "Astra Sen · Kaali Kothi · generated identity art" : "new genre actors missing"
+    ));
     await cdp.navigate(`${baseUrl}/characters/c-bramble`);
     await pageState(cdp, ["CAPTAIN VIKRANT SURI", "Generate dialogue", "Generate 5-second video"]);
     const vikrantIdentity = await cdp.evaluate(`(() => ({

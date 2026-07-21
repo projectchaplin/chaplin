@@ -313,7 +313,12 @@ export async function getHomepageBrollState() {
       dialogueUrl: null,
       themeUrl: null,
     };
-    if (asset.kind === "video" && !entry.videoUrl) entry.videoUrl = asset.url;
+    if (
+      asset.kind === "video" &&
+      (!entry.videoUrl || (!entry.videoUrl.startsWith("https://") && asset.url.startsWith("https://")))
+    ) {
+      entry.videoUrl = asset.url;
+    }
     if (asset.kind === "dialogue" && !entry.dialogueUrl) {
       const metadata = asset.metadata as Record<string, unknown> | null;
       if (metadata?.voiceId === activeVoices.get(asset.character_id)) entry.dialogueUrl = asset.url;
