@@ -158,11 +158,16 @@ export async function POST(request: Request) {
 
     if (action === "voice-save") {
       const description = text(input, "description", 20, 1000);
+      const generatedVoiceId = text(input, "generatedVoiceId", 1, 200);
+      const currentProduction = await getCharacterProductionState(characterId);
+      if (currentProduction.voiceId === generatedVoiceId) {
+        return Response.json({ voice_id: generatedVoiceId, already_locked: true });
+      }
       jobId = await beginGeneration({ characterId, kind: "voice-lock", provider: "elevenlabs", model: "text-to-voice", prompt: description });
       const response = await eleven("/text-to-voice", {
         voice_name: text(input, "name", 1, 100),
         voice_description: description,
-        generated_voice_id: text(input, "generatedVoiceId", 1, 200),
+        generated_voice_id: generatedVoiceId,
         labels: { project: "chaplin", character_id: characterId },
       });
       const data = await response.json();

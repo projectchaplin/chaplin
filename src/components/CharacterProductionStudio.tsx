@@ -25,6 +25,8 @@ type ProviderCheck = {
   status: string;
   error: string | null;
   updatedAt: string;
+  hasSucceeded?: boolean;
+  lastSucceededAt?: string | null;
 };
 type VoicePreview = {
   audio_base_64: string;
@@ -160,9 +162,14 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         description: voiceDescription,
         generatedVoiceId: preview.generated_voice_id,
         characterId: character.id,
-      })) as { voice_id: string };
+      })) as { voice_id: string; already_locked?: boolean };
       setCharacterVoice(character.id, data.voice_id);
-      setMessage(`Voice locked to ${character.name}. Every future line can now use the same voice ID.`);
+      setPreviews([]);
+      setMessage(
+        data.already_locked
+          ? `${character.name}'s voice was already locked. It is ready for dialogue.`
+          : `Voice locked to ${character.name}. Every future line can now use the same voice ID.`
+      );
     });
   }
 
@@ -221,7 +228,9 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
   const seedModelsReady = status?.seedModels ?? false;
   const elevenReady = status?.elevenLabs ?? false;
-  const elevenOperational = status?.providers?.elevenLabs?.status === "succeeded";
+  const elevenOperational =
+    status?.providers?.elevenLabs?.status === "succeeded" ||
+    status?.providers?.elevenLabs?.hasSucceeded === true;
   const seedModelsFailed = status?.providers?.seedModels?.status === "failed";
   const seedModelsNeedActivation =
     seedModelsFailed && /not activated|activate the model/i.test(status?.providers?.seedModels?.error ?? "");
@@ -269,7 +278,9 @@ export default function CharacterProductionStudio({ character }: { character: Ch
               <div key={preview.generated_voice_id} className="border border-line rounded-sm p-2 flex items-center gap-2">
                 <span className="text-[10px] text-grey w-12">Take {index + 1}</span>
                 <audio controls className="h-8 flex-1 min-w-0" src={`data:${preview.media_type ?? "audio/mpeg"};base64,${preview.audio_base_64}`} />
-                <button onClick={() => lockVoice(preview)} disabled={Boolean(busy)} className="text-xs text-accent font-semibold">Lock</button>
+                <button onClick={() => lockVoice(preview)} disabled={Boolean(busy)} className="text-xs text-accent font-semibold disabled:opacity-40">
+                  {busy === "voice-save" ? "Locking..." : "Lock"}
+                </button>
               </div>
             ))}
           </div>
