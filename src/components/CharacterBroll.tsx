@@ -7,6 +7,7 @@ import { IconMicrophone, IconMusic, IconWaveform } from "@/components/Icons";
 
 type BrollState = {
   latestVideoUrl: string | null;
+  voicePreviewUrl: string | null;
   latestDialogueUrl: string | null;
   latestSfxUrl: string | null;
   latestThemeUrl: string | null;
@@ -52,7 +53,7 @@ export default function CharacterBroll({ character }: { character: Character }) 
   }, [character.id]);
 
   const videoSource = production?.latestVideoUrl ?? character.videoUrl ?? null;
-  const dialogueSource = production?.latestDialogueUrl ?? null;
+  const dialogueSource = production?.latestDialogueUrl ?? production?.voicePreviewUrl ?? null;
   const sfxSource = production?.latestSfxUrl ?? null;
   const themeSource = production?.latestThemeUrl ?? null;
   const posterSource = character.bannerUrl ?? character.imageUrl ?? null;

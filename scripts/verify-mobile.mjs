@@ -300,6 +300,18 @@ async function main() {
         !vikrantIdentity.video.includes("glass display case"),
       vikrantIdentity.dialogue.includes("Storms do not ask permission") ? "Vikrant line · scene · silent dubbing plate" : "Vikrant inherited another character's prompt"
     ));
+    const lockedVoiceControls = await cdp.evaluate(`(() => {
+      const voice = document.querySelector('[data-broll-track="voice"]');
+      const modes = [...document.querySelectorAll('[data-broll-audio-controls] [data-audio-mode]')]
+        .map((button) => button.dataset.audioMode);
+      return { source: voice?.currentSrc || voice?.getAttribute("src") || null, modes };
+    })()`);
+    checks.push(result(
+      "Locked voice available without dialogue",
+      lockedVoiceControls?.source?.startsWith("https://") &&
+        ["voice", "sfx", "theme"].every((mode) => lockedVoiceControls?.modes?.includes(mode)),
+      lockedVoiceControls?.source ? `${lockedVoiceControls.modes.join(" · ")} · locked preview loaded` : "locked voice preview missing"
+    ));
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
     const production = await pageState(cdp, ["AI ACTOR PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
     const heroAudio = await cdp.evaluate(`(() => {
