@@ -215,8 +215,36 @@ async function main() {
       return true;
     })()`);
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
-    const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Seedance 1.5 Pro needs account activation", "Generate dialogue", "Generate 5-second video"]);
-    checks.push(result("Production studio at 390px", production.required && !production.overflow, pageDetail(production)));
+    const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Generate dialogue", "Generate 5-second video"]);
+    let videoState = null;
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      videoState = await cdp.evaluate(`(() => {
+        const video = document.querySelector("video");
+        return video ? {
+          src: video.currentSrc || video.src,
+          readyState: video.readyState,
+          duration: video.duration,
+          width: video.videoWidth,
+          height: video.videoHeight,
+          error: video.error?.message ?? null,
+        } : null;
+      })()`);
+      if (videoState?.readyState >= 1 || videoState?.error) break;
+      await sleep(250);
+    }
+    const videoLoaded =
+      videoState?.src?.startsWith("https://") &&
+      videoState.readyState >= 1 &&
+      videoState.duration >= 4.5 &&
+      videoState.duration <= 5.5 &&
+      videoState.width > 0 &&
+      videoState.height > 0 &&
+      !videoState.error;
+    checks.push(result(
+      "Production video at 390px",
+      production.required && !production.overflow && videoLoaded,
+      `${pageDetail(production)} · ${videoState?.duration?.toFixed(2) ?? "?"}s ${videoState?.width ?? "?"}×${videoState?.height ?? "?"} · readyState ${videoState?.readyState ?? "missing"}`
+    ));
 
     await cdp.send("Network.setCookie", {
       name: "chaplin-demo-role",
@@ -225,8 +253,12 @@ async function main() {
       path: "/",
     });
     await cdp.navigate(`${baseUrl}/admin`);
-    const admin = await pageState(cdp, ["ADMIN CONTROL ROOM", "Video pipeline action required", "Generation spend", "Recent generation activity"]);
-    checks.push(result("Admin control room at 390px", admin.required && !admin.overflow, pageDetail(admin)));
+    const admin = await pageState(cdp, ["ADMIN CONTROL ROOM", "Generation spend", "Recent generation activity", "seedance-1-5-pro-251215"]);
+    const adminHasSuccessfulSeedance = await cdp.evaluate(`(() => {
+      const text = document.body.innerText.toLowerCase();
+      return text.includes("seedance-1-5-pro-251215") && text.includes("succeeded");
+    })()`);
+    checks.push(result("Admin Seedance log at 390px", admin.required && adminHasSuccessfulSeedance && !admin.overflow, pageDetail(admin)));
 
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 1440,
