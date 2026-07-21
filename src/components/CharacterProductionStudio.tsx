@@ -187,7 +187,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, characterId: character.id, ...payload }),
+      body: JSON.stringify({ action, characterId: character.id, character, ...payload }),
     });
     if (!response.ok) throw new Error(await errorFrom(response));
     return response.json();
@@ -197,7 +197,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, characterId: character.id, ...payload }),
+      body: JSON.stringify({ action, characterId: character.id, character, ...payload }),
     });
     if (!response.ok) throw new Error(await errorFrom(response));
     const persistentUrl = response.headers.get("X-Asset-Url");
@@ -287,6 +287,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     void run("upload", async () => {
       const form = new FormData();
       form.set("characterId", character.id);
+      form.set("character", JSON.stringify(character));
       form.set("kind", "gallery");
       form.set("file", file);
       const response = await fetch("/api/admin/upload", { method: "POST", body: form });

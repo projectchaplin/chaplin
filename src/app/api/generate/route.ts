@@ -9,8 +9,10 @@ import {
   saveCharacterVoice,
   saveMediaAsset,
   saveRemoteMediaAsset,
+  ensureCharacter,
 } from "@/lib/server/supabase-admin";
 import { calculateGenerationBilling } from "@/lib/server/billing";
+import type { Character } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -146,6 +148,11 @@ export async function POST(request: Request) {
     const input = (await request.json()) as Input;
     const action = text(input, "action", 1, 30);
     const characterId = text(input, "characterId", 1, 100);
+    if (input.character && typeof input.character === "object") {
+      const character = input.character as Character;
+      if (character.id !== characterId) throw new Error("AI actor identity does not match this generation request.");
+      await ensureCharacter(character);
+    }
 
     if (action === "voice-design") {
       const description = text(input, "description", 20, 1000);

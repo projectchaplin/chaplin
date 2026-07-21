@@ -50,6 +50,7 @@ interface ChaplinState extends ChaplinWorld {
   setCurrentUser: (userId: string) => void;
   switchDemoRole: (role: AppRole) => void;
   addCharacter: (input: NewCharacterInput) => Character;
+  removeCharacter: (characterId: string) => void;
   addStory: (input: NewStoryInput) => Story;
   setCharacterVoice: (characterId: string, voiceId: string) => void;
   addCharacterImage: (characterId: string, imageUrl: string) => void;
@@ -76,10 +77,8 @@ function persist(state: ChaplinState) {
   }
 }
 
-let idCounter = 1000;
 function nextId(prefix: string) {
-  idCounter += 1;
-  return `${prefix}-${idCounter}`;
+  return `${prefix}-${crypto.randomUUID()}`;
 }
 
 function nowIso() {
@@ -137,6 +136,11 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
     set((s) => ({ characters: [character, ...s.characters] }));
     persist(get());
     return character;
+  },
+
+  removeCharacter: (characterId) => {
+    set((state) => ({ characters: state.characters.filter((character) => character.id !== characterId) }));
+    persist(get());
   },
 
   addStory: (input) => {

@@ -47,6 +47,7 @@ export default function NewCharacterPage() {
   const currentUserId = useChaplinStore((s) => s.currentUserId);
   const activeRole = useChaplinStore((s) => s.activeRole);
   const addCharacter = useChaplinStore((s) => s.addCharacter);
+  const removeCharacter = useChaplinStore((s) => s.removeCharacter);
 
   const [name, setName] = useState("");
   const [archetype, setArchetype] = useState<Archetype>("hero");
@@ -63,6 +64,7 @@ export default function NewCharacterPage() {
   const [royaltyRate, setRoyaltyRate] = useState(30);
   const [hue, setHue] = useState(205);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const isCustomVoice = voicePreset === VOICE_PRESETS[VOICE_PRESETS.length - 1];
   const voiceDesc = isCustomVoice ? customVoice : voicePreset;
@@ -82,7 +84,7 @@ export default function NewCharacterPage() {
     );
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (
       !name.trim() ||
@@ -95,6 +97,8 @@ export default function NewCharacterPage() {
       setError("Every field earns this AI actor a place on the shelf, fill them all in.");
       return;
     }
+    setSaving(true);
+    setError("");
     const character = addCharacter({
       makerId: currentUserId,
       name: name.trim(),
@@ -109,7 +113,22 @@ export default function NewCharacterPage() {
       licenseType,
       royaltyRate,
     });
-    router.push(`/characters/${character.id}`);
+    try {
+      const response = await fetch("/api/characters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(character),
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error ?? `Saving the AI actor returned ${response.status}.`);
+      }
+      router.push(`/characters/${character.id}`);
+    } catch (submitError) {
+      removeCharacter(character.id);
+      setError(submitError instanceof Error ? submitError.message : "The AI actor could not be saved.");
+      setSaving(false);
+    }
   }
 
   return (
@@ -318,9 +337,10 @@ export default function NewCharacterPage() {
 
         <button
           type="submit"
-          className="bg-accent text-paper font-semibold px-4 py-3 rounded-sm hover:bg-accent-light transition-colors"
+          disabled={saving}
+          className="bg-accent text-paper font-semibold px-4 py-3 rounded-sm hover:bg-accent-light transition-colors disabled:opacity-50"
         >
-          Put {name.trim() || "this AI actor"} on the shelf
+          {saving ? "Saving AI actor…" : `Put ${name.trim() || "this AI actor"} on the shelf`}
         </button>
       </form>
     </div>

@@ -1,5 +1,6 @@
-import { beginGeneration, completeGeneration, failGeneration, saveMediaAsset } from "@/lib/server/supabase-admin";
+import { beginGeneration, completeGeneration, ensureCharacter, failGeneration, saveMediaAsset } from "@/lib/server/supabase-admin";
 import { calculateGenerationBilling } from "@/lib/server/billing";
+import type { Character } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
   try {
     const form = await request.formData();
     const characterId = form.get("characterId");
+    const characterJson = form.get("character");
     const kind = form.get("kind");
     const file = form.get("file");
 
@@ -28,6 +30,13 @@ export async function POST(request: Request) {
     }
 
     const cleanCharacterId = characterId.trim();
+    if (typeof characterJson === "string" && characterJson) {
+      const character = JSON.parse(characterJson) as Character;
+      if (character.id !== cleanCharacterId) {
+        return Response.json({ error: "AI actor identity does not match this upload." }, { status: 400 });
+      }
+      await ensureCharacter(character);
+    }
     jobId = await beginGeneration({
       characterId: cleanCharacterId,
       kind: `upload-${kind}`,

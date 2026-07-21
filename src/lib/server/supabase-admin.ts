@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { SEED_WORLD } from "@/data/seed";
 import type { GenerationBilling } from "@/lib/server/billing";
+import type { Character } from "@/lib/types";
 
 export interface AdminCharacterRow {
   id: string;
@@ -83,22 +84,8 @@ function assert(error: { message: string } | null, label: string) {
   if (error) throw new Error(`${label}: ${error.message}`);
 }
 
-export async function seedAdminCatalog() {
-  const supabase = adminClient();
-
-  const users = SEED_WORLD.users.map((user) => ({
-    id: user.id,
-    name: user.name,
-    handle: user.handle,
-    role_badges: user.roleBadges,
-    avatar_initial: user.avatarInitial,
-    avatar_hue: user.avatarHue,
-    image_url: user.imageUrl ?? null,
-    updated_at: new Date().toISOString(),
-  }));
-  assert((await supabase.from("users").upsert(users)).error, "Seed users");
-
-  const characters = SEED_WORLD.characters.map((character) => ({
+function characterRow(character: Character) {
+  return {
     id: character.id,
     maker_id: character.makerId,
     name: character.name,
@@ -119,7 +106,45 @@ export async function seedAdminCatalog() {
     earnings_total: character.stats.earnings,
     created_at: character.createdAt,
     updated_at: new Date().toISOString(),
+  };
+}
+
+export async function persistCharacter(character: Character) {
+  const { error } = await adminClient()
+    .from("characters")
+    .upsert(characterRow(character), { onConflict: "id" });
+  assert(error, "Save AI actor");
+}
+
+export async function ensureCharacter(character: Character) {
+  const supabase = adminClient();
+  const existing = await supabase
+    .from("characters")
+    .select("id")
+    .eq("id", character.id)
+    .maybeSingle();
+  assert(existing.error, "Check AI actor");
+  if (existing.data) return;
+  const { error } = await supabase.from("characters").insert(characterRow(character));
+  if (error?.code !== "23505") assert(error, "Register AI actor for generation");
+}
+
+export async function seedAdminCatalog() {
+  const supabase = adminClient();
+
+  const users = SEED_WORLD.users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    handle: user.handle,
+    role_badges: user.roleBadges,
+    avatar_initial: user.avatarInitial,
+    avatar_hue: user.avatarHue,
+    image_url: user.imageUrl ?? null,
+    updated_at: new Date().toISOString(),
   }));
+  assert((await supabase.from("users").upsert(users)).error, "Seed users");
+
+  const characters = SEED_WORLD.characters.map(characterRow);
   assert((await supabase.from("characters").upsert(characters)).error, "Seed characters");
 
   const stories = SEED_WORLD.stories.map((story) => ({
