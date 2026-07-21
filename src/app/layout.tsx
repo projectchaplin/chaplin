@@ -23,9 +23,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Project Chaplin: Casting Marketplace for AI Characters",
+  title: "Project Chaplin: Casting Marketplace for AI Actors",
   description:
-    "Build characters, cast them into stories, and watch performers build a career of their own.",
+    "Build AI actors, cast them into stories, and watch performers build a career of their own.",
 };
 
 export default function RootLayout({
@@ -50,7 +50,7 @@ export default function RootLayout({
             <span className="marquee-title text-sm tracking-widest text-ink">
               PROJECT CHAPLIN
             </span>
-            <span>A casting marketplace for AI characters. Every character, every audience.</span>
+            <span>A casting marketplace for AI actors. Every actor, every audience.</span>
           </div>
         </footer>
         <BottomNav />

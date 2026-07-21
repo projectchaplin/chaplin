@@ -66,7 +66,7 @@ export default function StudioPage() {
         <div className="ml-auto hidden sm:flex gap-6 text-right">
           <div>
             <p className="text-xl font-semibold">{myCharacters.length}</p>
-            <p className="text-[11px] text-grey uppercase tracking-wide">Characters</p>
+            <p className="text-[11px] text-grey uppercase tracking-wide">AI actors</p>
           </div>
           <div>
             <p className="text-xl font-semibold">{totalCastings}</p>
@@ -86,7 +86,7 @@ export default function StudioPage() {
       <div className="flex gap-2 mb-6 text-sm">
         {(
           [
-            ["characters", `My Characters (${myCharacters.length})`],
+            ["characters", `My AI Actors (${myCharacters.length})`],
             ["stories", `My Stories (${myStories.length})`],
             ["earnings", `Earnings (${myLedger.length})`],
           ] as const
@@ -112,7 +112,7 @@ export default function StudioPage() {
             className="border border-dashed border-line rounded-md flex flex-col items-center justify-center gap-2 text-grey hover:border-accent hover:text-accent transition-colors p-6 min-h-40"
           >
             <span className="text-2xl">+</span>
-            <span className="text-sm">Build a new character</span>
+            <span className="text-sm">Build a new AI actor</span>
           </Link>
           {myCharacters.map((c) => (
             <CharacterCard key={c.id} character={c} />
@@ -144,7 +144,7 @@ export default function StudioPage() {
           />
           {myLedger.length === 0 ? (
             <div className="poster-card rounded-md p-10 text-center text-grey">
-              No earnings yet, cast one of your characters into a story to start the ledger.
+              No earnings yet, cast one of your AI actors into a story to start the ledger.
             </div>
           ) : (
             <div className="poster-card rounded-md overflow-x-auto scrollbar-thin">
@@ -152,7 +152,7 @@ export default function StudioPage() {
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-grey">
                     <th className="px-4 py-3 font-medium">Date</th>
-                    <th className="px-4 py-3 font-medium">Character</th>
+                    <th className="px-4 py-3 font-medium">AI actor</th>
                     <th className="px-4 py-3 font-medium">Story</th>
                     <th className="px-4 py-3 font-medium">Type</th>
                     <th className="px-4 py-3 font-medium text-right">Amount</th>

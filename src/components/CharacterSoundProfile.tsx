@@ -112,7 +112,7 @@ export default function CharacterSoundProfile({
     <section id="sound-profile" className="poster-card rounded-md p-5 flex flex-col gap-4 scroll-mt-24">
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-grey">Sound profile</h2>
-        <p className="text-[11px] text-grey mt-1">Real generated assets attached to this character—not preview animations.</p>
+        <p className="text-[11px] text-grey mt-1">Real generated assets attached to this AI actor—not preview animations.</p>
       </div>
       {failed && (
         <p className="rounded-sm bg-red-500/10 px-3 py-2 text-xs text-red-500">

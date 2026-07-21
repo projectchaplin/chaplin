@@ -66,7 +66,7 @@ export default function DeveloperAccessCard({ character }: { character: Characte
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4 bg-paper/75">
             <IconLock className="w-5 h-5 text-grey" />
             <p className="text-[11px] text-grey max-w-[220px]">
-              Unlock API access and character export tools for {character.name.split(" ")[0]}
+              Unlock API access and AI actor export tools for {character.name.split(" ")[0]}
             </p>
             <button
               onClick={() => setUnlocked(true)}

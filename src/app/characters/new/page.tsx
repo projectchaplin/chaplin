@@ -92,7 +92,7 @@ export default function NewCharacterPage() {
       !sfxDesc.trim() ||
       !themeDesc.trim()
     ) {
-      setError("Every field earns this character its place on the shelf, fill them all in.");
+      setError("Every field earns this AI actor a place on the shelf, fill them all in.");
       return;
     }
     const character = addCharacter({
@@ -120,7 +120,7 @@ export default function NewCharacterPage() {
 
       <div className="mt-3 mb-6">
         <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-1">
-          Character Builder
+          AI Actor Builder
         </p>
         <h1 className="reel-title text-3xl">Bring a new performer to the shelf</h1>
         <p className="text-sm text-grey mt-1">
@@ -320,7 +320,7 @@ export default function NewCharacterPage() {
           type="submit"
           className="bg-accent text-paper font-semibold px-4 py-3 rounded-sm hover:bg-accent-light transition-colors"
         >
-          Put {name.trim() || "this character"} on the shelf
+          Put {name.trim() || "this AI actor"} on the shelf
         </button>
       </form>
     </div>

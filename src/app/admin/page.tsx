@@ -61,11 +61,11 @@ export default async function AdminPage() {
         <div>
           <p className="text-[11px] uppercase tracking-[0.24em] text-accent font-semibold mb-2">Content operations</p>
           <h1 className="marquee-title text-3xl sm:text-5xl leading-tight break-words">ADMIN CONTROL ROOM</h1>
-          <p className="text-sm text-grey mt-2 max-w-2xl">See what exists, what is missing, and which characters are ready to earn a position on the homepage.</p>
+          <p className="text-sm text-grey mt-2 max-w-2xl">See what exists, what is missing, and which AI actors are ready to earn a position on the homepage.</p>
         </div>
         <div className="flex flex-wrap gap-2 self-start">
           <AdminRefreshButton />
-          <Link href="/characters/new" className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold">+ Create character</Link>
+          <Link href="/characters/new" className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold">+ Create AI actor</Link>
         </div>
       </div>
 
@@ -92,7 +92,7 @@ export default async function AdminPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         {[
-          ["Characters", data.characters.length],
+          ["AI actors", data.characters.length],
           ["Homepage ready", readyCharacters.length],
           ["Media assets", data.assets.length],
           ["Generation jobs", data.jobs.length],
@@ -130,8 +130,8 @@ export default async function AdminPage() {
       <section className="mb-10">
         <div className="flex items-end justify-between gap-4 mb-4">
           <div>
-            <h2 className="reel-title text-2xl">Character readiness</h2>
-            <p className="text-xs text-grey mt-1">A homepage-ready character needs identity art, a locked voice, signature SFX, a theme score, at least three gallery stills, and a video.</p>
+            <h2 className="reel-title text-2xl">AI actor readiness</h2>
+            <p className="text-xs text-grey mt-1">A homepage-ready AI actor needs identity art, a locked voice, signature SFX, a theme score, at least three gallery stills, and a video.</p>
           </div>
           <span className="text-xs text-grey">{readyCharacters.length}/{data.characters.length} ready</span>
         </div>
@@ -140,7 +140,7 @@ export default async function AdminPage() {
           <table className="w-full min-w-[980px] text-left">
             <thead className="text-[10px] uppercase tracking-[0.16em] text-grey border-b border-line">
               <tr>
-                <th className="px-4 py-3">Character</th>
+                <th className="px-4 py-3">AI actor</th>
                 <th className="px-3 py-3">Identity</th>
                 <th className="px-3 py-3">Voice</th>
                 <th className="px-3 py-3">SFX</th>

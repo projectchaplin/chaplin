@@ -32,7 +32,7 @@ export default function CharacterProfilePage() {
   if (!character) {
     return (
       <div className="max-w-3xl mx-auto px-6 py-16 text-center">
-        <p className="text-grey mb-4">This character isn&apos;t on the shelf (yet).</p>
+        <p className="text-grey mb-4">This AI actor isn&apos;t on the shelf (yet).</p>
         <Link href="/characters" className="text-accent hover:underline">
           ← Back to the Shelf
         </Link>
@@ -216,9 +216,9 @@ export default function CharacterProfilePage() {
             <p className="text-sm mb-1">{LICENSE_LABEL[character.licenseType]}</p>
             <p className="text-xs text-grey">
               {character.licenseType === "open" &&
-                "Anyone can cast this character for free. The maker still earns from fan tips."}
+                "Anyone can cast this AI actor for free. The maker still earns from fan tips."}
               {character.licenseType === "paid" &&
-                `Casting this character costs ${money(character.royaltyRate)}, paid to the maker every time.`}
+                `Casting this AI actor costs ${money(character.royaltyRate)}, paid to the maker every time.`}
               {character.licenseType === "approval" &&
                 `The maker signs off on each story before ${character.name} can appear in it. Fee once approved: ${money(character.royaltyRate)}.`}
             </p>

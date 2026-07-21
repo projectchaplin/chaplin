@@ -65,7 +65,7 @@ export default function ShelfPage() {
     <div className="max-w-6xl mx-auto px-6 py-10 w-full">
       <SectionHeading
         eyebrow="The Shelf"
-        title="Every character, ready to be cast"
+        title="Every AI actor, ready to be cast"
       />
 
       <div className="poster-card rounded-md p-4 mb-6 flex flex-col gap-4">
@@ -120,7 +120,7 @@ export default function ShelfPage() {
       </div>
 
       <p className="text-xs text-grey mb-3">
-        {results.length} character{results.length === 1 ? "" : "s"} on the shelf
+        {results.length} AI actor{results.length === 1 ? "" : "s"} on the shelf
       </p>
 
       {results.length === 0 ? (

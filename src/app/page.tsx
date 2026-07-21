@@ -33,7 +33,7 @@ export default function HomePage() {
           <>
             CREATE AND MONETIZE
             <br />
-            AI CHARACTERS
+            AI ACTORS
           </>
         ),
         description:
@@ -44,17 +44,17 @@ export default function HomePage() {
       }
     : isBrand
       ? {
-        eyebrow: "Characters for campaigns.",
+        eyebrow: "AI actors for campaigns.",
         heading: (
           <>
-            CHOOSE A CHARACTER
+            CHOOSE AN AI ACTOR
             <br />
             FOR YOUR NEXT AD OR REEL
           </>
         ),
         description:
-          "Choose a production-ready AI character for your next advertisement, social reel, branded campaign, or product story.",
-        primary: { href: "/characters", label: "Browse Brand-Ready Characters" },
+          "Choose a production-ready AI actor for your next advertisement, social reel, branded campaign, or product story.",
+        primary: { href: "/characters", label: "Browse Brand-Ready AI Actors" },
         secondary: { href: "/studio/write?format=ad", label: "Create an Ad or Reel" },
         tertiary: { href: "/ledger", label: "See commercial licensing" },
       }
@@ -69,7 +69,7 @@ export default function HomePage() {
         ),
         description:
           "Discover production-ready AI actors with consistent voices and visual identities. Cast them into your story, scene, campaign, or film.",
-        primary: { href: "/characters", label: "Browse AI Characters" },
+        primary: { href: "/characters", label: "Browse AI Actors" },
         secondary: { href: "/studio/write", label: "Create a Casting" },
         tertiary: { href: "/stories", label: "See stories in production" },
       };
@@ -141,7 +141,7 @@ export default function HomePage() {
   const fillerCount = (gridColumns - (occupiedCells % gridColumns)) % gridColumns;
 
   const STATS = [
-    { label: "Characters on the shelf", value: `${world.characters.length}` },
+    { label: "AI actors on the shelf", value: `${world.characters.length}` },
     { label: "Stories performed", value: `${world.stories.length}` },
     { label: "Castings made", value: `${totalCastings}` },
     { label: "Royalties paid to makers", value: `${compactNumber(totalPaidOut)}` },
@@ -165,7 +165,7 @@ export default function HomePage() {
                   className={`rounded px-3 py-1.5 text-left transition-colors ${audience === "caster" ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
                 >
                   <span className="block text-[10px] font-semibold uppercase tracking-[0.14em]">Caster</span>
-                  <span className={`block text-[9px] mt-0.5 ${audience === "caster" ? "text-paper/75" : "text-grey"}`}>Cast a character</span>
+                  <span className={`block text-[9px] mt-0.5 ${audience === "caster" ? "text-paper/75" : "text-grey"}`}>Cast an actor</span>
                 </button>
                 <button
                   type="button"
@@ -225,7 +225,7 @@ export default function HomePage() {
                   <IconMask className="w-5 h-5 text-accent mb-1.5" />
                   <p className="text-xs font-semibold">{isMaker ? "Build Identity" : isBrand ? "Choose a Face" : "Discover Talent"}</p>
                   <p className="text-[10px] text-grey leading-snug">
-                    {isMaker ? "Create and own original AI actors" : isBrand ? "Find a character that fits the campaign" : "Find production-ready AI actors"}
+                    {isMaker ? "Create and own original AI actors" : isBrand ? "Find an AI actor that fits the campaign" : "Find production-ready AI actors"}
                   </p>
                 </div>
                 <div className="min-w-0">
@@ -269,7 +269,7 @@ export default function HomePage() {
                   >
                     <span className="text-lg leading-none">{isMaker ? "+" : "→"}</span>
                     <span className="text-[8px] sm:text-[9px] leading-tight">
-                      {isMaker ? "Create a Character" : "Browse all actors"}
+                      {isMaker ? "Create an AI Actor" : "Browse all actors"}
                     </span>
                   </Link>
                 ))}
@@ -306,7 +306,7 @@ export default function HomePage() {
                 )}
               </div>
               <span className="text-xs text-grey hidden sm:inline">
-                {world.characters.length} characters ready to cast
+                {world.characters.length} AI actors ready to cast
               </span>
             </div>
           </div>

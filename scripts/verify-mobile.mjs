@@ -192,7 +192,7 @@ async function main() {
     const checks = [];
 
     await cdp.navigate(`${baseUrl}/`);
-    const caster = await pageState(cdp, ["CASTING FOR", "AI ACTORS", "Browse AI Characters", "Create a Casting"]);
+    const caster = await pageState(cdp, ["CASTING FOR", "AI ACTORS", "Browse AI Actors", "Create a Casting"]);
     checks.push(result("Caster homepage at 390px", caster.required && !caster.overflow, pageDetail(caster)));
     let homeBroll = null;
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -247,7 +247,7 @@ async function main() {
       return true;
     })()`);
     await sleep(500);
-    const brand = await pageState(cdp, ["CHOOSE A CHARACTER", "FOR YOUR NEXT AD OR REEL", "Browse Brand-Ready Characters", "Create an Ad or Reel"]);
+    const brand = await pageState(cdp, ["CHOOSE AN AI ACTOR", "FOR YOUR NEXT AD OR REEL", "Browse Brand-Ready AI Actors", "Create an Ad or Reel"]);
     checks.push(result("Brand homepage at 390px", brandClicked && brand.required && !brand.overflow, pageDetail(brand)));
 
     const makerClicked = await cdp.evaluate(`(() => {
@@ -257,7 +257,7 @@ async function main() {
       return true;
     })()`);
     await sleep(500);
-    const maker = await pageState(cdp, ["CREATE AND MONETIZE", "AI CHARACTERS", "Create an AI Actor", "Open Maker Studio"]);
+    const maker = await pageState(cdp, ["CREATE AND MONETIZE", "AI ACTORS", "Create an AI Actor", "Open Maker Studio"]);
     checks.push(result("Maker homepage at 390px", makerClicked && maker.required && !maker.overflow, pageDetail(maker)));
 
     await cdp.evaluate(`(() => {
@@ -284,7 +284,7 @@ async function main() {
       vikrantIdentity.dialogue.includes("Storms do not ask permission") ? "Vikrant line · scene · silent dubbing plate" : "Vikrant inherited another character's prompt"
     ));
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
-    const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
+    const production = await pageState(cdp, ["AI ACTOR PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
     const brollState = await cdp.evaluate(`(() => {
       const reel = document.querySelector("[data-character-broll]");
       if (!reel) return null;

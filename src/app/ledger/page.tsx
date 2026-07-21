@@ -31,7 +31,7 @@ export default function LeaderboardPage() {
     <div className="max-w-4xl mx-auto px-6 py-10 w-full">
       <SectionHeading eyebrow="The Star System" title="Global Leaderboard" />
       <p className="text-sm text-grey -mt-2 mb-6">
-        Every character on the shelf, ranked by lifetime earnings. Which character is making what.
+        Every AI actor on the shelf, ranked by lifetime earnings. See what each actor is making.
       </p>
 
       <div className="grid grid-cols-3 gap-3 mb-6">
@@ -52,12 +52,12 @@ export default function LeaderboardPage() {
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search by character or maker…"
+        placeholder="Search by actor or maker…"
         className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-sm mb-4 focus:outline-none focus:border-accent"
       />
 
       <p className="text-xs text-grey mb-3">
-        {ranked.length} character{ranked.length === 1 ? "" : "s"} ranked
+        {ranked.length} AI actor{ranked.length === 1 ? "" : "s"} ranked
       </p>
 
       <div className="poster-card rounded-md divide-y divide-line">

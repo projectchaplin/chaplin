@@ -223,7 +223,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         previewText,
       })) as { previews: VoicePreview[] };
       setPreviews(data.previews ?? []);
-      setMessage("Three original voice candidates are ready. Listen, then lock one to the character.");
+      setMessage("Three original voice candidates are ready. Listen, then lock one to the actor.");
     });
   }
 
@@ -261,7 +261,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     void run("sfx", async () => {
       setSfxUrl(await audioAction("sfx", { prompt: sfxPrompt }));
       await refreshHistory();
-      setMessage("A fresh version of the character's signature sound is ready.");
+      setMessage("A fresh version of the actor's signature sound is ready.");
     });
   }
 
@@ -269,7 +269,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     void run("theme", async () => {
       setThemeUrl(await audioAction("theme", { prompt: themePrompt }));
       await refreshHistory();
-      setMessage("The character theme was generated, archived to the CDN, and added to the public Sound Profile.");
+      setMessage("The actor theme was generated, archived to the CDN, and added to the public Sound Profile.");
     });
   }
 
@@ -279,7 +279,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       setGeneratedImage(data.url);
       addCharacterImage(character.id, data.url);
       await refreshHistory();
-      setMessage("Still generated and added to the character gallery. It is now the video reference frame.");
+      setMessage("Still generated and added to the actor gallery. It is now the video reference frame.");
     });
   }
 
@@ -307,7 +307,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       setGeneratedVideo(data.url);
       setCharacterVideo(character.id, data.url);
       await refreshHistory();
-      setMessage("Five-second Seedance clip generated and attached to the character profile.");
+      setMessage("Five-second Seedance clip generated and attached to the actor profile.");
     });
   }
 
@@ -349,7 +349,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-1">
-              Character production pipeline
+              AI actor production pipeline
             </p>
             <h2 className="reel-title text-2xl">Make {character.name} perform</h2>
             <p className="text-xs text-grey mt-1 max-w-xl">
