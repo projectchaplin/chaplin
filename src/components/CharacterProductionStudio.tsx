@@ -183,7 +183,17 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     window.dispatchEvent(new CustomEvent("chaplin:media-updated", { detail: { characterId: character.id } }));
   }
 
+  async function ensureCharacterIsSaved() {
+    const response = await fetch("/api/characters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ character, ensureOnly: true }),
+    });
+    if (!response.ok) throw new Error(await errorFrom(response));
+  }
+
   async function jsonAction(action: string, payload: Record<string, unknown>) {
+    await ensureCharacterIsSaved();
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -194,6 +204,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   }
 
   async function audioAction(action: "speech" | "sfx" | "theme", payload: Record<string, unknown>) {
+    await ensureCharacterIsSaved();
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -285,6 +296,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
   function uploadReferenceImage(file: File) {
     void run("upload", async () => {
+      await ensureCharacterIsSaved();
       const form = new FormData();
       form.set("characterId", character.id);
       form.set("character", JSON.stringify(character));

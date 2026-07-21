@@ -1,4 +1,4 @@
-import { persistCharacter } from "@/lib/server/supabase-admin";
+import { ensureCharacter, persistCharacter } from "@/lib/server/supabase-admin";
 import type { Archetype, Character, LicenseType, VoiceGender } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -74,8 +74,18 @@ function parseCharacter(value: unknown): Character {
 
 export async function POST(request: Request) {
   try {
-    const character = parseCharacter(await request.json());
-    await persistCharacter(character);
+    const body = await request.json() as unknown;
+    const ensureOnly = Boolean(
+      body && typeof body === "object" && (body as Record<string, unknown>).ensureOnly === true
+    );
+    const character = parseCharacter(
+      ensureOnly ? (body as Record<string, unknown>).character : body
+    );
+    if (ensureOnly) {
+      await ensureCharacter(character);
+    } else {
+      await persistCharacter(character);
+    }
     return Response.json({ character });
   } catch (error) {
     return Response.json(
