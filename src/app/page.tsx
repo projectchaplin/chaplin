@@ -220,25 +220,25 @@ export default function HomePage() {
                 {hero.tertiary.label} <span aria-hidden>→</span>
               </Link>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 poster-card rounded-md p-4">
+              <div className="grid grid-cols-3 gap-2 poster-card rounded-md p-3 sm:gap-4 sm:p-4" data-audience-features>
                 <div className="min-w-0">
-                  <IconMask className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">{isMaker ? "Build Identity" : isBrand ? "Choose a Face" : "Discover Talent"}</p>
-                  <p className="text-[10px] text-grey leading-snug">
+                  <IconMask className="w-4 h-4 text-accent mb-1 sm:w-5 sm:h-5 sm:mb-1.5" />
+                  <p className="text-[10px] font-semibold leading-tight sm:text-xs">{isMaker ? "Build Identity" : isBrand ? "Choose a Face" : "Discover Talent"}</p>
+                  <p className="mt-0.5 text-[8px] text-grey leading-tight sm:text-[10px] sm:leading-snug">
                     {isMaker ? "Create and own original AI actors" : isBrand ? "Find an AI actor that fits the campaign" : "Find production-ready AI actors"}
                   </p>
                 </div>
                 <div className="min-w-0">
-                  <IconFilm className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">{isMaker ? "Produce Assets" : isBrand ? "Make Ads & Reels" : "Cast Into Stories"}</p>
-                  <p className="text-[10px] text-grey leading-snug">
+                  <IconFilm className="w-4 h-4 text-accent mb-1 sm:w-5 sm:h-5 sm:mb-1.5" />
+                  <p className="text-[10px] font-semibold leading-tight sm:text-xs">{isMaker ? "Produce Assets" : isBrand ? "Make Ads & Reels" : "Cast Into Stories"}</p>
+                  <p className="mt-0.5 text-[8px] text-grey leading-tight sm:text-[10px] sm:leading-snug">
                     {isMaker ? "Voice, SFX, images, and video" : isBrand ? "Build short-form branded content" : "Build scenes with consistent talent"}
                   </p>
                 </div>
                 <div className="min-w-0">
-                  <IconTrophy className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">{isMaker ? "Earn Royalties" : isBrand ? "Commercial Licensing" : "Clear Licensing"}</p>
-                  <p className="text-[10px] text-grey leading-snug">
+                  <IconTrophy className="w-4 h-4 text-accent mb-1 sm:w-5 sm:h-5 sm:mb-1.5" />
+                  <p className="text-[10px] font-semibold leading-tight sm:text-xs">{isMaker ? "Earn Royalties" : isBrand ? "Commercial Licensing" : "Clear Licensing"}</p>
+                  <p className="mt-0.5 text-[8px] text-grey leading-tight sm:text-[10px] sm:leading-snug">
                     {isMaker ? "Monetize every performance" : isBrand ? "Know usage rights before launch" : "Know the terms before you cast"}
                   </p>
                 </div>

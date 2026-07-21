@@ -194,6 +194,16 @@ async function main() {
     await cdp.navigate(`${baseUrl}/`);
     const caster = await pageState(cdp, ["CASTING FOR", "AI ACTORS", "Browse AI Actors", "Create a Casting"]);
     checks.push(result("Caster homepage at 390px", caster.required && !caster.overflow, pageDetail(caster)));
+    const featureRow = await cdp.evaluate(`(() => {
+      const row = document.querySelector("[data-audience-features]");
+      if (!row) return null;
+      return { columns: getComputedStyle(row).gridTemplateColumns.split(" ").length, height: Math.round(row.getBoundingClientRect().height) };
+    })()`);
+    checks.push(result(
+      "Audience value points stay inline",
+      featureRow?.columns === 3 && featureRow?.height < 130,
+      featureRow ? `${featureRow.columns} columns · ${featureRow.height}px tall` : "feature row missing"
+    ));
     let homeBroll = null;
     for (let attempt = 0; attempt < 20; attempt += 1) {
       homeBroll = await cdp.evaluate(`(() => {
