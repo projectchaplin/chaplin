@@ -34,12 +34,12 @@ export default function StudioPage() {
   const totalCastings = myCharacters.reduce((n, c) => n + c.stats.castings, 0);
   const totalFans = myCharacters.reduce((n, c) => n + c.stats.fans, 0);
 
-  if (world.activeRole === "caster") {
+  if (world.activeRole === "caster" || world.activeRole === "brand") {
     return (
       <div className="max-w-xl mx-auto px-6 py-16 text-center w-full">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-2">Caster workspace</p>
-        <h1 className="reel-title text-3xl">Cast actors into your next story</h1>
-        <p className="text-sm text-grey mt-3 mb-6">The maker studio, actor production tools, and earnings are hidden in Caster view.</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-2">{world.activeRole === "brand" ? "Brand workspace" : "Caster workspace"}</p>
+        <h1 className="reel-title text-3xl">{world.activeRole === "brand" ? "Choose an actor for your next ad or reel" : "Cast actors into your next story"}</h1>
+        <p className="text-sm text-grey mt-3 mb-6">Maker production tools and earnings stay private while you cast.</p>
         <div className="flex flex-wrap justify-center gap-3">
           <Link href="/characters" className="border border-line rounded-full px-5 py-2.5 text-sm hover:border-accent">Browse actors</Link>
           <Link href="/studio/write" className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold">Write a story</Link>

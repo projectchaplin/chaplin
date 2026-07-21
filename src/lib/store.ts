@@ -106,6 +106,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
     const preferredUserId: Record<AppRole, string> = {
       maker: "u-meera",
       caster: "u-kabir",
+      brand: "u-kabir",
       admin: "u-admin",
     };
     const user = get().users.find((item) => item.id === preferredUserId[role])
@@ -283,7 +284,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
           ];
           const requestedUserId = saved.currentUserId ?? get().currentUserId;
           const requestedUser = mergedUsers.find((user) => user.id === requestedUserId);
-          const savedRole = (["maker", "caster", "admin"] as AppRole[]).includes(saved.activeRole)
+          const savedRole = (["maker", "caster", "brand", "admin"] as AppRole[]).includes(saved.activeRole)
             ? (saved.activeRole as AppRole)
             : null;
           const activeRole = savedRole && requestedUser?.roleBadges.includes(savedRole)

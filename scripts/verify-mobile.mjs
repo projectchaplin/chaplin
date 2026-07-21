@@ -240,6 +240,16 @@ async function main() {
       completedBrollId && nextBroll?.characterId ? `${completedBrollId} → ${nextBroll.characterId}` : "ready-video handoff failed"
     ));
 
+    const brandClicked = await cdp.evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find((item) => item.innerText.includes("BRAND"));
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await sleep(500);
+    const brand = await pageState(cdp, ["CHOOSE A CHARACTER", "FOR YOUR NEXT AD OR REEL", "Browse Brand-Ready Characters", "Create an Ad or Reel"]);
+    checks.push(result("Brand homepage at 390px", brandClicked && brand.required && !brand.overflow, pageDetail(brand)));
+
     const makerClicked = await cdp.evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find((item) => item.innerText.includes("MAKER"));
       if (!button) return false;

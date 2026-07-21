@@ -71,11 +71,11 @@ export default function NewCharacterPage() {
   const isCustomScore = scorePreset === SCORE_PRESETS[SCORE_PRESETS.length - 1];
   const themeDesc = isCustomScore ? customScore : scorePreset;
 
-  if (activeRole === "caster") {
+  if (activeRole === "caster" || activeRole === "brand") {
     return (
       <div className="max-w-xl mx-auto px-6 py-16 text-center w-full">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-2">Caster view</p>
-        <h1 className="reel-title text-3xl">Actor creation is hidden from casters</h1>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-2">Casting view</p>
+        <h1 className="reel-title text-3xl">Actor creation is reserved for makers</h1>
         <p className="text-sm text-grey mt-3 mb-6">Switch to Actor Maker from the profile menu to build a new AI actor.</p>
         <Link href="/characters" className="accent-btn inline-flex rounded-full px-5 py-2.5 text-sm font-semibold">Browse actors</Link>
       </div>

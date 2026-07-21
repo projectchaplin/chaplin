@@ -21,6 +21,13 @@ const TABS: Record<AppRole, Array<{ href: string; label: string; Icon: typeof Ic
     { href: "/studio/write", label: "Write", Icon: IconBriefcase },
     { href: "/ledger", label: "Leaders", Icon: IconTrophy },
   ],
+  brand: [
+    { href: "/", label: "Home", Icon: IconHome },
+    { href: "/characters", label: "Talent", Icon: IconMask },
+    { href: "/studio/write", label: "Create", Icon: IconFilm },
+    { href: "/stories", label: "Campaigns", Icon: IconBriefcase },
+    { href: "/ledger", label: "Licensing", Icon: IconReceipt },
+  ],
   admin: [
     { href: "/admin", label: "Admin", Icon: IconBriefcase },
     { href: "/admin/logs", label: "Logs", Icon: IconReceipt },

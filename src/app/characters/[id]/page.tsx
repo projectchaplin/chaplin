@@ -44,7 +44,7 @@ export default function CharacterProfilePage() {
   const resume = resumeForCharacter(world, character.id);
   const ledger = ledgerForCharacter(world, character.id);
   const canProduce = world.activeRole === "admin" || (world.activeRole === "maker" && character.makerId === world.currentUserId);
-  const canCast = world.activeRole === "admin" || world.activeRole === "caster";
+  const canCast = world.activeRole === "admin" || world.activeRole === "caster" || world.activeRole === "brand";
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10 w-full min-w-0 overflow-hidden">

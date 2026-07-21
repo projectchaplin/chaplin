@@ -22,8 +22,9 @@ import { compactNumber, money } from "@/lib/format";
 
 export default function HomePage() {
   const world = useChaplinStore((s) => s);
-  const audience = world.activeRole === "maker" ? "maker" : "caster";
+  const audience = world.activeRole === "maker" ? "maker" : world.activeRole === "brand" ? "brand" : "caster";
   const isMaker = audience === "maker";
+  const isBrand = audience === "brand";
 
   const hero = isMaker
     ? {
@@ -41,7 +42,23 @@ export default function HomePage() {
         secondary: { href: "/studio", label: "Open Maker Studio" },
         tertiary: { href: "/ledger", label: "See how royalties work" },
       }
-    : {
+    : isBrand
+      ? {
+        eyebrow: "Characters for campaigns.",
+        heading: (
+          <>
+            CHOOSE A CHARACTER
+            <br />
+            FOR YOUR NEXT AD OR REEL
+          </>
+        ),
+        description:
+          "Choose a production-ready AI character for your next advertisement, social reel, branded campaign, or product story.",
+        primary: { href: "/characters", label: "Browse Brand-Ready Characters" },
+        secondary: { href: "/studio/write?format=ad", label: "Create an Ad or Reel" },
+        tertiary: { href: "/ledger", label: "See commercial licensing" },
+      }
+      : {
         eyebrow: "Discover. Cast. Create.",
         heading: (
           <>
@@ -138,17 +155,17 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-5 gap-10 items-center">
             <div className="lg:col-span-5 flex justify-end">
               <div
-                className="grid grid-cols-2 gap-1 rounded-md border border-line bg-paper-dim p-1 w-full max-w-[19rem] ml-auto"
+                className="grid grid-cols-3 gap-1 rounded-md border border-line bg-paper-dim p-1 w-full max-w-[30rem] ml-auto"
                 aria-label="Choose how you want to use Chaplin"
               >
                 <button
                   type="button"
-                  aria-pressed={!isMaker}
+                  aria-pressed={audience === "caster"}
                   onClick={() => world.switchDemoRole("caster")}
-                  className={`rounded px-3 py-1.5 text-left transition-colors ${!isMaker ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
+                  className={`rounded px-3 py-1.5 text-left transition-colors ${audience === "caster" ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
                 >
                   <span className="block text-[10px] font-semibold uppercase tracking-[0.14em]">Caster</span>
-                  <span className={`block text-[9px] mt-0.5 ${!isMaker ? "text-paper/75" : "text-grey"}`}>Cast a character</span>
+                  <span className={`block text-[9px] mt-0.5 ${audience === "caster" ? "text-paper/75" : "text-grey"}`}>Cast a character</span>
                 </button>
                 <button
                   type="button"
@@ -159,6 +176,15 @@ export default function HomePage() {
                   <span className="block text-[10px] font-semibold uppercase tracking-[0.14em]">Maker</span>
                   <span className={`block text-[9px] mt-0.5 ${isMaker ? "text-paper/75" : "text-grey"}`}>Make and monetize</span>
                 </button>
+                <button
+                  type="button"
+                  aria-pressed={isBrand}
+                  onClick={() => world.switchDemoRole("brand")}
+                  className={`rounded px-3 py-1.5 text-left transition-colors ${isBrand ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
+                >
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em]">Brand</span>
+                  <span className={`block text-[9px] mt-0.5 ${isBrand ? "text-paper/75" : "text-grey"}`}>Ads and reels</span>
+                </button>
               </div>
             </div>
 
@@ -167,7 +193,7 @@ export default function HomePage() {
               <p className="accent-text text-xs uppercase tracking-[0.3em] mb-4 font-semibold">
                 {hero.eyebrow}
               </p>
-              <h1 className={`marquee-title leading-none mb-5 break-words ${isMaker ? "text-4xl sm:text-5xl" : "text-4xl sm:text-6xl"}`}>
+              <h1 className={`marquee-title leading-none mb-5 break-words ${isMaker || isBrand ? "text-4xl sm:text-5xl" : "text-4xl sm:text-6xl"}`}>
                 {hero.heading}
               </h1>
               <p className="text-sm sm:text-base text-grey mb-7 max-w-md">
@@ -197,23 +223,23 @@ export default function HomePage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 poster-card rounded-md p-4">
                 <div className="min-w-0">
                   <IconMask className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">{isMaker ? "Build Identity" : "Discover Talent"}</p>
+                  <p className="text-xs font-semibold">{isMaker ? "Build Identity" : isBrand ? "Choose a Face" : "Discover Talent"}</p>
                   <p className="text-[10px] text-grey leading-snug">
-                    {isMaker ? "Create and own original AI actors" : "Find production-ready AI actors"}
+                    {isMaker ? "Create and own original AI actors" : isBrand ? "Find a character that fits the campaign" : "Find production-ready AI actors"}
                   </p>
                 </div>
                 <div className="min-w-0">
                   <IconFilm className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">{isMaker ? "Produce Assets" : "Cast Into Stories"}</p>
+                  <p className="text-xs font-semibold">{isMaker ? "Produce Assets" : isBrand ? "Make Ads & Reels" : "Cast Into Stories"}</p>
                   <p className="text-[10px] text-grey leading-snug">
-                    {isMaker ? "Voice, SFX, images, and video" : "Build scenes with consistent talent"}
+                    {isMaker ? "Voice, SFX, images, and video" : isBrand ? "Build short-form branded content" : "Build scenes with consistent talent"}
                   </p>
                 </div>
                 <div className="min-w-0">
                   <IconTrophy className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">{isMaker ? "Earn Royalties" : "Clear Licensing"}</p>
+                  <p className="text-xs font-semibold">{isMaker ? "Earn Royalties" : isBrand ? "Commercial Licensing" : "Clear Licensing"}</p>
                   <p className="text-[10px] text-grey leading-snug">
-                    {isMaker ? "Monetize every performance" : "Know the terms before you cast"}
+                    {isMaker ? "Monetize every performance" : isBrand ? "Know usage rights before launch" : "Know the terms before you cast"}
                   </p>
                 </div>
               </div>

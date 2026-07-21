@@ -18,6 +18,11 @@ const ROLE_META: Record<AppRole, { label: string; short: string; description: st
     short: "Caster",
     description: "Discover actors and cast them into stories.",
   },
+  brand: {
+    label: "Brand",
+    short: "Brand",
+    description: "Cast AI actors for ads, reels, campaigns, and branded stories.",
+  },
   admin: {
     label: "Super Admin",
     short: "Admin",
@@ -25,7 +30,7 @@ const ROLE_META: Record<AppRole, { label: string; short: string; description: st
   },
 };
 
-const ROLE_ORDER: AppRole[] = ["maker", "caster", "admin"];
+const ROLE_ORDER: AppRole[] = ["caster", "maker", "brand", "admin"];
 
 export default function Header() {
   const users = useChaplinStore((state) => state.users);
@@ -41,6 +46,8 @@ export default function Header() {
     ? { href: "/admin", label: "Admin" }
     : activeRole === "maker"
       ? { href: "/studio", label: "Maker Studio" }
+      : activeRole === "brand"
+        ? { href: "/characters", label: "Brand casting" }
       : { href: "/characters", label: "Start casting" };
 
   return (
@@ -86,7 +93,7 @@ export default function Header() {
                   <button onClick={() => setOpen(false)} className="text-grey hover:text-ink text-lg leading-none" aria-label="Close role switcher">×</button>
                 </div>
 
-                <div className="grid sm:grid-cols-3 gap-2 mb-4">
+                <div className="grid sm:grid-cols-2 gap-2 mb-4">
                   {ROLE_ORDER.map((role) => (
                     <button
                       key={role}

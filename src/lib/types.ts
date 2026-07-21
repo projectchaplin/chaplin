@@ -15,7 +15,7 @@ export type Archetype =
 
 export type LicenseType = "open" | "paid" | "approval";
 export type VoiceGender = "feminine" | "masculine" | "androgynous";
-export type AppRole = "maker" | "caster" | "admin";
+export type AppRole = "maker" | "caster" | "brand" | "admin";
 
 export interface User {
   id: string;
