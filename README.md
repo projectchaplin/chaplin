@@ -93,9 +93,17 @@ environment when deployed:
 
 ```bash
 ANTHROPIC_API_KEY=your_anthropic_api_key
-ANTHROPIC_MODEL=claude-sonnet-4-6
+ANTHROPIC_MODEL=claude-sonnet-5
+ANTHROPIC_INPUT_USD_PER_MILLION_TOKENS=2
+ANTHROPIC_OUTPUT_USD_PER_MILLION_TOKENS=10
 ```
 
 `ANTHROPIC_MODEL` is optional. When no Claude key is configured, Magic Writer
 uses its built-in structured draft engine so the button remains usable during
 setup.
+
+Every editable production prompt on an actor page also has a character-aware
+Quick Write button. Claude usage from these actions is recorded in the admin
+generation log with input tokens, output tokens, USD, INR, and normalized
+Chaplin tokens. The rate variables above are optional overrides for the current
+Sonnet contract.

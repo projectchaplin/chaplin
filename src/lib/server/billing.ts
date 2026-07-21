@@ -1,6 +1,8 @@
 import "server-only";
 
 export type GenerationUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
   inputCharacters?: number;
   outputCharacters?: number;
   durationSeconds?: number;
@@ -33,6 +35,12 @@ const ELEVEN_MUSIC_USD_PER_MINUTE = Number(
 );
 const SEEDREAM_USD_PER_IMAGE = Number(process.env.SEEDREAM_USD_PER_IMAGE ?? "0.04");
 const SEEDANCE_USD_PER_SECOND = Number(process.env.SEEDANCE_USD_PER_SECOND ?? "0.10");
+const ANTHROPIC_INPUT_USD_PER_MILLION_TOKENS = Number(
+  process.env.ANTHROPIC_INPUT_USD_PER_MILLION_TOKENS ?? "2"
+);
+const ANTHROPIC_OUTPUT_USD_PER_MILLION_TOKENS = Number(
+  process.env.ANTHROPIC_OUTPUT_USD_PER_MILLION_TOKENS ?? "10"
+);
 const NORMALIZED_TOKENS_PER_USD = Number(process.env.CHAPLIN_TOKENS_PER_USD ?? "1000");
 const FALLBACK_USD_TO_INR = Number(process.env.USD_TO_INR_RATE ?? "96.45");
 
@@ -100,6 +108,10 @@ export async function calculateGenerationBilling(input: {
   } else if (input.kind === "video") {
     costUsd = (usage.durationSeconds ?? 0) * SEEDANCE_USD_PER_SECOND;
     pricingNote = `Seedance estimate at $${SEEDANCE_USD_PER_SECOND}/second; override with SEEDANCE_USD_PER_SECOND when your ModelArk contract differs.`;
+  } else if (input.kind === "anthropic-prompt") {
+    costUsd = ((usage.inputTokens ?? 0) / 1_000_000) * ANTHROPIC_INPUT_USD_PER_MILLION_TOKENS
+      + ((usage.outputTokens ?? 0) / 1_000_000) * ANTHROPIC_OUTPUT_USD_PER_MILLION_TOKENS;
+    pricingNote = `Anthropic estimate at $${ANTHROPIC_INPUT_USD_PER_MILLION_TOKENS}/M input tokens and $${ANTHROPIC_OUTPUT_USD_PER_MILLION_TOKENS}/M output tokens; override the Anthropic rate variables when pricing changes.`;
   } else {
     costMethod = "no-charge";
     pricingNote = "No rate card is configured for this operation.";

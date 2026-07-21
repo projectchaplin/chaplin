@@ -184,11 +184,12 @@ const OUTPUT_SCHEMA = {
 export async function GET() {
   return Response.json({
     configured: Boolean(process.env.ANTHROPIC_API_KEY),
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
   });
 }
 
 export async function POST(request: Request) {
+  let fallbackInput: Parameters<typeof fallbackDraft>[0] | null = null;
   try {
     const body = await request.json() as Record<string, unknown>;
     const requestedFormat = clean(body.format, 20) as WritingFormat;
@@ -211,13 +212,14 @@ export async function POST(request: Request) {
       characters,
       castIds,
     };
+    fallbackInput = input;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return Response.json({ draft: fallbackDraft(input), provider: "chaplin-local", configured: false });
     }
 
-    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
     const characterContext = characters.map((character) => ({
       ...character,
       selected: castIds.includes(character.id),
@@ -274,8 +276,17 @@ export async function POST(request: Request) {
       .filter((id) => allowedIds.has(id));
     return Response.json({ draft, provider: "anthropic", model, usage: data.usage, configured: true });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not build the magic draft.";
+    if (fallbackInput) {
+      return Response.json({
+        draft: fallbackDraft(fallbackInput),
+        provider: "chaplin-local",
+        configured: Boolean(process.env.ANTHROPIC_API_KEY),
+        warning: `Claude could not run: ${message} A complete local draft was used instead.`,
+      });
+    }
     return Response.json(
-      { error: error instanceof Error ? error.message : "Could not build the magic draft." },
+      { error: message },
       { status: 502 }
     );
   }

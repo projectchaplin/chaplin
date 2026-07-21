@@ -56,6 +56,15 @@ type MagicScene = {
   sound: string;
 };
 
+type QuickWriteField =
+  | "voice-description"
+  | "voice-preview"
+  | "dialogue"
+  | "sfx"
+  | "theme"
+  | "image"
+  | "video";
+
 const SEEDANCE_ACTIVATION_URL =
   "https://console.byteplus.com/ark/region%3Aark%2Bap-southeast-1/model/detail?Id=seedance-1-5-pro";
 const MAGIC_LINE_ENDINGS = ["Move.", "Now.", "Watch closely.", "Remember that."];
@@ -101,6 +110,30 @@ async function errorFrom(response: Response) {
   return data?.error ?? `Generation failed with status ${response.status}.`;
 }
 
+function QuickWriteButton({
+  field,
+  busy,
+  writing,
+  onClick,
+}: {
+  field: QuickWriteField;
+  busy: boolean;
+  writing: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      data-quick-write={field}
+      className="shrink-0 rounded-full border border-accent/50 px-2.5 py-1 text-[10px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40"
+    >
+      {writing ? "Writing..." : "✦ Quick Write"}
+    </button>
+  );
+}
+
 export default function CharacterProductionStudio({ character }: { character: Character }) {
   const setCharacterVoice = useChaplinStore((s) => s.setCharacterVoice);
   const addCharacterImage = useChaplinStore((s) => s.addCharacterImage);
@@ -142,6 +175,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   const [assetHistory, setAssetHistory] = useState<ProductionAsset[]>([]);
   const [magicSceneIndex, setMagicSceneIndex] = useState(-1);
   const [busy, setBusy] = useState("");
+  const [quickWriting, setQuickWriting] = useState<QuickWriteField | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -190,6 +224,48 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       body: JSON.stringify({ character, ensureOnly: true }),
     });
     if (!response.ok) throw new Error(await errorFrom(response));
+  }
+
+  async function quickWrite(
+    field: QuickWriteField,
+    currentText: string,
+    update: (value: string) => void
+  ) {
+    setQuickWriting(field);
+    setMessage("");
+    try {
+      const response = await fetch("/api/write/quick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          field,
+          currentText,
+          character,
+          context: {
+            voiceDescription,
+            voicePreview: previewText,
+            dialogue: speechText,
+            sfx: sfxPrompt,
+            theme: themePrompt,
+            image: imagePrompt,
+            video: scenePrompt,
+          },
+        }),
+      });
+      if (!response.ok) throw new Error(await errorFrom(response));
+      const data = await response.json() as { text?: string; provider?: string; warning?: string };
+      if (!data.text) throw new Error("Quick Write returned no text.");
+      update(data.text);
+      setMessage(
+        data.warning || (data.provider === "anthropic"
+          ? "Claude rewrote this field using the actor's complete identity."
+          : "Quick Write updated this field locally.")
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Quick Write failed.");
+    } finally {
+      setQuickWriting(null);
+    }
   }
 
   async function jsonAction(action: string, payload: Record<string, unknown>) {
@@ -432,8 +508,30 @@ export default function CharacterProductionStudio({ character }: { character: Ch
               <h3 className="font-semibold text-sm">1. Unique voice identity</h3>
               {character.voiceId && <span className="text-[10px] text-emerald-600 uppercase">Voice locked</span>}
             </div>
-            <textarea value={voiceDescription} onChange={(event) => setVoiceDescription(event.target.value)} rows={4} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
-            <textarea value={previewText} onChange={(event) => setPreviewText(event.target.value)} rows={3} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-wide text-grey">Voice design prompt</span>
+                <QuickWriteButton
+                  field="voice-description"
+                  busy={Boolean(busy) || Boolean(quickWriting)}
+                  writing={quickWriting === "voice-description"}
+                  onClick={() => void quickWrite("voice-description", voiceDescription, setVoiceDescription)}
+                />
+              </div>
+              <textarea value={voiceDescription} onChange={(event) => setVoiceDescription(event.target.value)} rows={4} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-wide text-grey">Voice performance sample</span>
+                <QuickWriteButton
+                  field="voice-preview"
+                  busy={Boolean(busy) || Boolean(quickWriting)}
+                  writing={quickWriting === "voice-preview"}
+                  onClick={() => void quickWrite("voice-preview", previewText, setPreviewText)}
+                />
+              </div>
+              <textarea value={previewText} onChange={(event) => setPreviewText(event.target.value)} rows={3} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
+            </div>
             <button onClick={designVoice} disabled={!elevenReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "voice-design" ? "Designing three voices..." : "Design voice candidates"}
             </button>
@@ -455,7 +553,15 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
 
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
-            <h3 className="font-semibold text-sm">2. Dialogue in her voice</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-semibold text-sm">2. Dialogue in the locked voice</h3>
+              <QuickWriteButton
+                field="dialogue"
+                busy={Boolean(busy) || Boolean(quickWriting)}
+                writing={quickWriting === "dialogue"}
+                onClick={() => void quickWrite("dialogue", speechText, setSpeechText)}
+              />
+            </div>
             <textarea data-scene-field="dialogue" value={speechText} onChange={(event) => setSpeechText(event.target.value)} rows={5} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateSpeech} disabled={!elevenReady || Boolean(busy) || !character.voiceId} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "speech" ? "Performing line..." : "Generate dialogue"}
@@ -470,7 +576,15 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         </div>
 
         <div className="border border-line rounded-md p-4 flex flex-col gap-3">
-          <h3 className="font-semibold text-sm">3. Signature SFX</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm">3. Signature SFX</h3>
+            <QuickWriteButton
+              field="sfx"
+              busy={Boolean(busy) || Boolean(quickWriting)}
+              writing={quickWriting === "sfx"}
+              onClick={() => void quickWrite("sfx", sfxPrompt, setSfxPrompt)}
+            />
+          </div>
           <input data-scene-field="sfx" value={sfxPrompt} onChange={(event) => setSfxPrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={generateSfx} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
@@ -481,7 +595,15 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         </div>
 
         <div className="border border-line rounded-md p-4 flex flex-col gap-3">
-          <h3 className="font-semibold text-sm">4. Theme score</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm">4. Theme score</h3>
+            <QuickWriteButton
+              field="theme"
+              busy={Boolean(busy) || Boolean(quickWriting)}
+              writing={quickWriting === "theme"}
+              onClick={() => void quickWrite("theme", themePrompt, setThemePrompt)}
+            />
+          </div>
           <input data-scene-field="theme" value={themePrompt} onChange={(event) => setThemePrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={generateTheme} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
@@ -493,7 +615,15 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
         <div className="grid md:grid-cols-2 gap-5">
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
-            <h3 className="font-semibold text-sm">5. Consistent scene still</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-semibold text-sm">5. Consistent scene still</h3>
+              <QuickWriteButton
+                field="image"
+                busy={Boolean(busy) || Boolean(quickWriting)}
+                writing={quickWriting === "image"}
+                onClick={() => void quickWrite("image", imagePrompt, setImagePrompt)}
+              />
+            </div>
             <textarea data-scene-field="image" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateImage} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "image" ? "Seedream is creating..." : "Generate scene image"}
@@ -523,7 +653,15 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
 
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
-            <h3 className="font-semibold text-sm">6. Animate a five-second scene</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-semibold text-sm">6. Animate a five-second scene</h3>
+              <QuickWriteButton
+                field="video"
+                busy={Boolean(busy) || Boolean(quickWriting)}
+                writing={quickWriting === "video"}
+                onClick={() => void quickWrite("video", scenePrompt, setScenePrompt)}
+              />
+            </div>
             <textarea data-scene-field="video" value={scenePrompt} onChange={(event) => setScenePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateVideo} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "video" ? "Seedance is rendering..." : "Generate 5-second video"}

@@ -183,6 +183,7 @@ export default function StoryBuilderForm() {
         provider?: string;
         error?: string;
         configured?: boolean;
+        warning?: string;
       };
       if (!response.ok || !data.draft) throw new Error(data.error || "Magic Writer could not build this draft.");
       const draft = data.draft;
@@ -194,9 +195,9 @@ export default function StoryBuilderForm() {
       setStep(3);
       setClaudeConfigured(Boolean(data.configured));
       setMagicMessage(
-        data.provider === "anthropic"
+        data.warning || (data.provider === "anthropic"
           ? "Claude expanded your input into a complete, editable production draft."
-          : "A complete local draft is ready. Add your Claude key for deeper character-aware variations."
+          : "A complete local draft is ready. Add your Claude key for deeper character-aware variations.")
       );
     } catch (magicError) {
       setError(magicError instanceof Error ? magicError.message : "Magic Writer failed.");

@@ -300,6 +300,15 @@ async function main() {
         !vikrantIdentity.video.includes("glass display case"),
       vikrantIdentity.dialogue.includes("Storms do not ask permission") ? "Vikrant line · scene · silent dubbing plate" : "Vikrant inherited another character's prompt"
     ));
+    const quickWriteFields = await cdp.evaluate(`(() =>
+      [...document.querySelectorAll("[data-quick-write]")].map((button) => button.dataset.quickWrite)
+    )()`);
+    const expectedQuickWriteFields = ["voice-description", "voice-preview", "dialogue", "sfx", "theme", "image", "video"];
+    checks.push(result(
+      "Quick Write on every production prompt",
+      expectedQuickWriteFields.every((field) => quickWriteFields.includes(field)),
+      `${quickWriteFields.length}/7 character-aware prompt actions`
+    ));
     const lockedVoiceControls = await cdp.evaluate(`(() => {
       const voice = document.querySelector('[data-broll-track="voice"]');
       const modes = [...document.querySelectorAll('[data-broll-audio-controls] [data-audio-mode]')]
