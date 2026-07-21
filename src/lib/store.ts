@@ -8,6 +8,7 @@ import type {
   Casting,
   LedgerEntry,
   ChaplinWorld,
+  AppRole,
   LicenseType,
 } from "@/lib/types";
 
@@ -19,6 +20,7 @@ export type NewCharacterInput = Pick<
   | "archetype"
   | "tagline"
   | "personality"
+  | "voiceGender"
   | "voiceDesc"
   | "sfxDesc"
   | "themeDesc"
@@ -43,10 +45,15 @@ export interface NewStoryInput {
 
 interface ChaplinState extends ChaplinWorld {
   currentUserId: string;
+  activeRole: AppRole;
   hydrated: boolean;
   setCurrentUser: (userId: string) => void;
+  switchDemoRole: (role: AppRole) => void;
   addCharacter: (input: NewCharacterInput) => Character;
   addStory: (input: NewStoryInput) => Story;
+  setCharacterVoice: (characterId: string, voiceId: string) => void;
+  addCharacterImage: (characterId: string, imageUrl: string) => void;
+  setCharacterVideo: (characterId: string, videoUrl: string) => void;
   hydrateFromStorage: () => void;
 }
 
@@ -60,8 +67,10 @@ function persist(state: ChaplinState) {
       castings: state.castings,
       ledger: state.ledger,
       currentUserId: state.currentUserId,
+      activeRole: state.activeRole,
     };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    document.cookie = `chaplin-demo-role=${state.activeRole}; path=/; max-age=31536000; SameSite=Lax`;
   } catch {
     // storage full or unavailable, demo still works in-memory
   }
@@ -79,11 +88,30 @@ function nowIso() {
 
 export const useChaplinStore = create<ChaplinState>((set, get) => ({
   ...SEED_WORLD,
-  currentUserId: "u-arjun",
+  currentUserId: "u-admin",
+  activeRole: "admin",
   hydrated: false,
 
   setCurrentUser: (userId) => {
-    set({ currentUserId: userId });
+    const user = get().users.find((item) => item.id === userId);
+    if (!user) return;
+    const activeRole = user.roleBadges.includes(get().activeRole)
+      ? get().activeRole
+      : user.roleBadges[0] ?? "caster";
+    set({ currentUserId: userId, activeRole });
+    persist(get());
+  },
+
+  switchDemoRole: (role) => {
+    const preferredUserId: Record<AppRole, string> = {
+      maker: "u-meera",
+      caster: "u-kabir",
+      admin: "u-admin",
+    };
+    const user = get().users.find((item) => item.id === preferredUserId[role])
+      ?? get().users.find((item) => item.roleBadges.includes(role));
+    if (!user) return;
+    set({ currentUserId: user.id, activeRole: role });
     persist(get());
   },
 
@@ -95,6 +123,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       archetype: input.archetype,
       tagline: input.tagline,
       personality: input.personality,
+      voiceGender: input.voiceGender,
       voiceDesc: input.voiceDesc,
       sfxDesc: input.sfxDesc,
       themeDesc: input.themeDesc,
@@ -197,6 +226,41 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
     return story;
   },
 
+
+  setCharacterVoice: (characterId, voiceId) => {
+    set((s) => ({
+      characters: s.characters.map((character) =>
+        character.id === characterId ? { ...character, voiceId } : character
+      ),
+    }));
+    persist(get());
+  },
+
+  addCharacterImage: (characterId, imageUrl) => {
+    set((s) => ({
+      characters: s.characters.map((character) =>
+        character.id === characterId
+          ? {
+              ...character,
+              galleryUrls: [
+                imageUrl,
+                ...(character.galleryUrls ?? []).filter((url) => url !== imageUrl),
+              ],
+            }
+          : character
+      ),
+    }));
+    persist(get());
+  },
+
+  setCharacterVideo: (characterId, videoUrl) => {
+    set((s) => ({
+      characters: s.characters.map((character) =>
+        character.id === characterId ? { ...character, videoUrl } : character
+      ),
+    }));
+    persist(get());
+  },
   hydrateFromStorage: () => {
     if (typeof window === "undefined" || get().hydrated) return;
     try {
@@ -204,13 +268,44 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       if (raw) {
         const saved = JSON.parse(raw);
         if (saved && Array.isArray(saved.characters)) {
+          const currentCharacters = get().characters;
+          const currentUsers = get().users;
+          const savedUsers = Array.isArray(saved.users) ? saved.users : [];
+          const mergedUsers = [
+            ...currentUsers.map((current) => ({
+              ...current,
+              ...(savedUsers.find((savedUser: { id?: string }) => savedUser.id === current.id) ?? {}),
+              roleBadges: current.roleBadges,
+            })),
+            ...savedUsers.filter(
+              (savedUser: { id?: string }) => !currentUsers.some((current) => current.id === savedUser.id)
+            ),
+          ];
+          const requestedUserId = saved.currentUserId ?? get().currentUserId;
+          const requestedUser = mergedUsers.find((user) => user.id === requestedUserId);
+          const savedRole = (["maker", "caster", "admin"] as AppRole[]).includes(saved.activeRole)
+            ? (saved.activeRole as AppRole)
+            : null;
+          const activeRole = savedRole && requestedUser?.roleBadges.includes(savedRole)
+            ? savedRole
+            : requestedUser?.roleBadges[0] ?? get().activeRole;
           set({
-            users: saved.users ?? get().users,
-            characters: saved.characters,
+            users: mergedUsers,
+            characters: saved.characters.map((character: Character) => ({
+              ...character,
+              galleryUrls: character.galleryUrls
+                ? [...new Set(character.galleryUrls)]
+                : undefined,
+              voiceGender:
+                character.voiceGender ??
+                currentCharacters.find((current) => current.id === character.id)?.voiceGender ??
+                "androgynous",
+            })),
             stories: saved.stories ?? get().stories,
             castings: saved.castings ?? get().castings,
             ledger: saved.ledger ?? get().ledger,
-            currentUserId: saved.currentUserId ?? get().currentUserId,
+            currentUserId: requestedUser?.id ?? get().currentUserId,
+            activeRole,
           });
         }
       }
@@ -218,5 +313,6 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       // corrupt storage, fall back to seed silently
     }
     set({ hydrated: true });
+    persist(get());
   },
 }));

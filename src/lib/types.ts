@@ -14,12 +14,14 @@ export type Archetype =
   | "outsider";
 
 export type LicenseType = "open" | "paid" | "approval";
+export type VoiceGender = "feminine" | "masculine" | "androgynous";
+export type AppRole = "maker" | "caster" | "admin";
 
 export interface User {
   id: string;
   name: string;
   handle: string;
-  roleBadges: Array<"maker" | "caster">;
+  roleBadges: AppRole[];
   avatarInitial: string;
   avatarHue: number; // 0-360, used to color the monogram poster (fallback when imageUrl is unset)
   imageUrl?: string;
@@ -38,7 +40,9 @@ export interface Character {
   archetype: Archetype;
   tagline: string;
   personality: string;
+  voiceGender: VoiceGender;
   voiceDesc: string;
+  voiceId?: string; // ElevenLabs voice locked to this character
   sfxDesc: string; // signature sound effect, same mock pattern as voiceDesc
   themeDesc: string; // signature background score, same mock pattern as voiceDesc
   avatarHue: number; // fallback color when imageUrl is unset (e.g. freshly built characters)

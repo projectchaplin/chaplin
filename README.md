@@ -34,3 +34,48 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Character generation pipeline
+
+Character profiles include a production lab for generating a persistent voice,
+signature SFX, consistent scene stills, and five-second videos. Provider keys
+stay on the server behind `/api/generate`.
+
+Create `.env.local` in the project root:
+
+```bash
+ELEVEN_LABS_API_KEY=your_elevenlabs_key
+SEEDANCE_API_KEY=your_byteplus_modelark_key
+```
+
+The admin cost ledger records provider-native usage and converts each completed
+job into USD, INR, and a comparable Chaplin-token amount. Media APIs do not use
+LLM tokens, so Chaplin tokens are deliberately normalized at 1,000 per US
+dollar. Optional rate overrides:
+
+```bash
+ELEVEN_TTS_USD_PER_1K_CHARACTERS=0.10
+ELEVEN_SFX_USD_PER_MINUTE=0.12
+SEEDREAM_USD_PER_IMAGE=0.04
+SEEDANCE_USD_PER_SECOND=0.10
+CHAPLIN_TOKENS_PER_USD=1000
+USD_TO_INR_RATE=96.45
+```
+
+When `USD_TO_INR_RATE` is omitted, the server fetches the latest USD/INR rate
+from Frankfurter and stores the exact rate used on each job. Seed model rates
+are contract-dependent estimates until ModelArk returns an explicit billed
+dollar amount, so both are configurable and labeled as estimates in the UI.
+
+- ElevenLabs Voice Design creates three candidates. Locking one stores the
+  resulting `voiceId` on that character so every future line uses the same
+  voice.
+- ElevenLabs Sound Effects generates the character's five-second signature
+  sound.
+- BytePlus ModelArk runs Seedream 4.5 directly to create a 16:9 character still
+  and add it to the gallery.
+- BytePlus ModelArk runs Seedance 1.5 Pro directly using that still as its
+  identity reference and renders a
+  five-second 720p video with synchronized audio.
+
+Open `/characters/c-selene` to use the first configured pipeline for Meher Qureshi.

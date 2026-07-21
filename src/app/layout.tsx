@@ -44,7 +44,7 @@ export default function RootLayout({
         <div className="ambient-glow" />
         <div className="grain" />
         <Header />
-        <main className="flex-1 flex flex-col relative z-10 pb-24">{children}</main>
+        <main className="flex-1 flex flex-col min-w-0 relative z-10 pb-24">{children}</main>
         <footer className="border-t border-line relative z-10 pb-24">
           <div className="max-w-6xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-grey">
             <span className="marquee-title text-sm tracking-widest text-ink">

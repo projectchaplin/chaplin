@@ -16,6 +16,7 @@ export default function DeveloperAccessCard({ character }: { character: Characte
       tagline: character.tagline,
       personality: character.personality,
       voiceDesc: character.voiceDesc,
+      voiceId: character.voiceId,
       sfxDesc: character.sfxDesc,
       themeDesc: character.themeDesc,
       licenseType: character.licenseType,

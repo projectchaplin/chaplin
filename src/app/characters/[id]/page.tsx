@@ -11,6 +11,7 @@ import VoicePlayButton from "@/components/VoicePlayButton";
 import EarningsSparkline from "@/components/EarningsSparkline";
 import CharacterGallery from "@/components/CharacterGallery";
 import DeveloperAccessCard from "@/components/DeveloperAccessCard";
+import CharacterProductionStudio from "@/components/CharacterProductionStudio";
 import { IconArrowLeft } from "@/components/Icons";
 import {
   ARCHETYPE_HUE,
@@ -42,9 +43,11 @@ export default function CharacterProfilePage() {
   const maker = getUser(world, character.makerId);
   const resume = resumeForCharacter(world, character.id);
   const ledger = ledgerForCharacter(world, character.id);
+  const canProduce = world.activeRole === "admin" || (world.activeRole === "maker" && character.makerId === world.currentUserId);
+  const canCast = world.activeRole === "admin" || world.activeRole === "caster";
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10 w-full">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10 w-full min-w-0 overflow-hidden">
       <Link
         href="/characters"
         className="inline-flex items-center gap-1.5 pl-2.5 pr-4 py-2 rounded-full poster-card text-sm font-semibold hover:text-accent transition-colors mb-3"
@@ -160,6 +163,12 @@ export default function CharacterProfilePage() {
         </div>
       )}
 
+      {canProduce && (
+        <div className="mt-6">
+          <CharacterProductionStudio character={character} />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         {/* Left: personality, voice, license terms */}
         <div className="md:col-span-2 flex flex-col gap-6">
@@ -259,14 +268,24 @@ export default function CharacterProfilePage() {
             <EarningsSparkline entries={ledger} />
           </section>
 
-          <DeveloperAccessCard character={character} />
+          {canProduce && <DeveloperAccessCard character={character} />}
 
-          <Link
-            href={`/studio/write?cast=${character.id}`}
-            className="bg-accent text-paper font-semibold text-center px-4 py-3 rounded-sm hover:bg-accent-light transition-colors"
-          >
-            Cast {character.name.split(" ")[0]} in a story
-          </Link>
+          {canCast && (
+            <Link
+              href={`/studio/write?cast=${character.id}`}
+              className="bg-accent text-paper font-semibold text-center px-4 py-3 rounded-sm hover:bg-accent-light transition-colors"
+            >
+              Cast {character.name.split(" ")[0]} in a story
+            </Link>
+          )}
+          {world.activeRole === "maker" && character.makerId === world.currentUserId && (
+            <Link
+              href="/studio"
+              className="border border-accent text-accent font-semibold text-center px-4 py-3 rounded-sm hover:bg-accent/10 transition-colors"
+            >
+              Manage {character.name.split(" ")[0]}
+            </Link>
+          )}
         </div>
       </div>
     </div>

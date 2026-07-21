@@ -3,22 +3,41 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IconHome, IconMask, IconFilm, IconBriefcase, IconTrophy } from "@/components/Icons";
+import { useChaplinStore } from "@/lib/store";
+import type { AppRole } from "@/lib/types";
 
-const TABS = [
-  { href: "/", label: "Home", Icon: IconHome },
-  { href: "/characters", label: "Characters", Icon: IconMask },
-  { href: "/stories", label: "Stories", Icon: IconFilm },
-  { href: "/studio", label: "Studio", Icon: IconBriefcase },
-  { href: "/ledger", label: "Leaders", Icon: IconTrophy },
-];
+const TABS: Record<AppRole, Array<{ href: string; label: string; Icon: typeof IconHome }>> = {
+  maker: [
+    { href: "/", label: "Home", Icon: IconHome },
+    { href: "/characters", label: "Actors", Icon: IconMask },
+    { href: "/studio", label: "Maker", Icon: IconBriefcase },
+    { href: "/stories", label: "Stories", Icon: IconFilm },
+    { href: "/ledger", label: "Earnings", Icon: IconTrophy },
+  ],
+  caster: [
+    { href: "/", label: "Home", Icon: IconHome },
+    { href: "/characters", label: "Cast", Icon: IconMask },
+    { href: "/stories", label: "Stories", Icon: IconFilm },
+    { href: "/studio/write", label: "Write", Icon: IconBriefcase },
+    { href: "/ledger", label: "Leaders", Icon: IconTrophy },
+  ],
+  admin: [
+    { href: "/admin", label: "Admin", Icon: IconBriefcase },
+    { href: "/characters", label: "Actors", Icon: IconMask },
+    { href: "/stories", label: "Stories", Icon: IconFilm },
+    { href: "/studio", label: "Studio", Icon: IconHome },
+    { href: "/ledger", label: "Ledger", Icon: IconTrophy },
+  ],
+};
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const activeRole = useChaplinStore((state) => state.activeRole);
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-line bg-paper/80 backdrop-blur-xl">
       <div className="max-w-md mx-auto flex items-stretch justify-around px-2">
-        {TABS.map(({ href, label, Icon }) => {
+        {TABS[activeRole].map(({ href, label, Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link

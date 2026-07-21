@@ -7,7 +7,7 @@ import { useChaplinStore } from "@/lib/store";
 import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
 import { ARCHETYPES } from "@/data/seed";
-import type { Archetype, LicenseType } from "@/lib/types";
+import type { Archetype, LicenseType, VoiceGender } from "@/lib/types";
 import { ARCHETYPE_HUE, ARCHETYPE_LABEL, LICENSE_HUE, LICENSE_LABEL } from "@/lib/format";
 
 const VOICE_PRESETS = [
@@ -45,12 +45,14 @@ const HUE_SWATCHES = [340, 30, 205, 45, 150, 265, 18, 300, 220, 95];
 export default function NewCharacterPage() {
   const router = useRouter();
   const currentUserId = useChaplinStore((s) => s.currentUserId);
+  const activeRole = useChaplinStore((s) => s.activeRole);
   const addCharacter = useChaplinStore((s) => s.addCharacter);
 
   const [name, setName] = useState("");
   const [archetype, setArchetype] = useState<Archetype>("hero");
   const [tagline, setTagline] = useState("");
   const [personality, setPersonality] = useState("");
+  const [voiceGender, setVoiceGender] = useState<VoiceGender>("feminine");
   const [voicePreset, setVoicePreset] = useState(VOICE_PRESETS[0]);
   const [customVoice, setCustomVoice] = useState("");
   const [sfxPreset, setSfxPreset] = useState(SFX_PRESETS[0]);
@@ -68,6 +70,17 @@ export default function NewCharacterPage() {
   const sfxDesc = isCustomSfx ? customSfx : sfxPreset;
   const isCustomScore = scorePreset === SCORE_PRESETS[SCORE_PRESETS.length - 1];
   const themeDesc = isCustomScore ? customScore : scorePreset;
+
+  if (activeRole === "caster") {
+    return (
+      <div className="max-w-xl mx-auto px-6 py-16 text-center w-full">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-2">Caster view</p>
+        <h1 className="reel-title text-3xl">Actor creation is hidden from casters</h1>
+        <p className="text-sm text-grey mt-3 mb-6">Switch to Actor Maker from the profile menu to build a new AI actor.</p>
+        <Link href="/characters" className="accent-btn inline-flex rounded-full px-5 py-2.5 text-sm font-semibold">Browse actors</Link>
+      </div>
+    );
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,6 +101,7 @@ export default function NewCharacterPage() {
       archetype,
       tagline: tagline.trim(),
       personality: personality.trim(),
+      voiceGender,
       voiceDesc: voiceDesc.trim(),
       sfxDesc: sfxDesc.trim(),
       themeDesc: themeDesc.trim(),
@@ -183,6 +197,15 @@ export default function NewCharacterPage() {
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Voice</span>
           <select
+            value={voiceGender}
+            onChange={(e) => setVoiceGender(e.target.value as VoiceGender)}
+            className="border border-line rounded-sm px-3 py-2 bg-paper focus:outline-none focus:border-accent"
+          >
+            <option value="feminine">Feminine voice</option>
+            <option value="masculine">Masculine voice</option>
+            <option value="androgynous">Androgynous voice</option>
+          </select>
+          <select
             value={voicePreset}
             onChange={(e) => setVoicePreset(e.target.value)}
             className="border border-line rounded-sm px-3 py-2 bg-paper focus:outline-none focus:border-accent"
@@ -202,7 +225,7 @@ export default function NewCharacterPage() {
             />
           )}
           <span className="text-[11px] text-grey">
-            Real voice generation wires in later, this describes it for now.
+            Voice presentation is sent explicitly to ElevenLabs with the performance description.
           </span>
         </label>
 

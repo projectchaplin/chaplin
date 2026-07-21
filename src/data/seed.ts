@@ -20,6 +20,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 export const USERS: User[] = [
+  { id: "u-admin", name: "Chaplin Admin", handle: "@superadmin", roleBadges: ["admin"], avatarInitial: "S", avatarHue: 165 },
   { id: "u-meera", name: "Meera Rao", handle: "@meera", roleBadges: ["maker"], avatarInitial: "M", avatarHue: 28, imageUrl: "/unsplash/u-meera-mkpinodl-tw.webp" },
   { id: "u-arjun", name: "Arjun Dev", handle: "@arjun", roleBadges: ["caster", "maker"], avatarInitial: "A", avatarHue: 202, imageUrl: "/unsplash/u-arjun-zxr0fnwhddq.webp" },
   { id: "u-priya", name: "Priya Nair", handle: "@priya", roleBadges: ["maker", "caster"], avatarInitial: "P", avatarHue: 335, imageUrl: "/unsplash/u-priya-f49xhybpia0.webp" },
@@ -36,6 +37,7 @@ type SeedCharacter = Pick<
   | "archetype"
   | "tagline"
   | "personality"
+  | "voiceGender"
   | "voiceDesc"
   | "sfxDesc"
   | "themeDesc"
@@ -57,6 +59,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "villain",
     tagline: "Every heist needs a narrator. She works Chandni Chowk and prefers being the twist.",
     personality: "Cold, theatrical, allergic to being second-guessed. Speaks in half-finished threats.",
+    voiceGender: "feminine",
     voiceDesc: "Low, clipped, a faint smile in every sentence",
     sfxDesc: "A single coin flip, mid-heist sting",
     themeDesc: "Moody sitar riff over a slow tabla pulse, 12s loop",
@@ -74,6 +77,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "mentor",
     tagline: "Retired locksmith of Old Delhi. Unretired the day his shagird went missing.",
     personality: "Patient, dry humor, tests people before he trusts them.",
+    voiceGender: "masculine",
     voiceDesc: "Gravelly, unhurried, pauses before punchlines",
     sfxDesc: "A lock tumbler clicking into place",
     themeDesc: "Warm santoor over a slow harmonium drone",
@@ -91,6 +95,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "comic-relief",
     tagline: "Demolitions expert. Emotionally, also a demolitions expert.",
     personality: "Chaotic, loyal, narrates her own explosions.",
+    voiceGender: "feminine",
     voiceDesc: "Bright, fast, cracks on the high notes",
     sfxDesc: "A firecracker fuse hissing, then a pop",
     themeDesc: "Bouncy dhol-driven brass, festival energy",
@@ -108,6 +113,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "love-interest",
     tagline: "A Lucknow jewel thief who only steals from people who deserve it.",
     personality: "Composed, magnetic, says more with silence than lines.",
+    voiceGender: "feminine",
     voiceDesc: "Smoky, deliberate, a slight theatrical lilt",
     sfxDesc: "A glass display case sliding open",
     themeDesc: "Slow ghazal strings, a single sarangi line",
@@ -133,6 +139,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "hero",
     tagline: "Ex-lighthouse keeper on the Konkan coast. Now keeps watch over things that matter more.",
     personality: "Earnest, a little old-fashioned, believes in second chances.",
+    voiceGender: "masculine",
     voiceDesc: "Warm, steady, carries a slight sea-worn rasp",
     sfxDesc: "A foghorn, far off and low",
     themeDesc: "Rolling waves under a solo bansuri",
@@ -150,6 +157,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "villain",
     tagline: "One voice. Speaks like there are several more behind it.",
     personality: "Eerily polite, never raises its voice, always already knows.",
+    voiceGender: "androgynous",
     voiceDesc: "Layered whisper, echoes its own last word",
     sfxDesc: "A door creaking, then three overlapping whispers",
     themeDesc: "Detuned harmonium drone with a distant temple bell",
@@ -167,6 +175,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "sidekick",
     tagline: "Pickpocket, cartographer, professional third wheel.",
     personality: "Quick-witted, a little starstruck by everyone braver than her.",
+    voiceGender: "feminine",
     voiceDesc: "Light, quick, trips over her own excitement",
     sfxDesc: "A coin purse being lifted, quick and clean",
     themeDesc: "Playful flute over a running tabla shuffle",
@@ -184,6 +193,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "mentor",
     tagline: "Runs the world's most dangerous mithai shop. Ask about the ladoos.",
     personality: "Warm on the surface, terrifyingly competent underneath.",
+    voiceGender: "feminine",
     voiceDesc: "Soft, grandmotherly, undercut by total confidence",
     sfxDesc: "A ladle clinking against a hot kadhai",
     themeDesc: "Gentle harmonium lullaby, kitchen-warm",
@@ -201,6 +211,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "outsider",
     tagline: "Banished from three akhadas. Still shows up to all their reunions.",
     personality: "Guarded, sardonic, softens for exactly one person at a time.",
+    voiceGender: "masculine",
     voiceDesc: "Flat, dry, a beat of hesitation before honesty",
     sfxDesc: "Prayer beads clicking, one slow breath",
     themeDesc: "Solo ektara over a long, open silence",
@@ -218,6 +229,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "villain",
     tagline: "Collects debts. And the occasional haveli.",
     personality: "Charming until crossed, then suddenly not charming at all.",
+    voiceGender: "masculine",
     voiceDesc: "Silky, precise, enunciates threats like poetry",
     sfxDesc: "A wax seal pressed onto a promissory note",
     themeDesc: "Slow shehnai over ominous tabla rolls",
@@ -235,6 +247,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "comic-relief",
     tagline: "Town crier. Nobody asked him to editorialize. He does anyway.",
     personality: "Overconfident, endlessly cheerful, wrong about most things.",
+    voiceGender: "masculine",
     voiceDesc: "Chirpy, over-enunciated, loves a dramatic pause",
     sfxDesc: "A hand bell, rung twice, too enthusiastically",
     themeDesc: "Chirpy dholak march, slightly off-beat",
@@ -252,6 +265,7 @@ const SEED_CHARACTERS: SeedCharacter[] = [
     archetype: "rebel",
     tagline: "Deserted the royal guard. Kept the armor out of spite.",
     personality: "Blunt, principled, allergic to authority of any kind.",
+    voiceGender: "feminine",
     voiceDesc: "Hard-edged, clipped commands, rare cracks of warmth",
     sfxDesc: "Armor plates clinking as she turns to leave",
     themeDesc: "Driving nagada drums under a defiant string line",
