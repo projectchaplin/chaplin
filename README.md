@@ -107,3 +107,9 @@ Quick Write button. Claude usage from these actions is recorded in the admin
 generation log with input tokens, output tokens, USD, INR, and normalized
 Chaplin tokens. The rate variables above are optional overrides for the current
 Sonnet contract.
+
+The actor builder at `/characters/new` has the same assistance at the identity
+stage. Magic Character can fill tagline, personality, voice, signature SFX, and
+theme together, while each field also has its own Suggest action. If Claude is
+not configured or rejects the key, the builder falls back to archetype-aware
+local suggestions instead of leaving the form blank.

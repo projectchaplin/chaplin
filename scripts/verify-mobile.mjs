@@ -275,6 +275,50 @@ async function main() {
       document.cookie = "chaplin-demo-role=admin; path=/; max-age=31536000; SameSite=Lax";
       return true;
     })()`);
+    await cdp.navigate(`${baseUrl}/characters/new`);
+    const actorBuilder = await pageState(cdp, ["AI ACTOR BUILDER", "Magic Character", "Build my character"]);
+    const actorSuggestionTargets = await cdp.evaluate(`(() =>
+      [...document.querySelectorAll("[data-suggest-character]")].map((button) => button.dataset.suggestCharacter)
+    )()`);
+    const characterNameEntered = await cdp.evaluate(`(() => {
+      const input = document.querySelector('[data-character-field="name"]');
+      if (!input) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "Boxer Benson");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    })()`);
+    await sleep(100);
+    const characterMagicStarted = await cdp.evaluate(`(() => {
+      const button = document.querySelector('[data-suggest-character="all"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    let characterSuggestion = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      characterSuggestion = await cdp.evaluate(`(() => ({
+        tagline: document.querySelector('[data-character-field="tagline"]')?.value ?? "",
+        personality: document.querySelector('[data-character-field="personality"]')?.value ?? "",
+        voice: document.querySelector('[data-character-field="voice"]')?.value ?? "",
+        sfx: document.querySelector('[data-character-field="sfx"]')?.value ?? "",
+        theme: document.querySelector('[data-character-field="theme"]')?.value ?? "",
+      }))()`);
+      if (Object.values(characterSuggestion ?? {}).every(Boolean)) break;
+      await sleep(250);
+    }
+    const expectedActorSuggestionTargets = ["all", "tagline", "personality", "voice", "sfx", "theme"];
+    const actorSuggestionsReady = characterNameEntered && characterMagicStarted &&
+      expectedActorSuggestionTargets.every((target) => actorSuggestionTargets.includes(target)) &&
+      Object.values(characterSuggestion ?? {}).every(Boolean);
+    checks.push(result(
+      "Magic suggestions in actor builder",
+      actorBuilder.required && !actorBuilder.overflow && actorSuggestionsReady,
+      actorSuggestionsReady
+        ? `${pageDetail(actorBuilder)} Â· full identity plus five per-field suggestions`
+        : `${pageDetail(actorBuilder)} Â· one or more actor suggestions did not populate`
+    ));
+
     await cdp.navigate(`${baseUrl}/characters`);
     const expandedShelf = await pageState(cdp, ["Astra Sen", "Kaali Kothi", "Superhero", "Horror"]);
     const newActorArt = await cdp.evaluate(`(() => ({

@@ -42,6 +42,38 @@ const SCORE_PRESETS = [
 
 const HUE_SWATCHES = [340, 30, 205, 45, 150, 265, 18, 300, 220, 95];
 
+type SuggestionTarget = "all" | "tagline" | "personality" | "voice" | "sfx" | "theme";
+type CharacterSuggestion = {
+  tagline: string;
+  personality: string;
+  voiceGender: VoiceGender;
+  voiceDescription: string;
+  signatureSfx: string;
+  themeScore: string;
+};
+
+function SuggestButton({
+  target,
+  activeTarget,
+  onClick,
+}: {
+  target: SuggestionTarget;
+  activeTarget: SuggestionTarget | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={Boolean(activeTarget)}
+      data-suggest-character={target}
+      className="rounded-full border border-accent/50 px-2.5 py-1 text-[10px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40"
+    >
+      {activeTarget === target ? "Writing..." : target === "all" ? "✦ Build my character" : "✦ Suggest"}
+    </button>
+  );
+}
+
 export default function NewCharacterPage() {
   const router = useRouter();
   const currentUserId = useChaplinStore((s) => s.currentUserId);
@@ -65,6 +97,8 @@ export default function NewCharacterPage() {
   const [hue, setHue] = useState(205);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [suggestingTarget, setSuggestingTarget] = useState<SuggestionTarget | null>(null);
+  const [suggestionMessage, setSuggestionMessage] = useState("");
 
   const isCustomVoice = voicePreset === VOICE_PRESETS[VOICE_PRESETS.length - 1];
   const voiceDesc = isCustomVoice ? customVoice : voicePreset;
@@ -72,6 +106,65 @@ export default function NewCharacterPage() {
   const sfxDesc = isCustomSfx ? customSfx : sfxPreset;
   const isCustomScore = scorePreset === SCORE_PRESETS[SCORE_PRESETS.length - 1];
   const themeDesc = isCustomScore ? customScore : scorePreset;
+
+  async function suggestCharacter(target: SuggestionTarget) {
+    if (!name.trim()) {
+      setError("Name the AI actor first, then Magic Character can build the identity.");
+      return;
+    }
+    setSuggestingTarget(target);
+    setError("");
+    setSuggestionMessage("");
+    try {
+      const response = await fetch("/api/write/character", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target,
+          name,
+          archetype,
+          tagline,
+          personality,
+          voiceGender,
+          voiceDescription: voiceDesc,
+          signatureSfx: sfxDesc,
+          themeScore: themeDesc,
+        }),
+      });
+      const data = await response.json() as {
+        suggestion?: CharacterSuggestion;
+        provider?: string;
+        warning?: string;
+        error?: string;
+      };
+      if (!response.ok || !data.suggestion) throw new Error(data.error || "Character suggestions failed.");
+      const suggestion = data.suggestion;
+      if (target === "all" || target === "tagline") setTagline(suggestion.tagline);
+      if (target === "all" || target === "personality") setPersonality(suggestion.personality);
+      if (target === "all" || target === "voice") {
+        setVoiceGender(suggestion.voiceGender);
+        setVoicePreset(VOICE_PRESETS[VOICE_PRESETS.length - 1]);
+        setCustomVoice(suggestion.voiceDescription);
+      }
+      if (target === "all" || target === "sfx") {
+        setSfxPreset(SFX_PRESETS[SFX_PRESETS.length - 1]);
+        setCustomSfx(suggestion.signatureSfx);
+      }
+      if (target === "all" || target === "theme") {
+        setScorePreset(SCORE_PRESETS[SCORE_PRESETS.length - 1]);
+        setCustomScore(suggestion.themeScore);
+      }
+      setSuggestionMessage(
+        data.warning || (data.provider === "anthropic"
+          ? "Claude expanded the character. Every suggestion is editable."
+          : "Character suggestions are ready. Every field remains editable.")
+      );
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "Character suggestions failed.");
+    } finally {
+      setSuggestingTarget(null);
+    }
+  }
 
   if (activeRole === "caster" || activeRole === "brand") {
     return (
@@ -170,6 +263,7 @@ export default function NewCharacterPage() {
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Name</span>
           <input
+            data-character-field="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Ferra Voss"
@@ -192,29 +286,63 @@ export default function NewCharacterPage() {
           </div>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Tagline</span>
+        <div className="rounded-md border border-accent/50 bg-accent/5 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div>
+              <p className="text-sm font-semibold">Magic Character</p>
+              <p className="mt-1 text-xs text-grey">
+                Type a name, choose an archetype, then build a coherent identity in one click.
+              </p>
+            </div>
+            <div className="shrink-0">
+              <SuggestButton
+                target="all"
+                activeTarget={suggestingTarget}
+                onClick={() => void suggestCharacter("all")}
+              />
+            </div>
+          </div>
+          {suggestionMessage && (
+            <p className="mt-3 text-[11px] text-grey" data-suggestion-message>
+              {suggestionMessage}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">Tagline</span>
+            <SuggestButton target="tagline" activeTarget={suggestingTarget} onClick={() => void suggestCharacter("tagline")} />
+          </div>
           <input
+            data-character-field="tagline"
             value={tagline}
             onChange={(e) => setTagline(e.target.value)}
             placeholder="One line that sells the pitch"
             className="border border-line rounded-sm px-3 py-2 focus:outline-none focus:border-accent"
           />
-        </label>
+        </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Personality</span>
+        <div className="flex flex-col gap-1 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">Personality</span>
+            <SuggestButton target="personality" activeTarget={suggestingTarget} onClick={() => void suggestCharacter("personality")} />
+          </div>
           <textarea
+            data-character-field="personality"
             value={personality}
             onChange={(e) => setPersonality(e.target.value)}
             rows={3}
             placeholder="How they talk, what they want, what sets them off"
             className="border border-line rounded-sm px-3 py-2 focus:outline-none focus:border-accent resize-none"
           />
-        </label>
+        </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Voice</span>
+        <div className="flex flex-col gap-1 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">Voice</span>
+            <SuggestButton target="voice" activeTarget={suggestingTarget} onClick={() => void suggestCharacter("voice")} />
+          </div>
           <select
             value={voiceGender}
             onChange={(e) => setVoiceGender(e.target.value as VoiceGender)}
@@ -237,6 +365,7 @@ export default function NewCharacterPage() {
           </select>
           {isCustomVoice && (
             <input
+              data-character-field="voice"
               value={customVoice}
               onChange={(e) => setCustomVoice(e.target.value)}
               placeholder="Describe the voice yourself"
@@ -246,10 +375,13 @@ export default function NewCharacterPage() {
           <span className="text-[11px] text-grey">
             Voice presentation is sent explicitly to ElevenLabs with the performance description.
           </span>
-        </label>
+        </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Signature SFX</span>
+        <div className="flex flex-col gap-1 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">Signature SFX</span>
+            <SuggestButton target="sfx" activeTarget={suggestingTarget} onClick={() => void suggestCharacter("sfx")} />
+          </div>
           <select
             value={sfxPreset}
             onChange={(e) => setSfxPreset(e.target.value)}
@@ -263,16 +395,20 @@ export default function NewCharacterPage() {
           </select>
           {isCustomSfx && (
             <input
+              data-character-field="sfx"
               value={customSfx}
               onChange={(e) => setCustomSfx(e.target.value)}
               placeholder="Describe the signature sound yourself"
               className="border border-line rounded-sm px-3 py-2 mt-1 focus:outline-none focus:border-accent"
             />
           )}
-        </label>
+        </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Theme score</span>
+        <div className="flex flex-col gap-1 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">Theme score</span>
+            <SuggestButton target="theme" activeTarget={suggestingTarget} onClick={() => void suggestCharacter("theme")} />
+          </div>
           <select
             value={scorePreset}
             onChange={(e) => setScorePreset(e.target.value)}
@@ -286,6 +422,7 @@ export default function NewCharacterPage() {
           </select>
           {isCustomScore && (
             <input
+              data-character-field="theme"
               value={customScore}
               onChange={(e) => setCustomScore(e.target.value)}
               placeholder="Describe the theme yourself"
@@ -295,7 +432,7 @@ export default function NewCharacterPage() {
           <span className="text-[11px] text-grey">
             Real music generation wires in later, this describes it for now.
           </span>
-        </label>
+        </div>
 
         <div className="flex flex-col gap-2 text-sm">
           <span className="font-medium">License</span>
