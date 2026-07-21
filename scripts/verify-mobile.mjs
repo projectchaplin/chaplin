@@ -197,13 +197,11 @@ async function main() {
     let homeBroll = null;
     for (let attempt = 0; attempt < 20; attempt += 1) {
       homeBroll = await cdp.evaluate(`(() => {
-        const reel = document.querySelector("[data-home-broll]");
-        const activeCard = reel?.closest("div.relative");
+        const activeCard = document.querySelector('[data-home-video="active"]');
         const video = activeCard?.querySelector("video");
-        return reel ? {
+        return activeCard ? {
           characterId: activeCard?.dataset.heroCharacterId ?? null,
           videoSource: video?.currentSrc || video?.src || null,
-          soundControl: Boolean(reel.querySelector('button[aria-label*="B-roll with sound"]')),
           timingBar: Boolean(activeCard?.querySelector("[data-broll-timing-bar]")),
         } : null;
       })()`);
@@ -211,14 +209,13 @@ async function main() {
       await sleep(250);
     }
     checks.push(result(
-      "Homepage uses persisted B-roll",
+      "Homepage uses silent persisted video",
       homeBroll?.videoSource?.startsWith("https://") && homeBroll.timingBar,
       homeBroll?.videoSource ? "active tile playing Supabase CDN video · pink timing bar" : "active tile has no persisted video"
     ));
     const completedBrollId = homeBroll?.characterId;
     const endedDispatched = await cdp.evaluate(`(() => {
-      const reel = document.querySelector("[data-home-broll]");
-      const card = reel?.closest("[data-hero-character-id]");
+      const card = document.querySelector('[data-home-video="active"]');
       const video = card?.querySelector("video");
       if (!video) return false;
       video.dispatchEvent(new Event("ended"));
@@ -226,16 +223,15 @@ async function main() {
     })()`);
     await sleep(1200);
     const nextBroll = await cdp.evaluate(`(() => {
-      const reel = document.querySelector("[data-home-broll]");
-      const card = reel?.closest("[data-hero-character-id]");
+      const card = document.querySelector('[data-home-video="active"]');
       const video = card?.querySelector("video");
-      return reel ? {
+      return card ? {
         characterId: card?.dataset.heroCharacterId ?? null,
         videoSource: video?.currentSrc || video?.src || null,
       } : null;
     })()`);
     checks.push(result(
-      "B-roll carousel advances on completion",
+      "Video carousel advances on completion",
       endedDispatched && completedBrollId && nextBroll?.characterId !== completedBrollId && nextBroll?.videoSource?.startsWith("https://"),
       completedBrollId && nextBroll?.characterId ? `${completedBrollId} → ${nextBroll.characterId}` : "ready-video handoff failed"
     ));

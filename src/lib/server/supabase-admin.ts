@@ -269,6 +269,10 @@ export async function getCharacterProductionState(characterId: string) {
     const metadata = asset.metadata as Record<string, unknown> | null;
     return metadata?.voiceId === activeVoiceId;
   });
+  const latestVideo =
+    rows.find((asset) => asset.kind === "video" && asset.url.startsWith("https://")) ??
+    rows.find((asset) => asset.kind === "video");
+
   return {
     voiceId: activeVoiceId,
     voicePreviewUrl: voice.data?.preview_url ?? null,
@@ -276,7 +280,7 @@ export async function getCharacterProductionState(characterId: string) {
     latestSfxUrl: rows.find((asset) => asset.kind === "sfx")?.url ?? null,
     latestThemeUrl: rows.find((asset) => asset.kind === "theme")?.url ?? null,
     latestImageUrl: rows.find((asset) => asset.kind === "gallery")?.url ?? null,
-    latestVideoUrl: rows.find((asset) => asset.kind === "video")?.url ?? null,
+    latestVideoUrl: latestVideo?.url ?? null,
     assets: rows,
   };
 }
