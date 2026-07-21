@@ -175,6 +175,7 @@ export default function StoryBuilderForm() {
             personality: character.personality,
             voiceGender: character.voiceGender,
             voiceDesc: character.voiceDesc,
+            productionBible: character.productionBible,
           })),
         }),
       });

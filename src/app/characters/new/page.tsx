@@ -7,7 +7,7 @@ import { useChaplinStore } from "@/lib/store";
 import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
 import { ARCHETYPES } from "@/data/seed";
-import type { Archetype, LicenseType, VoiceGender } from "@/lib/types";
+import type { Archetype, CharacterProductionBible, LicenseType, VoiceGender } from "@/lib/types";
 import { ARCHETYPE_HUE, ARCHETYPE_LABEL, LICENSE_HUE, LICENSE_LABEL } from "@/lib/format";
 
 const VOICE_PRESETS = [
@@ -50,6 +50,7 @@ type CharacterSuggestion = {
   voiceDescription: string;
   signatureSfx: string;
   themeScore: string;
+  productionBible: CharacterProductionBible;
 };
 
 function SuggestButton({
@@ -85,6 +86,8 @@ export default function NewCharacterPage() {
   const [archetype, setArchetype] = useState<Archetype>("hero");
   const [tagline, setTagline] = useState("");
   const [personality, setPersonality] = useState("");
+  const [appearanceBrief, setAppearanceBrief] = useState("");
+  const [worldBrief, setWorldBrief] = useState("");
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("feminine");
   const [voicePreset, setVoicePreset] = useState(VOICE_PRESETS[0]);
   const [customVoice, setCustomVoice] = useState("");
@@ -99,6 +102,7 @@ export default function NewCharacterPage() {
   const [saving, setSaving] = useState(false);
   const [suggestingTarget, setSuggestingTarget] = useState<SuggestionTarget | null>(null);
   const [suggestionMessage, setSuggestionMessage] = useState("");
+  const [productionBible, setProductionBible] = useState<CharacterProductionBible | undefined>();
 
   const isCustomVoice = voicePreset === VOICE_PRESETS[VOICE_PRESETS.length - 1];
   const voiceDesc = isCustomVoice ? customVoice : voicePreset;
@@ -125,6 +129,8 @@ export default function NewCharacterPage() {
           archetype,
           tagline,
           personality,
+          appearanceBrief,
+          worldBrief,
           voiceGender,
           voiceDescription: voiceDesc,
           signatureSfx: sfxDesc,
@@ -139,6 +145,7 @@ export default function NewCharacterPage() {
       };
       if (!response.ok || !data.suggestion) throw new Error(data.error || "Character suggestions failed.");
       const suggestion = data.suggestion;
+      setProductionBible(suggestion.productionBible);
       if (target === "all" || target === "tagline") setTagline(suggestion.tagline);
       if (target === "all" || target === "personality") setPersonality(suggestion.personality);
       if (target === "all" || target === "voice") {
@@ -202,6 +209,7 @@ export default function NewCharacterPage() {
       voiceDesc: voiceDesc.trim(),
       sfxDesc: sfxDesc.trim(),
       themeDesc: themeDesc.trim(),
+      productionBible,
       avatarHue: hue,
       licenseType,
       royaltyRate,
@@ -307,6 +315,29 @@ export default function NewCharacterPage() {
               {suggestionMessage}
             </p>
           )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Face, age & wardrobe direction</span>
+            <textarea
+              value={appearanceBrief}
+              onChange={(event) => setAppearanceBrief(event.target.value)}
+              rows={3}
+              placeholder="Optional: late 30s, angular face, cropped hair, weathered khaki jacket"
+              className="border border-line rounded-sm px-3 py-2 focus:outline-none focus:border-accent resize-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">World, lighting & palette</span>
+            <textarea
+              value={worldBrief}
+              onChange={(event) => setWorldBrief(event.target.value)}
+              rows={3}
+              placeholder="Optional: rain-dark railway world, tungsten practicals, deep green and brass"
+              className="border border-line rounded-sm px-3 py-2 focus:outline-none focus:border-accent resize-none"
+            />
+          </label>
         </div>
 
         <div className="flex flex-col gap-1 text-sm">
@@ -469,6 +500,37 @@ export default function NewCharacterPage() {
             </label>
           )}
         </div>
+
+        {productionBible && (
+          <details className="rounded-md border border-line bg-paper/40 p-4" data-character-bible open>
+            <summary className="cursor-pointer text-sm font-semibold">Actor Direction Bible</summary>
+            <p className="mt-1 text-[11px] text-grey">Saved with the actor and reused by stills, motion, voice, sound, music, and stories.</p>
+            <div className="mt-4 grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">
+              <div>
+                <p className="font-semibold text-accent">Dramatic engine</p>
+                <p className="mt-1"><span className="text-grey">Want:</span> {productionBible.dramatic.externalWant}</p>
+                <p className="mt-1"><span className="text-grey">Contradiction:</span> {productionBible.dramatic.contradiction}</p>
+                <p className="mt-1"><span className="text-grey">Vulnerability:</span> {productionBible.dramatic.vulnerability}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-accent">Performance tells</p>
+                <p className="mt-1"><span className="text-grey">Face:</span> {productionBible.performance.restingExpression}</p>
+                <p className="mt-1"><span className="text-grey">Pressure:</span> {productionBible.performance.underPressure}</p>
+                <p className="mt-1"><span className="text-grey">Movement:</span> {productionBible.performance.movementStyle}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-accent">Visual continuity</p>
+                <p className="mt-1"><span className="text-grey">Face anchors:</span> {productionBible.visual.faceAnchors.join("; ")}</p>
+                <p className="mt-1"><span className="text-grey">Wardrobe:</span> {productionBible.visual.wardrobe}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-accent">Story engine</p>
+                <p className="mt-1"><span className="text-grey">Hook:</span> {productionBible.story.hookPattern}</p>
+                <p className="mt-1"><span className="text-grey">Cliffhanger:</span> {productionBible.story.cliffhangerPattern}</p>
+              </div>
+            </div>
+          </details>
+        )}
 
         {error && <p className="text-xs text-red-600">{error}</p>}
 

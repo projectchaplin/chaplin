@@ -113,3 +113,31 @@ stage. Magic Character can fill tagline, personality, voice, signature SFX, and
 theme together, while each field also has its own Suggest action. If Claude is
 not configured or rejects the key, the builder falls back to archetype-aware
 local suggestions instead of leaving the form blank.
+
+## Production-directed prompting
+
+Each actor now carries a persistent `productionBible` covering dramatic want
+and contradiction, pressure behavior, facial and wardrobe continuity, movement
+grammar, camera and motivated-light defaults, plus hook, escalation,
+cliffhanger, payoff, and recurring motifs. It is stored in Supabase as
+`characters.production_bible` and passed into Magic Writer as story canon.
+
+Prompts are deliberately different by medium:
+
+- ElevenLabs Voice Design receives language/dialect, presentation and age,
+  quality, persona, emotion, timbre, pacing, and pressure delivery only.
+- ElevenLabs SFX receives a physical five-second event and acoustic timeline;
+  Eleven Music receives BPM, key, motif, instrumentation, musical development,
+  mix priority, and an instrumental-only instruction.
+- Seedream receives the designed first frame: face anchors, performance beat,
+  set, blocking, framing, camera angle and lens, motivated key/fill/edge light,
+  and continuity locks.
+- Seedance receives the selected image as its exact first frame and source of
+  truth. Its prompt contains only timed subject motion, facial beat, camera
+  path, light continuity, secondary motion, final frame, and geometry locks.
+  Voice, SFX, and music are generated and mixed separately.
+
+Magic Scene asks Claude for a structured director blueprint first, then the app
+renders separate provider-ready prompts from that blueprint. If Claude is
+unavailable, the same pipeline uses production-directed local blueprints rather
+than reverting to a shared biography prompt.

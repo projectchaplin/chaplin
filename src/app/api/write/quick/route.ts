@@ -5,6 +5,13 @@ import {
   failGeneration,
 } from "@/lib/server/supabase-admin";
 import { calculateGenerationBilling } from "@/lib/server/billing";
+import {
+  buildProductionBible,
+  buildScenePackage,
+  composeSfxPrompt,
+  composeThemePrompt,
+  composeVoiceDesignPrompt,
+} from "@/lib/production-prompting";
 import type { Character } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -22,13 +29,13 @@ const FIELDS = [
 type QuickField = typeof FIELDS[number];
 
 const FIELD_RULES: Record<QuickField, string> = {
-  "voice-description": "Write a precise ElevenLabs Voice Design description. Specify adult vocal identity, perceived age, accent and language behavior, timbre, resonance, pace, energy, emotional control, and repeatable performance qualities. Make it an original fictional voice and never imitate a real person. 70-130 words.",
+  "voice-description": "Write only an ElevenLabs Voice Design prompt using this order: native language and dialect; gender presentation and age range; quality; 2-5 word persona; 2-3 emotions; timbre, pitch, resonance, pacing, intonation, and pressure behavior. Do not include biography, camera language, SFX, reverb, echo, phone, tape, or celebrity imitation. 65-105 words.",
   "voice-preview": "Write one or two short spoken lines that reveal the actor's distinctive personality and test pacing, emotion, pronunciation, and vocal range. It must sound natural when performed in 6-12 seconds. Output dialogue only.",
   dialogue: "Write a concise, performable line in this actor's established personality and locked voice. Preserve the user's intent, use subtext rather than exposition, and make it memorable without catchphrase clichés. Output dialogue only.",
-  sfx: "Write a production prompt for one distinctive five-second signature sound effect. Describe foreground events, timing, texture, and subtle room tone. No speech, music, vocals, or character names spoken aloud. 25-60 words.",
-  theme: "Write a production prompt for a distinctive 12-second instrumental character theme. Specify instrumentation, rhythm, emotional arc, memorable motif, mix, and clean ending. No vocals or copyrighted musical imitation. 35-80 words.",
-  image: "Write a Seedream-ready cinematic 16:9 still prompt. Preserve the actor's exact face, age, wardrobe language, and identity; specify visible action, setting, composition, lens feeling, practical lighting, skin and fabric realism, and film texture. No text, logo, or watermark. 90-160 words.",
-  video: "Write a Seedance-ready five-second image-to-video performance prompt. Preserve identity from the reference still; specify one clear physical action, facial beat, camera movement, environmental motion, timing, and final frame. This is a silent dubbing plate: no generated speech, vocals, subtitles, text, logo, or watermark. 90-170 words.",
+  sfx: "Write only an ElevenLabs five-second non-musical one-shot prompt. Use a 0.0-1.5s / 1.5-3.5s / 3.5-5.0s event timeline, physical sound sources, material texture, acoustic distance, room response, and a clean stop. One coherent effect, not a biography or score. No speech, voice, melody, or trailer braam. 45-85 words.",
+  theme: "Write only an Eleven Music prompt for a 12-second instrumental ident. Include BPM, key, a three-note motif, exact instruments, 0-3s / 3-8s / 8-12s development, mix priority, and final cadence. No biography, sound-effect sequence, vocals, choir, lyrics, or copyrighted imitation. 55-95 words.",
+  image: "Write only a Seedream 16:9 first-frame prompt using labeled blocks: SUBJECT anchors; DRAMATIC MOMENT; SET; CAMERA framing, angle, height, and lens; LIGHTING with motivated key direction, fill, edge, and temperature; CONTINUITY locks; EXCLUSIONS. Show a playable decision through face, hands, weight, and eyeline. No biography, plot summary, camera movement, dialogue, typography, logo, or watermark. 130-230 words.",
+  video: "Write only a Seedance five-second IMAGE-TO-VIDEO motion plan. State that the supplied image is exact first frame/source of truth; do not redescribe the actor, wardrobe, set, palette, or biography. Specify 0.0-1.2s, 1.2-3.5s, and 3.5-5.0s subject action; one facial beat; one camera path; fixed source-image axis/lens/horizon; light continuity; secondary motion; final frame; identity and geometry locks. Silent plate: no lip-sync, speech, subtitles, text, logo, or watermark. 130-220 words.",
 };
 
 function clean(value: unknown, max = 4000) {
@@ -37,13 +44,13 @@ function clean(value: unknown, max = 4000) {
 
 function localRewrite(field: QuickField, character: Character, currentText: string) {
   const base = currentText || character.tagline;
-  if (field === "voice-description") return `An original adult ${character.voiceGender} voice with ${character.voiceDesc.toLowerCase()}. The performance is unmistakably ${character.name}: ${character.personality.toLowerCase()}. Natural Indian English with confident Hindi and Urdu pronunciation, controlled breath, clean consonants, and repeatable emotional timing. Never an imitation of a real person.`;
-  if (field === "voice-preview") return character.brollLine || `${base.replace(/[.!?]+$/, "")}. You can doubt me after we are safely outside.`;
-  if (field === "dialogue") return `${base.replace(/[.!?]+$/, "")}. Now watch what happens next.`;
-  if (field === "sfx") return `${character.sfxDesc}. A five-second signature: immediate foreground detail, one sharp turning beat at three seconds, subtle cinematic room tone, then a clean stop. No speech or music.`;
-  if (field === "theme") return `${character.themeDesc}. A 12-second instrumental identity theme for ${character.name}: establish one memorable motif, build controlled momentum, add a decisive final accent, and end cleanly. No vocals.`;
-  if (field === "image") return `${character.name}, an original fictional ${character.archetype}, in a cinematic 16:9 production still. ${character.personality} ${base}. Preserve the same face, age, and wardrobe language. Medium-wide composition, practical motivated lighting, realistic skin and fabric, restrained film grain, strong depth, no text, logo, or watermark.`;
-  return `${character.name} performs a five-second cinematic beat based on: ${base}. Preserve the exact identity, face, age, wardrobe, and setting from the reference image. One readable gesture, a subtle facial turn, controlled camera push-in, natural fabric and environmental motion, and a strong final look. Silent dubbing plate only: no speech, vocals, subtitles, text, logo, or watermark.`;
+  const scene = buildScenePackage(character, Math.abs(base.length) % 4);
+  if (field === "voice-description") return composeVoiceDesignPrompt(character);
+  if (field === "voice-preview") return character.brollLine || scene.dialogue;
+  if (field === "dialogue") return scene.dialogue;
+  if (field === "sfx") return composeSfxPrompt(character);
+  if (field === "theme") return composeThemePrompt(character);
+  return field === "image" ? scene.image : scene.video;
 }
 
 export async function POST(request: Request) {
@@ -117,6 +124,7 @@ export async function POST(request: Request) {
               theme: character.themeDesc,
               brollLine: character.brollLine ?? null,
               brollScene: character.brollScene ?? null,
+              productionBible: character.productionBible ?? buildProductionBible(character),
             },
             relatedCurrentFields: context,
           }),

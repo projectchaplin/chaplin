@@ -4,6 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { Character } from "@/lib/types";
 import { useChaplinStore } from "@/lib/store";
 import MediaPlayer from "@/components/MediaPlayer";
+import {
+  buildProductionBible,
+  buildScenePackage,
+  composeVoiceDesignPrompt,
+  type ScenePackage,
+  type ShotBlueprint,
+} from "@/lib/production-prompting";
 
 type ProductionAsset = {
   id: string;
@@ -48,14 +55,6 @@ type VoicePreview = {
   media_type?: string;
   duration_secs?: number;
 };
-type MagicScene = {
-  name: string;
-  line: string;
-  still: string;
-  motion: string;
-  sound: string;
-};
-
 type QuickWriteField =
   | "voice-description"
   | "voice-preview"
@@ -67,44 +66,6 @@ type QuickWriteField =
 
 const SEEDANCE_ACTIVATION_URL =
   "https://console.byteplus.com/ark/region%3Aark%2Bap-southeast-1/model/detail?Id=seedance-1-5-pro";
-const MAGIC_LINE_ENDINGS = ["Move.", "Now.", "Watch closely.", "Remember that."];
-const MAGIC_SCENES: MagicScene[] = [
-  {
-    name: "Midnight Escape",
-    line: "You brought the guards. I brought an exit. Keep up—the doors close in five seconds.",
-    still: "inside a shadowy old cinema projection booth at night, turning toward camera with alert confidence as dust catches the projector beam",
-    motion: "A hidden glass panel slides open. The character turns sharply toward camera, gives a knowing half-smile, and steps toward the escape route as the camera makes a slow controlled push-in.",
-    sound: "A glass mechanism slides open, followed by a restrained projector hum and one decisive footstep.",
-  },
-  {
-    name: "Monsoon Rendezvous",
-    line: "You came alone. Good. That means we still have a chance to leave before the last train.",
-    still: "beneath an old railway canopy during monsoon rain, waiting beside a brass station clock with wet reflections across the platform",
-    motion: "Rain sweeps across the empty platform. The character looks up from the station clock, meets the camera, and takes one measured step forward while the last train glows in the distance.",
-    sound: "Monsoon rain on a metal canopy, a distant train brake, and a soft clock mechanism.",
-  },
-  {
-    name: "Rooftop Signal",
-    line: "Look at the city. Everyone is hiding something. Tonight, we decide what survives.",
-    still: "on a moonlit Lucknow rooftop above the old city, holding a small signal lamp while fabric moves in the night wind",
-    motion: "The signal lamp flickers on. The character crosses the rooftop into moonlight, turns toward camera, and raises the lamp as the skyline falls softly out of focus.",
-    sound: "A match strike, a low night wind, distant city ambience, and one soft signal bell.",
-  },
-  {
-    name: "Gallery Switch",
-    line: "The original was never in that case. But thank you for showing me who wanted it.",
-    still: "in a grand museum corridor after hours, standing beside an open display case under pools of warm security light",
-    motion: "A security light sweeps across the corridor. The character closes an empty display case, reveals a concealed object with a subtle gesture, and walks past camera without breaking composure.",
-    sound: "A display latch clicks shut, a quiet security scanner passes, and footsteps recede across polished stone.",
-  },
-];
-
-const VOICE_PRESENTATION = {
-  feminine: "An adult woman with a clearly feminine vocal identity and natural feminine resonance",
-  masculine: "An adult man with a clearly masculine vocal identity and natural masculine resonance",
-  androgynous: "An adult with a deliberately androgynous vocal identity",
-} as const;
-
 async function errorFrom(response: Response) {
   const data = (await response.json().catch(() => null)) as { error?: string } | null;
   return data?.error ?? `Generation failed with status ${response.status}.`;
@@ -139,44 +100,40 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   const addCharacterImage = useChaplinStore((s) => s.addCharacterImage);
   const setCharacterVideo = useChaplinStore((s) => s.setCharacterVideo);
 
-  const identity = useMemo(
-    () =>
-      `${character.name} is a fictional ${character.archetype}. ${character.personality} ` +
-      `Keep the same face, age, wardrobe language, voice identity, and cinematic world in every generation.`,
-    [character]
-  );
+  const productionBible = useMemo(() => buildProductionBible(character), [character]);
+  const initialScene = useMemo(() => buildScenePackage(character, 0), [character]);
   const brollLine = character.brollLine ?? character.tagline;
-  const brollScene = character.brollScene ?? `in a cinematic setting that expresses ${character.personality.toLowerCase()}`;
-  const subjectPronoun = character.voiceGender === "feminine" ? "she" : character.voiceGender === "masculine" ? "he" : "they";
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [voiceDescription, setVoiceDescription] = useState(
-    `${VOICE_PRESENTATION[character.voiceGender ?? "androgynous"]}. ${character.voiceDesc}. Indian English with natural Hindi and Urdu pronunciation, emotionally controlled, unmistakable and repeatable. This is an original fictional voice, not an imitation of a real person.`
+    composeVoiceDesignPrompt(character)
   );
   const [previewText, setPreviewText] = useState(brollLine);
   const [previews, setPreviews] = useState<VoicePreview[]>([]);
   const [speechText, setSpeechText] = useState(brollLine);
   const [speechUrl, setSpeechUrl] = useState("");
   const [sfxPrompt, setSfxPrompt] = useState(
-    `${character.sfxDesc}. A distinctive five-second cinematic signature for ${character.name}; clean foreground effect, subtle room tone, no speech.`
+    initialScene.sfx
   );
   const [sfxUrl, setSfxUrl] = useState("");
   const [themePrompt, setThemePrompt] = useState(
-    `${character.themeDesc}. A distinctive 12-second instrumental character theme for ${character.name}; cinematic, memorable, no vocals, clean ending.`
+    initialScene.theme
   );
   const [themeUrl, setThemeUrl] = useState("");
   const [imagePrompt, setImagePrompt] = useState(
-    `${identity} Cinematic 16:9 production still: ${brollScene}. ${subjectPronoun} turns toward camera in character, practical motivated lighting, fine film grain, realistic skin and fabric, no text, no watermark.`
+    initialScene.image
   );
   const [scenePrompt, setScenePrompt] = useState(
-    `${identity} Five-second cinematic visual performance: ${brollScene}. ${subjectPronoun} turns toward camera and silently performs one short punchline for later dubbing. Slow controlled push-in, natural fabric movement, strong final look to camera. Silent performance plate only: no speech, no generated voice, no vocals, no subtitles, no text, no watermark. Dialogue will be supplied separately using ${character.name}'s locked ElevenLabs voice.`
+    initialScene.video
   );
   const [generatedImage, setGeneratedImage] = useState("");
   const [generatedVideo, setGeneratedVideo] = useState("");
   const [assetHistory, setAssetHistory] = useState<ProductionAsset[]>([]);
-  const [magicSceneIndex, setMagicSceneIndex] = useState(-1);
+  const [magicSceneIndex, setMagicSceneIndex] = useState(0);
+  const [sceneBlueprint, setSceneBlueprint] = useState<ShotBlueprint>(initialScene.blueprint);
   const [busy, setBusy] = useState("");
   const [quickWriting, setQuickWriting] = useState<QuickWriteField | null>(null);
   const [message, setMessage] = useState("");
+  const referenceImage = generatedImage || character.galleryUrls?.[0] || character.bannerUrl || character.imageUrl || "";
 
   useEffect(() => {
     fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`)
@@ -390,8 +347,6 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
   function generateVideo() {
     void run("video", async () => {
-      const referenceImage =
-        generatedImage || character.galleryUrls?.[0] || character.bannerUrl || character.imageUrl || "";
       const data = (await jsonAction("video", { prompt: scenePrompt, referenceImage })) as { url: string };
       setGeneratedVideo(data.url);
       setCharacterVideo(character.id, data.url);
@@ -400,27 +355,30 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     });
   }
 
+  function applyScenePackage(scene: ScenePackage) {
+    setSpeechText(scene.dialogue);
+    setSfxPrompt(scene.sfx);
+    setThemePrompt(scene.theme);
+    setImagePrompt(scene.image);
+    setScenePrompt(scene.video);
+    setSceneBlueprint(scene.blueprint);
+  }
+
   function applyMagicScene() {
-    const nextIndex = (magicSceneIndex + 1) % MAGIC_SCENES.length;
-    const scene = MAGIC_SCENES[nextIndex];
+    const nextIndex = magicSceneIndex + 1;
     setMagicSceneIndex(nextIndex);
-    const characterLine = character.brollLine
-      ? `${character.brollLine} ${MAGIC_LINE_ENDINGS[nextIndex]}`
-      : scene.line;
-    setSpeechText(characterLine);
-    setSfxPrompt(
-      `${scene.sound} Preserve ${character.name}'s signature sound: ${character.sfxDesc}. Five seconds, clean foreground mix, no speech.`
-    );
-    setThemePrompt(
-      `${character.themeDesc}. A 12-second instrumental score for the scene "${scene.name}" starring ${character.name}; cinematic, emotionally specific, memorable motif, no vocals, clean ending.`
-    );
-    setImagePrompt(
-      `${identity} Cinematic 16:9 production still: ${scene.still}. Realistic skin and fabric, expressive natural pose, practical lighting, fine film grain, no text, no watermark.`
-    );
-    setScenePrompt(
-      `${identity} Five-second cinematic visual performance. ${scene.motion} ${character.name} silently performs a short punchline for later dubbing. Silent performance plate only: no speech, no generated voice, no vocals, no subtitles, no text, no watermark. The final mix will use locked dialogue "${characterLine}", signature sound ${character.sfxDesc.toLowerCase()}, and score language ${character.themeDesc.toLowerCase()}.`
-    );
-    setMessage(`Magic Scene loaded: ${scene.name}. Review the coordinated prompts, then generate the assets you need.`);
+    void run("magic-scene", async () => {
+      const response = await fetch("/api/write/scene", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ character: { ...character, productionBible }, variation: nextIndex }),
+      });
+      if (!response.ok) throw new Error(await errorFrom(response));
+      const data = await response.json() as { scene?: ScenePackage; provider?: string; warning?: string };
+      if (!data.scene) throw new Error("Magic Scene returned no directed scene.");
+      applyScenePackage(data.scene);
+      setMessage(data.warning || `Magic Scene directed: ${data.scene.sceneName}. Each medium now has its own production instructions.`);
+    });
   }
 
   const seedModelsReady = status?.seedModels ?? false;
@@ -478,18 +436,30 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             </a>
           </div>
         )}
+        <details className="rounded-md border border-line bg-paper/30 p-4" data-production-bible>
+          <summary className="cursor-pointer text-sm font-semibold">Actor Direction Bible</summary>
+          <p className="mt-1 text-[11px] text-grey">Persistent canon used by every scene and story—not copied into every provider prompt.</p>
+          <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+            <p><span className="text-grey">Want:</span> {productionBible.dramatic.externalWant}</p>
+            <p><span className="text-grey">Contradiction:</span> {productionBible.dramatic.contradiction}</p>
+            <p><span className="text-grey">Under pressure:</span> {productionBible.performance.underPressure}</p>
+            <p><span className="text-grey">Movement:</span> {productionBible.performance.movementStyle}</p>
+            <p><span className="text-grey">Face locks:</span> {productionBible.visual.faceAnchors.join("; ")}</p>
+            <p><span className="text-grey">Story hook:</span> {productionBible.story.hookPattern}</p>
+          </div>
+        </details>
         <div className="rounded-md border border-accent/40 bg-accent/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold">Quick scene change</p>
               {magicSceneIndex >= 0 && (
                 <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[9px] uppercase tracking-wide text-accent">
-                  {MAGIC_SCENES[magicSceneIndex].name}
+                  {sceneBlueprint.sceneName}
                 </span>
               )}
             </div>
             <p className="text-xs text-grey mt-1">
-              One click coordinates dialogue, SFX, theme, still, and video prompts. Nothing is charged until you generate.
+              AI directs one playable beat, then writes separate instructions for dialogue, SFX, music, the first frame, and image-to-video motion.
             </p>
           </div>
           <button
@@ -499,9 +469,20 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             data-action="magic-scene"
             className="shrink-0 rounded-full bg-accent text-paper px-4 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-40"
           >
-            ✦ Magic Scene
+            {busy === "magic-scene" ? "Directing scene..." : "✦ Magic Scene"}
           </button>
         </div>
+        <details className="rounded-md border border-line bg-paper/40 p-4" data-scene-blueprint>
+          <summary className="cursor-pointer text-sm font-semibold">Director blueprint · {sceneBlueprint.sceneName}</summary>
+          <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+            <p><span className="text-grey">Hook:</span> {sceneBlueprint.hook}</p>
+            <p><span className="text-grey">Dramatic beat:</span> {sceneBlueprint.dramaticBeat}</p>
+            <p><span className="text-grey">Angle / lens:</span> {sceneBlueprint.cameraAngle}; {sceneBlueprint.lens}</p>
+            <p><span className="text-grey">Camera path:</span> {sceneBlueprint.cameraMovement}</p>
+            <p><span className="text-grey">Key light:</span> {sceneBlueprint.keyLight}</p>
+            <p><span className="text-grey">Final frame:</span> {sceneBlueprint.finalFrame}</p>
+          </div>
+        </details>
         <div className="grid md:grid-cols-2 gap-5">
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-2">
@@ -662,11 +643,18 @@ export default function CharacterProductionStudio({ character }: { character: Ch
                 onClick={() => void quickWrite("video", scenePrompt, setScenePrompt)}
               />
             </div>
+            {referenceImage && (
+              <div className="relative overflow-hidden rounded-sm border border-line" data-video-reference>
+                {/* eslint-disable-next-line @next/next/no-img-element -- generated and uploaded provider URLs are dynamic */}
+                <img src={referenceImage} alt="Selected exact first frame" className="aspect-video w-full object-cover" />
+                <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[9px] uppercase tracking-wide text-white">Exact first frame</span>
+              </div>
+            )}
             <textarea data-scene-field="video" value={scenePrompt} onChange={(event) => setScenePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateVideo} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "video" ? "Seedance is rendering..." : "Generate 5-second video"}
             </button>
-            <p className="text-[11px] text-grey">Seedance 1.5 Pro uses the newest generated still, or the current profile art, as its identity reference and creates synchronized audio.</p>
+            <p className="text-[11px] text-grey">Seedance uses the selected still as the exact first frame. This prompt controls only performance, camera, light continuity, environmental motion, and the final frame; locked voice, SFX, and music stay separate.</p>
             {(generatedVideo || character.videoUrl) && <MediaPlayer src={generatedVideo || character.videoUrl || ""} label={`${character.name} scene`} kind="video" />}
           </div>
         </div>

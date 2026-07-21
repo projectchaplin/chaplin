@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { SEED_WORLD } from "@/data/seed";
+import { buildProductionBible } from "@/lib/production-prompting";
 import type {
   Character,
   Story,
@@ -24,6 +25,7 @@ export type NewCharacterInput = Pick<
   | "voiceDesc"
   | "sfxDesc"
   | "themeDesc"
+  | "productionBible"
   | "licenseType"
   | "royaltyRate"
   | "avatarHue"
@@ -132,6 +134,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       voiceDesc: input.voiceDesc,
       sfxDesc: input.sfxDesc,
       themeDesc: input.themeDesc,
+      productionBible: input.productionBible ?? buildProductionBible(input),
       avatarHue: input.avatarHue,
       licenseType: input.licenseType as LicenseType,
       royaltyRate: input.licenseType === "open" ? 0 : input.royaltyRate,

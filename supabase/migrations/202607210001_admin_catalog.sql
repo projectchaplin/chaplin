@@ -23,6 +23,7 @@ create table if not exists public.characters (
   voice_description text not null,
   sfx_description text not null,
   theme_description text not null,
+  production_bible jsonb,
   avatar_hue integer not null default 0,
   image_url text,
   banner_url text,
@@ -38,6 +39,9 @@ create table if not exists public.characters (
 alter table public.characters
   add column if not exists voice_gender text not null default 'androgynous'
   check (voice_gender in ('feminine', 'masculine', 'androgynous'));
+
+alter table public.characters
+  add column if not exists production_bible jsonb;
 
 create table if not exists public.character_voices (
   id uuid primary key default gen_random_uuid(),

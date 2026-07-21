@@ -1,5 +1,5 @@
 import { ensureCharacter, persistCharacter } from "@/lib/server/supabase-admin";
-import type { Archetype, Character, LicenseType, VoiceGender } from "@/lib/types";
+import type { Archetype, Character, CharacterProductionBible, LicenseType, VoiceGender } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -54,6 +54,9 @@ function parseCharacter(value: unknown): Character {
     voiceId: typeof input.voiceId === "string" ? input.voiceId : undefined,
     sfxDesc: requiredString(input.sfxDesc, "sfxDesc", 1000),
     themeDesc: requiredString(input.themeDesc, "themeDesc", 1000),
+    productionBible: input.productionBible && typeof input.productionBible === "object"
+      ? input.productionBible as CharacterProductionBible
+      : undefined,
     brollLine: typeof input.brollLine === "string" ? input.brollLine : undefined,
     brollScene: typeof input.brollScene === "string" ? input.brollScene : undefined,
     avatarHue: number("avatarHue"),

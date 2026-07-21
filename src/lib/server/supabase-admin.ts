@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
+import { buildProductionBible } from "@/lib/production-prompting";
 import { SEED_WORLD } from "@/data/seed";
 import type { GenerationBilling } from "@/lib/server/billing";
 import type { Character } from "@/lib/types";
@@ -96,6 +97,7 @@ function characterRow(character: Character) {
     voice_description: character.voiceDesc,
     sfx_description: character.sfxDesc,
     theme_description: character.themeDesc,
+    production_bible: character.productionBible ?? buildProductionBible(character),
     avatar_hue: character.avatarHue,
     image_url: character.imageUrl ?? null,
     banner_url: character.bannerUrl ?? null,
@@ -117,16 +119,10 @@ export async function persistCharacter(character: Character) {
 }
 
 export async function ensureCharacter(character: Character) {
-  const supabase = adminClient();
-  const existing = await supabase
+  const { error } = await adminClient()
     .from("characters")
-    .select("id")
-    .eq("id", character.id)
-    .maybeSingle();
-  assert(existing.error, "Check AI actor");
-  if (existing.data) return;
-  const { error } = await supabase.from("characters").insert(characterRow(character));
-  if (error?.code !== "23505") assert(error, "Register AI actor for generation");
+    .upsert(characterRow(character), { onConflict: "id" });
+  assert(error, "Register AI actor for generation");
 }
 
 export async function seedAdminCatalog() {

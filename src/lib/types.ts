@@ -35,6 +35,52 @@ export interface CharacterStats {
   earnings: number; // lifetime, in mock currency units
 }
 
+export interface CharacterProductionBible {
+  version: 1;
+  dramatic: {
+    externalWant: string;
+    innerNeed: string;
+    contradiction: string;
+    stakes: string;
+    vulnerability: string;
+    moralBoundary: string;
+  };
+  performance: {
+    restingExpression: string;
+    underPressure: string;
+    signatureGesture: string;
+    movementStyle: string;
+    eyeline: string;
+    tempo: string;
+  };
+  visual: {
+    perceivedAge: string;
+    faceAnchors: string[];
+    hair: string;
+    wardrobe: string;
+    silhouette: string;
+    palette: string[];
+    continuityRules: string[];
+  };
+  cinematography: {
+    heroFraming: string;
+    cameraHeight: string;
+    lens: string;
+    keyLight: string;
+    fillLight: string;
+    edgeLight: string;
+    worldTexture: string;
+  };
+  story: {
+    hookPattern: string;
+    escalationPattern: string;
+    cliffhangerPattern: string;
+    payoffPattern: string;
+    recurringMotifs: string[];
+    avoid: string[];
+  };
+}
+
 export interface Character {
   id: string;
   makerId: string;
@@ -47,6 +93,7 @@ export interface Character {
   voiceId?: string; // ElevenLabs voice locked to this character
   sfxDesc: string; // signature sound effect, same mock pattern as voiceDesc
   themeDesc: string; // signature background score, same mock pattern as voiceDesc
+  productionBible?: CharacterProductionBible; // persistent performance, visual, camera, and story continuity
   brollLine?: string; // short signature punchline performed in the character's locked voice
   brollScene?: string; // character-specific visual setup for the five-second profile reel
   avatarHue: number; // fallback color when imageUrl is unset (e.g. freshly built characters)

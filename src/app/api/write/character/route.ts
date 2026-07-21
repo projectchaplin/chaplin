@@ -1,4 +1,10 @@
-import type { Archetype, VoiceGender } from "@/lib/types";
+import {
+  buildProductionBible,
+  composeSfxPrompt,
+  composeThemePrompt,
+  composeVoiceDesignPrompt,
+} from "@/lib/production-prompting";
+import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,6 +16,7 @@ type CharacterSuggestion = {
   voiceDescription: string;
   signatureSfx: string;
   themeScore: string;
+  productionBible: CharacterProductionBible;
 };
 
 const TARGETS = ["all", "tagline", "personality", "voice", "sfx", "theme"] as const;
@@ -25,6 +32,8 @@ function localSuggestion(input: {
   voiceGender: VoiceGender;
   tagline: string;
   personality: string;
+  appearanceBrief?: string;
+  worldBrief?: string;
 }): CharacterSuggestion {
   const name = input.name || "This actor";
   const identity: Record<string, { hook: string; want: string; edge: string; sound: string; score: string }> = {
@@ -40,7 +49,7 @@ function localSuggestion(input: {
     outsider: { hook: "notices the rule because nobody explained it to them", want: "belong without becoming harmless", edge: "watchful, self-contained, and startlingly direct", sound: "a distant train brake followed by one approaching footstep", score: "sparse plucked strings over a widening atmospheric bass note" },
   };
   const profile = identity[input.archetype] ?? identity.hero;
-  return {
+  const suggestion = {
     tagline: input.tagline || `${name} ${profile.hook}.`,
     personality: input.personality || `${name} wants to ${profile.want}. ${name} is ${profile.edge}. In conversation, ${name} listens for the detail everyone skips, answers with concise wit, and becomes completely still before making a difficult decision. The contradiction is the engine: confidence in action, vulnerability around the people who matter.`,
     voiceGender: input.voiceGender,
@@ -48,12 +57,68 @@ function localSuggestion(input: {
     signatureSfx: `${profile.sound}; a distinctive five-second identity sting with clean foreground detail, subtle cinematic room tone, and no speech or music.`,
     themeScore: `${profile.score}; a memorable 12-second instrumental identity theme with a clear opening motif, controlled lift, and clean ending. No vocals.`,
   };
+  const productionBible = buildProductionBible({
+      name,
+      archetype: input.archetype,
+      tagline: suggestion.tagline,
+      personality: suggestion.personality,
+      voiceGender: input.voiceGender,
+      voiceDesc: suggestion.voiceDescription,
+      sfxDesc: suggestion.signatureSfx,
+      themeDesc: suggestion.themeScore,
+      appearanceBrief: input.appearanceBrief,
+      worldBrief: input.worldBrief,
+  });
+  const character = { ...input, name, ...suggestion, productionBible, voiceDesc: suggestion.voiceDescription, sfxDesc: suggestion.signatureSfx, themeDesc: suggestion.themeScore };
+  return {
+    ...suggestion,
+    voiceDescription: composeVoiceDesignPrompt(character),
+    signatureSfx: composeSfxPrompt(character),
+    themeScore: composeThemePrompt(character),
+    productionBible,
+  };
 }
+
+const STRING = { type: "string" } as const;
+const STRING_ARRAY = { type: "array", items: STRING } as const;
+const PRODUCTION_BIBLE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["version", "dramatic", "performance", "visual", "cinematography", "story"],
+  properties: {
+    version: { type: "integer", enum: [1] },
+    dramatic: {
+      type: "object", additionalProperties: false,
+      required: ["externalWant", "innerNeed", "contradiction", "stakes", "vulnerability", "moralBoundary"],
+      properties: { externalWant: STRING, innerNeed: STRING, contradiction: STRING, stakes: STRING, vulnerability: STRING, moralBoundary: STRING },
+    },
+    performance: {
+      type: "object", additionalProperties: false,
+      required: ["restingExpression", "underPressure", "signatureGesture", "movementStyle", "eyeline", "tempo"],
+      properties: { restingExpression: STRING, underPressure: STRING, signatureGesture: STRING, movementStyle: STRING, eyeline: STRING, tempo: STRING },
+    },
+    visual: {
+      type: "object", additionalProperties: false,
+      required: ["perceivedAge", "faceAnchors", "hair", "wardrobe", "silhouette", "palette", "continuityRules"],
+      properties: { perceivedAge: STRING, faceAnchors: STRING_ARRAY, hair: STRING, wardrobe: STRING, silhouette: STRING, palette: STRING_ARRAY, continuityRules: STRING_ARRAY },
+    },
+    cinematography: {
+      type: "object", additionalProperties: false,
+      required: ["heroFraming", "cameraHeight", "lens", "keyLight", "fillLight", "edgeLight", "worldTexture"],
+      properties: { heroFraming: STRING, cameraHeight: STRING, lens: STRING, keyLight: STRING, fillLight: STRING, edgeLight: STRING, worldTexture: STRING },
+    },
+    story: {
+      type: "object", additionalProperties: false,
+      required: ["hookPattern", "escalationPattern", "cliffhangerPattern", "payoffPattern", "recurringMotifs", "avoid"],
+      properties: { hookPattern: STRING, escalationPattern: STRING, cliffhangerPattern: STRING, payoffPattern: STRING, recurringMotifs: STRING_ARRAY, avoid: STRING_ARRAY },
+    },
+  },
+} as const;
 
 const OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["tagline", "personality", "voiceGender", "voiceDescription", "signatureSfx", "themeScore"],
+  required: ["tagline", "personality", "voiceGender", "voiceDescription", "signatureSfx", "themeScore", "productionBible"],
   properties: {
     tagline: { type: "string" },
     personality: { type: "string" },
@@ -61,6 +126,7 @@ const OUTPUT_SCHEMA = {
     voiceDescription: { type: "string" },
     signatureSfx: { type: "string" },
     themeScore: { type: "string" },
+    productionBible: PRODUCTION_BIBLE_SCHEMA,
   },
 } as const;
 
@@ -78,6 +144,8 @@ export async function POST(request: Request) {
       voiceGender: clean(body.voiceGender, 30) as VoiceGender,
       tagline: clean(body.tagline, 500),
       personality: clean(body.personality, 2000),
+      appearanceBrief: clean(body.appearanceBrief, 1200),
+      worldBrief: clean(body.worldBrief, 1200),
     };
     fallbackInput = input;
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -95,8 +163,8 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1100,
-        system: "You are Chaplin's casting director and character-development writer. Expand a small idea into an original fictional AI actor with a castable contradiction, playable desire, specific behavior, repeatable voice, signature sound, and musical identity. Preserve useful user text. Avoid generic superlatives, copyrighted characters, celebrity imitation, and references to real performers. The tagline must be one sharp sentence. Personality must describe want, contradiction, conversational behavior, pressure response, and vulnerability in 80-140 words. Voice, SFX, and theme must be practical production prompts.",
+        max_tokens: 3000,
+        system: "You are Chaplin's casting director, performance director, cinematographer, and story editor. Build an original production-ready fictional actor, not a biography. Every value must be playable, visible, recordable, or usable as a continuity rule. Create a dramatic want/need contradiction, precise pressure behavior and micro-expression, three stable facial anchors, repeatable hair/wardrobe/silhouette, motivated camera and lighting grammar, and a story engine with a visual hook, escalation, situation-changing cliffhanger, payoff, motifs, and explicit cliches to avoid. Preserve useful user input. Never imitate a celebrity or copyrighted character. The voice prompt must follow ElevenLabs Voice Design order and contain no FX language. SFX must be a concise physical five-second one-shot. Theme must be a 12-second instrumental identity cue. Do not repeat the same biography across fields and do not use generic words without observable detail.",
         messages: [{
           role: "user",
           content: JSON.stringify({

@@ -357,7 +357,9 @@ export async function POST(request: Request) {
 
     if (action === "video") {
       const requestedPrompt = text(input, "prompt", 10, 3000);
-      const prompt = `${requestedPrompt} Audio policy: create a silent visual performance plate only. Do not generate speech, dialogue, vocals, music, or a substitute character voice; Chaplin mixes the locked ElevenLabs voice and character theme separately.`;
+      const prompt = /silent visual plate|audio is produced separately/i.test(requestedPrompt)
+        ? requestedPrompt
+        : `${requestedPrompt}\nAUDIO: silent visual plate only; no generated speech, vocals, SFX, or music.`;
       jobId = await beginGeneration({ characterId, kind: "video", provider: "byteplus", model: SEEDANCE_MODEL, prompt });
       const reference = typeof input.referenceImage === "string" ? input.referenceImage : "";
       const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];

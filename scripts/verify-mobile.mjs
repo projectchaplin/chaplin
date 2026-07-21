@@ -303,6 +303,7 @@ async function main() {
         voice: document.querySelector('[data-character-field="voice"]')?.value ?? "",
         sfx: document.querySelector('[data-character-field="sfx"]')?.value ?? "",
         theme: document.querySelector('[data-character-field="theme"]')?.value ?? "",
+        bible: Boolean(document.querySelector("[data-character-bible]")),
       }))()`);
       if (Object.values(characterSuggestion ?? {}).every(Boolean)) break;
       await sleep(250);
@@ -334,15 +335,23 @@ async function main() {
     await pageState(cdp, ["CAPTAIN VIKRANT SURI", "Generate dialogue", "Generate 5-second video"]);
     const vikrantIdentity = await cdp.evaluate(`(() => ({
       dialogue: document.querySelector('[data-scene-field="dialogue"]')?.value ?? "",
+      image: document.querySelector('[data-scene-field="image"]')?.value ?? "",
       video: document.querySelector('[data-scene-field="video"]')?.value ?? "",
+      reference: Boolean(document.querySelector("[data-video-reference] img")),
     }))()`);
     checks.push(result(
-      "Character-specific voice and B-roll prompts",
+      "Medium-specific actor production prompts",
       vikrantIdentity.dialogue.includes("Storms do not ask permission") &&
-        vikrantIdentity.video.includes("Konkan lighthouse") &&
-        vikrantIdentity.video.includes("no generated voice") &&
-        !vikrantIdentity.video.includes("glass display case"),
-      vikrantIdentity.dialogue.includes("Storms do not ask permission") ? "Vikrant line · scene · silent dubbing plate" : "Vikrant inherited another character's prompt"
+        vikrantIdentity.image.includes("Konkan lighthouse") &&
+        vikrantIdentity.image.includes("CAMERA:") &&
+        vikrantIdentity.image.includes("LIGHTING:") &&
+        vikrantIdentity.video.includes("exact first frame") &&
+        vikrantIdentity.video.includes("0.0-1.2s") &&
+        vikrantIdentity.video.includes("LIGHT CONTINUITY") &&
+        vikrantIdentity.reference &&
+        !vikrantIdentity.video.includes("Captain Vikrant Suri is") &&
+        !vikrantIdentity.video.includes("score language"),
+      vikrantIdentity.video.includes("exact first frame") ? "identity still · directed camera/light · image-to-video motion only" : "production prompts are still generic"
     ));
     const quickWriteFields = await cdp.evaluate(`(() =>
       [...document.querySelectorAll("[data-quick-write]")].map((button) => button.dataset.quickWrite)
@@ -402,17 +411,23 @@ async function main() {
       button.click();
       return true;
     })()`);
-    await sleep(300);
-    const sceneAfter = await cdp.evaluate(`(() => ({
-      fields: Object.fromEntries(
-        [...document.querySelectorAll("[data-scene-field]")].map((field) => [field.dataset.sceneField, field.value])
-      ),
-      label: document.body.innerText.includes("Midnight Escape"),
-    }))()`);
     const coordinatedFields = ["dialogue", "sfx", "theme", "image", "video"];
+    let sceneAfter = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      sceneAfter = await cdp.evaluate(`(() => ({
+        fields: Object.fromEntries(
+          [...document.querySelectorAll("[data-scene-field]")].map((field) => [field.dataset.sceneField, field.value])
+        ),
+        blueprint: Boolean(document.querySelector("[data-scene-blueprint]")),
+        videoIsMotionOnly: (document.querySelector('[data-scene-field="video"]')?.value ?? "").includes("exact first frame"),
+      }))()`);
+      if (coordinatedFields.every((field) => sceneBefore[field] && sceneAfter.fields[field] && sceneBefore[field] !== sceneAfter.fields[field])) break;
+      await sleep(250);
+    }
     const sceneChanged =
       magicClicked &&
-      sceneAfter.label &&
+      sceneAfter?.blueprint &&
+      sceneAfter?.videoIsMotionOnly &&
       coordinatedFields.every((field) => sceneBefore[field] && sceneAfter.fields[field] && sceneBefore[field] !== sceneAfter.fields[field]);
     checks.push(result(
       "Magic Scene coordinates prompts",

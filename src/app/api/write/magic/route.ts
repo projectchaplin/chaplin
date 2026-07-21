@@ -1,4 +1,5 @@
-import type { Archetype, VoiceGender } from "@/lib/types";
+import { buildProductionBible } from "@/lib/production-prompting";
+import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,6 +14,7 @@ type PromptCharacter = {
   personality: string;
   voiceGender: VoiceGender;
   voiceDesc: string;
+  productionBible: CharacterProductionBible;
 };
 
 type MagicDraft = {
@@ -42,7 +44,7 @@ function parseCharacters(value: unknown): PromptCharacter[] {
     const id = clean(row.id, 100);
     const name = clean(row.name, 120);
     if (!id || !name) return [];
-    return [{
+    const base = {
       id,
       name,
       archetype: clean(row.archetype, 50) as Archetype,
@@ -50,6 +52,12 @@ function parseCharacters(value: unknown): PromptCharacter[] {
       personality: clean(row.personality, 1200),
       voiceGender: clean(row.voiceGender, 30) as VoiceGender,
       voiceDesc: clean(row.voiceDesc, 700),
+    };
+    return [{
+      ...base,
+      productionBible: row.productionBible && typeof row.productionBible === "object"
+        ? row.productionBible as CharacterProductionBible
+        : buildProductionBible(base),
     }];
   });
 }
@@ -76,18 +84,19 @@ function fallbackDraft(input: {
   const foilId = foil?.id ?? leadId;
   const leadName = lead?.name ?? "The Lead";
   const foilName = foil?.name ?? leadName;
+  const storyEngine = lead?.productionBible.story;
 
   if (input.format === "ad" || input.format === "reel") {
     const reel = input.format === "reel";
     return {
       title: input.title || (reel ? `${leadName}: Stop the Scroll` : `${leadName} Makes the Case`),
       logline: input.logline || `${leadName} turns ${subject.toLowerCase()} into one sharp, visual promise and a direct invitation to act.`,
-      creativeDirection: `${input.durationSeconds}-second ${reel ? "vertical reel" : "cinematic ad"}. Open on a visual interruption, communicate one benefit, show proof on screen, and finish on a specific call to action.`,
+      creativeDirection: `${input.durationSeconds}-second ${reel ? "vertical reel" : "cinematic ad"}. Hook grammar: ${storyEngine?.hookPattern ?? "open on a visible interruption"}. Communicate one benefit through proof on screen, then finish on a specific call to action.`,
       castIds: cast.map((character) => character.id),
       scenes: [
         {
           setting: "EXT. CITY STREET - DAY",
-          objective: "Hook attention in the first two seconds with a visible problem or surprise.",
+          objective: `Hook attention in the first two seconds: ${storyEngine?.hookPattern ?? "show a visible problem or surprise"}.`,
           action: `${leadName} steps directly into frame as the ordinary world freezes behind them. A single prop reveals the problem without explanation.`,
           lines: [{ characterId: leadId, text: "Wait. You are still doing it the hard way?" }],
         },
@@ -105,7 +114,7 @@ function fallbackDraft(input: {
         },
         {
           setting: "EXT. CLEAN END FRAME - DAY",
-          objective: "Land one memorable line and a clear next action.",
+          objective: `Pay off the actor's pattern (${storyEngine?.payoffPattern ?? "turn the demonstrated proof into a decision"}) and land a clear next action.`,
           action: `${leadName} faces camera. Product, result, and brand space resolve into one uncluttered final composition.`,
           lines: [{ characterId: leadId, text: reel ? "Try it once. Then tell me you want to go back." : "Make the next move. Start today." }],
         },
@@ -116,18 +125,18 @@ function fallbackDraft(input: {
   return {
     title: input.title || `${leadName} and the Last Open Door`,
     logline: input.logline || `${leadName} pursues ${subject.toLowerCase()}, but ${foilName} forces a choice that changes what winning means.`,
-    creativeDirection: "A compact three-act short: establish a want, force a difficult turn, and resolve through a character choice. Every scene changes the situation and ends with new pressure.",
+    creativeDirection: `A compact three-act short built from the actor's persistent story engine. Hook: ${storyEngine?.hookPattern ?? "open after the obvious plan fails"}. Escalation: ${storyEngine?.escalationPattern ?? "make every gain create a cost"}. Cliffhanger: ${storyEngine?.cliffhangerPattern ?? "reverse the power relationship"}. Payoff: ${storyEngine?.payoffPattern ?? "resolve through a character choice"}. Every scene changes the situation; no biography as dialogue.`,
     castIds: cast.map((character) => character.id),
     scenes: [
       {
         setting: "INT. ABANDONED CINEMA LOBBY - NIGHT",
-        objective: `Establish what ${leadName} wants and why it must happen tonight.`,
+          objective: `Establish the external want (${lead?.productionBible.dramatic.externalWant ?? "a concrete urgent goal"}) through visible behavior and show why it must happen tonight.`,
         action: `${leadName} crosses the dark lobby, finds the projector key already missing, and sees fresh rainwater leading toward the auditorium.`,
         lines: [{ characterId: leadId, text: "Someone got here first. Good. I hate waiting for a story to begin." }],
       },
       {
         setting: "INT. CINEMA AUDITORIUM - MOMENTS LATER",
-        objective: "Complicate the plan and force the lead to reveal a value through action.",
+          objective: `Escalate through the actor's contradiction: ${lead?.productionBible.dramatic.contradiction ?? "the plan conflicts with a private value"}. End by changing who holds power.`,
         action: `${foilName} stands in the projector beam holding the key. The exit shutters slam down, turning negotiation into a deadline.`,
         lines: [
           { characterId: foilId, text: "You can keep the key, or you can get everyone out. Not both." },
@@ -136,7 +145,7 @@ function fallbackDraft(input: {
       },
       {
         setting: "EXT. CINEMA ROOFTOP - PRE-DAWN",
-        objective: "Pay off the central choice with an irreversible visual action.",
+          objective: `Pay off the central choice through ${storyEngine?.payoffPattern ?? "an irreversible visual action"}, not an explanatory speech.`,
         action: `${leadName} uses the key to release the shutters, then lets it fall into the flooded street below. First light reaches the rooftop as the others emerge.`,
         lines: [{ characterId: leadId, text: "Doors are useful. Knowing when to leave them open is rarer." }],
       },
@@ -234,7 +243,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         max_tokens: 4000,
-        system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors. Preserve each actor's personality and vocal identity. Every scene must have a screenplay slugline (INT./EXT., location, DAY/NIGHT), a playable objective, visible action that can be filmed, conflict or a turn, and dialogue with subtext rather than exposition. Never imitate a living performer. For stories, build setup, escalation, irreversible choice, and payoff. For ads and reels, open with a visual hook, communicate one main benefit, demonstrate proof, and end with a specific CTA. Keep the number and length of scenes realistic for the requested duration. Use only character IDs supplied by the user.`,
+        system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible as binding character canon. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. For ads and reels, dramatize one benefit through visible proof and finish with a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
         messages: [{
           role: "user",
           content: JSON.stringify({
