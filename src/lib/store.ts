@@ -247,6 +247,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
         character.id === characterId
           ? {
               ...character,
+              imageUrl: character.imageUrl ?? imageUrl,
               galleryUrls: [
                 imageUrl,
                 ...(character.galleryUrls ?? []).filter((url) => url !== imageUrl),

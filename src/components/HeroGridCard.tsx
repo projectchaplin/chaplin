@@ -31,6 +31,7 @@ export default function HeroGridCard({
   const [progress, setProgress] = useState(0);
 
   const videoSource = broll?.videoUrl ?? character.videoUrl ?? null;
+  const artworkSource = character.imageUrl ?? character.bannerUrl ?? character.galleryUrls?.[0] ?? null;
 
   function handleClick(e: React.MouseEvent) {
     // Devices with real hover (mouse/trackpad) always navigate on click, since
@@ -66,13 +67,14 @@ export default function HeroGridCard({
         className="group absolute inset-0 block overflow-hidden rounded-lg"
       >
         <div className="absolute inset-0">
-          {character.imageUrl ? (
+          {artworkSource ? (
             <Image
-              src={character.imageUrl}
+              src={artworkSource}
               alt={character.name}
               fill
               sizes="(max-width: 640px) 150px, 260px"
               className="object-cover transition-transform duration-500 group-hover:scale-105"
+              data-hero-artwork
             />
           ) : (
             <div

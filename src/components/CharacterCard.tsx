@@ -11,7 +11,7 @@ export default function CharacterCard({
   character: Character;
   makerName?: string;
 }) {
-  const image = character.bannerUrl ?? character.imageUrl;
+  const image = character.bannerUrl ?? character.imageUrl ?? character.galleryUrls?.[0];
   const hue = ARCHETYPE_HUE[character.archetype];
 
   return (
