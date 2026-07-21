@@ -3,6 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Character } from "@/lib/types";
 import { useChaplinStore } from "@/lib/store";
+import MediaPlayer from "@/components/MediaPlayer";
+
+type ProductionAsset = {
+  id: string;
+  kind: string;
+  url: string;
+  provider: string;
+  prompt: string | null;
+  duration_seconds: number | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
 
 type ProductionState = {
   voiceId: string | null;
@@ -11,6 +23,7 @@ type ProductionState = {
   latestThemeUrl: string | null;
   latestImageUrl: string | null;
   latestVideoUrl: string | null;
+  assets: ProductionAsset[];
 };
 type ProviderStatus = {
   elevenLabs: boolean;
@@ -124,6 +137,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   );
   const [generatedImage, setGeneratedImage] = useState("");
   const [generatedVideo, setGeneratedVideo] = useState("");
+  const [assetHistory, setAssetHistory] = useState<ProductionAsset[]>([]);
   const [magicSceneIndex, setMagicSceneIndex] = useState(-1);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -135,6 +149,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         setStatus(data);
         const production = data.production;
         if (!production) return;
+        setAssetHistory(production.assets ?? []);
         if (production.voiceId && production.voiceId !== character.voiceId) {
           setCharacterVoice(character.id, production.voiceId);
         }
@@ -156,6 +171,15 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       })
       .catch(() => setStatus({ elevenLabs: false, seedModels: false, database: false, production: null, providers: null }));
   }, [addCharacterImage, character.galleryUrls, character.id, character.videoUrl, character.voiceId, setCharacterVideo, setCharacterVoice]);
+
+  async function refreshHistory() {
+    const response = await fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const data = (await response.json()) as ProviderStatus;
+    setStatus(data);
+    if (data.production?.assets) setAssetHistory(data.production.assets);
+    window.dispatchEvent(new CustomEvent("chaplin:media-updated", { detail: { characterId: character.id } }));
+  }
 
   async function jsonAction(action: string, payload: Record<string, unknown>) {
     const response = await fetch("/api/generate", {
@@ -226,6 +250,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     }
     void run("speech", async () => {
       setSpeechUrl(await audioAction("speech", { voiceId: character.voiceId, speechText }));
+      await refreshHistory();
       setMessage("Dialogue generated with the character's locked ElevenLabs voice.");
     });
   }
@@ -233,6 +258,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   function generateSfx() {
     void run("sfx", async () => {
       setSfxUrl(await audioAction("sfx", { prompt: sfxPrompt }));
+      await refreshHistory();
       setMessage("A fresh version of the character's signature sound is ready.");
     });
   }
@@ -240,6 +266,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   function generateTheme() {
     void run("theme", async () => {
       setThemeUrl(await audioAction("theme", { prompt: themePrompt }));
+      await refreshHistory();
       setMessage("The character theme was generated, archived to the CDN, and added to the public Sound Profile.");
     });
   }
@@ -249,6 +276,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       const data = (await jsonAction("image", { prompt: imagePrompt })) as { url: string };
       setGeneratedImage(data.url);
       addCharacterImage(character.id, data.url);
+      await refreshHistory();
       setMessage("Still generated and added to the character gallery. It is now the video reference frame.");
     });
   }
@@ -264,6 +292,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       const data = (await response.json()) as { url: string };
       setGeneratedImage(data.url);
       if (!character.galleryUrls?.includes(data.url)) addCharacterImage(character.id, data.url);
+      await refreshHistory();
       setMessage("Reference image uploaded to the Supabase CDN and selected for Seedance.");
     });
   }
@@ -275,6 +304,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       const data = (await jsonAction("video", { prompt: scenePrompt, referenceImage })) as { url: string };
       setGeneratedVideo(data.url);
       setCharacterVideo(character.id, data.url);
+      await refreshHistory();
       setMessage("Five-second Seedance clip generated and attached to the character profile.");
     });
   }
@@ -392,7 +422,13 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             {previews.map((preview, index) => (
               <div key={preview.generated_voice_id} className="border border-line rounded-sm p-2 flex items-center gap-2">
                 <span className="text-[10px] text-grey w-12">Take {index + 1}</span>
-                <audio controls className="h-8 flex-1 min-w-0" src={`data:${preview.media_type ?? "audio/mpeg"};base64,${preview.audio_base_64}`} />
+                <div className="flex-1 min-w-0">
+                  <MediaPlayer
+                    src={`data:${preview.media_type ?? "audio/mpeg"};base64,${preview.audio_base_64}`}
+                    label={`Voice candidate ${index + 1}`}
+                    compact
+                  />
+                </div>
                 <button onClick={() => lockVoice(preview)} disabled={Boolean(busy)} className="text-xs text-accent font-semibold disabled:opacity-40">
                   {busy === "voice-save" ? "Locking..." : "Lock"}
                 </button>
@@ -406,7 +442,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <button onClick={generateSpeech} disabled={!elevenReady || Boolean(busy) || !character.voiceId} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "speech" ? "Performing line..." : "Generate dialogue"}
             </button>
-            {speechUrl ? <audio controls src={speechUrl} className="w-full h-9" /> : <p className="text-xs text-grey">Lock one voice once; reuse it across every story and language.</p>}
+            {speechUrl ? <MediaPlayer src={speechUrl} label={`${character.name} dialogue`} compact /> : <p className="text-xs text-grey">Lock one voice once; reuse it across every story and language.</p>}
           </div>
         </div>
 
@@ -417,7 +453,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <button onClick={generateSfx} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "sfx" ? "Building sound..." : "Generate 5-second SFX"}
             </button>
-            {sfxUrl && <audio controls src={sfxUrl} className="h-9 flex-1 min-w-64" />}
+            {sfxUrl && <div className="flex-1 min-w-64"><MediaPlayer src={sfxUrl} label={`${character.name} signature SFX`} compact /></div>}
           </div>
         </div>
 
@@ -428,7 +464,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <button onClick={generateTheme} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "theme" ? "Composing theme..." : "Generate 12-second theme"}
             </button>
-            {themeUrl && <audio controls preload="metadata" src={themeUrl} className="h-9 flex-1 min-w-64" />}
+            {themeUrl && <div className="flex-1 min-w-64"><MediaPlayer src={themeUrl} label={`${character.name} theme`} compact /></div>}
           </div>
         </div>
 
@@ -470,9 +506,63 @@ export default function CharacterProductionStudio({ character }: { character: Ch
               {busy === "video" ? "Seedance is rendering..." : "Generate 5-second video"}
             </button>
             <p className="text-[11px] text-grey">Seedance 1.5 Pro uses the newest generated still, or the current profile art, as its identity reference and creates synchronized audio.</p>
-            {(generatedVideo || character.videoUrl) && <video src={generatedVideo || character.videoUrl} controls playsInline className="w-full rounded-sm aspect-video object-cover" />}
+            {(generatedVideo || character.videoUrl) && <MediaPlayer src={generatedVideo || character.videoUrl || ""} label={`${character.name} scene`} kind="video" />}
           </div>
         </div>
+
+        <section data-generation-history className="border border-line rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-line flex flex-wrap items-center justify-between gap-2 bg-white/[0.02]">
+            <div>
+              <h3 className="font-semibold text-sm">Generated Scene Log</h3>
+              <p className="text-[11px] text-grey mt-0.5">Persistent outputs from Supabase. Replay any take or reopen its original prompt.</p>
+            </div>
+            <span className="text-[10px] uppercase tracking-wide text-grey">{assetHistory.length} saved assets</span>
+          </div>
+          {assetHistory.length === 0 ? (
+            <p className="px-4 py-8 text-center text-xs text-grey">Generated dialogue, sounds, stills, and videos will appear here.</p>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-3 p-3">
+              {assetHistory.slice(0, 12).map((asset) => {
+                const label = asset.kind === "dialogue"
+                  ? "Dialogue take"
+                  : asset.kind === "sfx"
+                    ? "Signature SFX"
+                    : asset.kind === "theme"
+                      ? "Theme score"
+                      : asset.kind === "video"
+                        ? "Generated scene"
+                        : "Scene still";
+                return (
+                  <article key={asset.id} className="rounded-md border border-line bg-black/10 p-3 min-w-0">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold">{label}</p>
+                        <p className="text-[10px] text-grey mt-0.5 truncate">
+                          {asset.provider} · {new Date(asset.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                        </p>
+                      </div>
+                      <a href={asset.url} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline whitespace-nowrap">CDN ↗</a>
+                    </div>
+                    {asset.kind === "video" ? (
+                      <MediaPlayer src={asset.url} label={label} kind="video" compact />
+                    ) : ["dialogue", "sfx", "theme"].includes(asset.kind) ? (
+                      <MediaPlayer src={asset.url} label={label} compact />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element -- generated CDN URLs are dynamic
+                      <img src={asset.url} alt={`${character.name} generated still`} loading="lazy" className="w-full aspect-video object-cover rounded-sm border border-line" />
+                    )}
+                    {asset.prompt && (
+                      <details className="mt-3 border-t border-line pt-2">
+                        <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-grey hover:text-accent">Original prompt</summary>
+                        <p className="text-[11px] leading-relaxed mt-2 text-grey break-words">{asset.prompt}</p>
+                      </details>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {message && <p className={`text-xs rounded-sm px-3 py-2 ${message.toLowerCase().includes("failed") || message.includes("not configured") ? "bg-red-500/10 text-red-600" : "bg-accent/10 text-ink"}`}>{message}</p>}
       </div>

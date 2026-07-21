@@ -249,18 +249,36 @@ async function main() {
       return {
         players: players.length,
         persistentSources: players.filter((audio) => (audio.currentSrc || audio.src).startsWith("https://")).length,
+        customPlayers: section.querySelectorAll("[data-media-player]").length,
+        nativeControls: section.querySelectorAll("audio[controls], video[controls]").length,
         missing: section.innerText.includes("Not generated yet"),
       };
     })()`);
     checks.push(result(
       "Public Sound Profile assets",
-      soundProfile?.players === 3 && soundProfile.persistentSources === 3 && !soundProfile.missing,
-      soundProfile ? `${soundProfile.persistentSources}/${soundProfile.players} persistent audio players` : "Sound Profile not found"
+      soundProfile?.players === 3 && soundProfile.persistentSources === 3 && soundProfile.customPlayers === 3 && soundProfile.nativeControls === 0 && !soundProfile.missing,
+      soundProfile ? `${soundProfile.persistentSources}/${soundProfile.players} persistent custom players · ${soundProfile.nativeControls} native controls` : "Sound Profile not found"
+    ));
+    const historyState = await cdp.evaluate(`(() => {
+      const history = document.querySelector("[data-generation-history]");
+      if (!history) return null;
+      return {
+        cards: history.querySelectorAll("article").length,
+        customPlayers: history.querySelectorAll("[data-media-player]").length,
+        videos: history.querySelectorAll('[data-media-player="video"]').length,
+        nativeControls: history.querySelectorAll("audio[controls], video[controls]").length,
+        text: history.innerText.includes("Generated Scene Log"),
+      };
+    })()`);
+    checks.push(result(
+      "Replayable generated scene log",
+      historyState?.text && historyState.cards > 0 && historyState.customPlayers > 0 && historyState.videos > 0 && historyState.nativeControls === 0,
+      historyState ? `${historyState.cards} logged assets · ${historyState.customPlayers} replay players · ${historyState.videos} videos` : "Generated Scene Log not found"
     ));
     let videoState = null;
     for (let attempt = 0; attempt < 24; attempt += 1) {
       videoState = await cdp.evaluate(`(() => {
-        const video = document.querySelector("video");
+        const video = document.querySelector('[data-media-player="video"] video');
         return video ? {
           src: video.currentSrc || video.src,
           readyState: video.readyState,

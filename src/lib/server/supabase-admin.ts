@@ -256,7 +256,7 @@ export async function getCharacterProductionState(characterId: string) {
       .maybeSingle(),
     supabase
       .from("media_assets")
-      .select("id,kind,url,provider,created_at")
+      .select("id,kind,url,provider,prompt,duration_seconds,metadata,created_at")
       .eq("character_id", characterId)
       .order("created_at", { ascending: false }),
   ]);

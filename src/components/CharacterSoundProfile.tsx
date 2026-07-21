@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Character } from "@/lib/types";
+import MediaPlayer from "@/components/MediaPlayer";
 
 type SoundState = {
   voicePreviewUrl: string | null;
@@ -43,7 +44,9 @@ function SoundAsset({
         <div className="h-9 max-w-md rounded-full bg-white/[0.05] animate-pulse" />
       ) : source ? (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <audio controls preload="metadata" src={source} className="w-full sm:max-w-md h-9" />
+          <div className="w-full sm:max-w-lg">
+            <MediaPlayer src={source} label={sourceLabel} compact />
+          </div>
           <a href={source} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline whitespace-nowrap">
             {sourceLabel} ↗
           </a>
@@ -74,19 +77,32 @@ export default function CharacterSoundProfile({
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Sound profile returned ${response.status}.`);
-        return response.json();
-      })
-      .then((data: { production?: SoundState | null }) => {
-        if (!cancelled) setSounds(data.production ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
+
+    function loadSounds() {
+      setFailed(false);
+      fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`, { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error(`Sound profile returned ${response.status}.`);
+          return response.json();
+        })
+        .then((data: { production?: SoundState | null }) => {
+          if (!cancelled) setSounds(data.production ?? null);
+        })
+        .catch(() => {
+          if (!cancelled) setFailed(true);
+        });
+    }
+
+    function handleMediaUpdated(event: Event) {
+      const detail = (event as CustomEvent<{ characterId?: string }>).detail;
+      if (detail?.characterId === character.id) loadSounds();
+    }
+
+    loadSounds();
+    window.addEventListener("chaplin:media-updated", handleMediaUpdated);
     return () => {
       cancelled = true;
+      window.removeEventListener("chaplin:media-updated", handleMediaUpdated);
     };
   }, [character.id]);
 
