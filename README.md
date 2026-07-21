@@ -46,6 +46,7 @@ Create `.env.local` in the project root:
 ```bash
 ELEVEN_LABS_API_KEY=your_elevenlabs_key
 SEEDANCE_API_KEY=your_byteplus_modelark_key
+ELEVEN_MUSIC_USD_PER_MINUTE=0.15
 ```
 
 The admin cost ledger records provider-native usage and converts each completed

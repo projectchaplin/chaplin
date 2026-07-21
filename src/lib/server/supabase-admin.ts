@@ -268,6 +268,7 @@ export async function getCharacterProductionState(characterId: string) {
     voicePreviewUrl: voice.data?.preview_url ?? null,
     latestDialogueUrl: rows.find((asset) => asset.kind === "dialogue")?.url ?? null,
     latestSfxUrl: rows.find((asset) => asset.kind === "sfx")?.url ?? null,
+    latestThemeUrl: rows.find((asset) => asset.kind === "theme")?.url ?? null,
     latestImageUrl: rows.find((asset) => asset.kind === "gallery")?.url ?? null,
     latestVideoUrl: rows.find((asset) => asset.kind === "video")?.url ?? null,
     assets: rows,

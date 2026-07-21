@@ -7,7 +7,6 @@ import { useChaplinStore } from "@/lib/store";
 import { getStory, getUser, castForStory } from "@/lib/selectors";
 import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
-import VoicePlayButton from "@/components/VoicePlayButton";
 import SoundtrackBar from "@/components/SoundtrackBar";
 import { ARCHETYPE_HUE, ARCHETYPE_LABEL, compactNumber, formatDate } from "@/lib/format";
 
@@ -122,7 +121,12 @@ export default function StoryPlayerPage() {
                         <p className="text-sm leading-relaxed">{line.text}</p>
                       </div>
                       <div className="mt-1.5">
-                        <VoicePlayButton durationSec={line.voiceClipMock.durationSec} compact />
+                        <Link
+                          href={`/characters/${character.id}#sound-profile`}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs text-grey hover:border-accent hover:text-accent"
+                        >
+                          ▶ Hear character voice
+                        </Link>
                       </div>
                     </div>
                   </div>

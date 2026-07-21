@@ -215,7 +215,7 @@ async function main() {
       return true;
     })()`);
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
-    const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 5-second video"]);
+    const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
     const sceneBefore = await cdp.evaluate(`(() => Object.fromEntries(
       [...document.querySelectorAll("[data-scene-field]")].map((field) => [field.dataset.sceneField, field.value])
     ))()`);
@@ -232,7 +232,7 @@ async function main() {
       ),
       label: document.body.innerText.includes("Midnight Escape"),
     }))()`);
-    const coordinatedFields = ["dialogue", "sfx", "image", "video"];
+    const coordinatedFields = ["dialogue", "sfx", "theme", "image", "video"];
     const sceneChanged =
       magicClicked &&
       sceneAfter.label &&
@@ -240,7 +240,22 @@ async function main() {
     checks.push(result(
       "Magic Scene coordinates prompts",
       sceneChanged,
-      sceneChanged ? "dialogue · SFX · still · video updated together" : "one or more scene fields did not update"
+      sceneChanged ? "dialogue · SFX · theme · still · video updated together" : "one or more scene fields did not update"
+    ));
+    const soundProfile = await cdp.evaluate(`(() => {
+      const section = document.querySelector("#sound-profile");
+      if (!section) return null;
+      const players = [...section.querySelectorAll("audio")];
+      return {
+        players: players.length,
+        persistentSources: players.filter((audio) => (audio.currentSrc || audio.src).startsWith("https://")).length,
+        missing: section.innerText.includes("Not generated yet"),
+      };
+    })()`);
+    checks.push(result(
+      "Public Sound Profile assets",
+      soundProfile?.players === 3 && soundProfile.persistentSources === 3 && !soundProfile.missing,
+      soundProfile ? `${soundProfile.persistentSources}/${soundProfile.players} persistent audio players` : "Sound Profile not found"
     ));
     let videoState = null;
     for (let attempt = 0; attempt < 24; attempt += 1) {

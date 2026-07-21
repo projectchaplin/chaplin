@@ -236,6 +236,45 @@ export async function POST(request: Request) {
       return new Response(bytes, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Asset-Url": asset.url } });
     }
 
+    if (action === "theme") {
+      const prompt = text(input, "prompt", 10, 1000);
+      const durationSeconds = 12;
+      jobId = await beginGeneration({ characterId, kind: "theme", provider: "elevenlabs", model: "music_v1", prompt });
+      const response = await eleven("/music?output_format=mp3_44100_128", {
+        prompt,
+        music_length_ms: durationSeconds * 1000,
+        model_id: "music_v1",
+        force_instrumental: true,
+        sign_with_c2pa: false,
+      });
+      const bytes = await response.arrayBuffer();
+      const asset = await saveMediaAsset({
+        characterId,
+        kind: "theme",
+        provider: "elevenlabs",
+        bytes,
+        contentType: response.headers.get("content-type") ?? "audio/mpeg",
+        prompt,
+        durationSeconds,
+        metadata: { songId: response.headers.get("song-id") },
+      });
+      await completeGeneration(
+        jobId,
+        asset.id,
+        { songId: response.headers.get("song-id") },
+        await calculateGenerationBilling({
+          kind: "theme",
+          usage: {
+            inputCharacters: prompt.length,
+            durationSeconds,
+            providerCredits: headerNumber(response, "character-cost"),
+          },
+        }),
+        response.headers.get("request-id") ?? response.headers.get("song-id")
+      );
+      return new Response(bytes, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Asset-Url": asset.url } });
+    }
+
     if (action === "image") {
       const prompt = text(input, "prompt", 10, 3000);
       jobId = await beginGeneration({ characterId, kind: "gallery", provider: "byteplus", model: SEEDREAM_MODEL, prompt });

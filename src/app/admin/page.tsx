@@ -47,7 +47,7 @@ export default async function AdminPage() {
   const slots = new Map(data.homeSlots.map((slot) => [slot.character_id, slot]));
   const readyCharacters = data.characters.filter((character) => {
     const assets = assetsByCharacter.get(character.id) ?? [];
-    return Boolean(character.image_url && character.banner_url && voices.has(character.id) && assets.includes("sfx") && assets.includes("video") && assets.filter((kind) => kind === "gallery").length >= 3);
+    return Boolean(character.image_url && character.banner_url && voices.has(character.id) && assets.includes("sfx") && assets.includes("theme") && assets.includes("video") && assets.filter((kind) => kind === "gallery").length >= 3);
   });
   const totalUsd = data.jobs.reduce((total, job) => total + number(job.cost_usd), 0);
   const totalInr = data.jobs.reduce((total, job) => total + number(job.cost_inr), 0);
@@ -132,19 +132,20 @@ export default async function AdminPage() {
         <div className="flex items-end justify-between gap-4 mb-4">
           <div>
             <h2 className="reel-title text-2xl">Character readiness</h2>
-            <p className="text-xs text-grey mt-1">A homepage-ready character needs identity art, a locked voice, signature SFX, at least three gallery stills, and a video.</p>
+            <p className="text-xs text-grey mt-1">A homepage-ready character needs identity art, a locked voice, signature SFX, a theme score, at least three gallery stills, and a video.</p>
           </div>
           <span className="text-xs text-grey">{readyCharacters.length}/{data.characters.length} ready</span>
         </div>
 
         <div className="overflow-x-auto max-w-full poster-card rounded-md">
-          <table className="w-full min-w-[920px] text-left">
+          <table className="w-full min-w-[980px] text-left">
             <thead className="text-[10px] uppercase tracking-[0.16em] text-grey border-b border-line">
               <tr>
                 <th className="px-4 py-3">Character</th>
                 <th className="px-3 py-3">Identity</th>
                 <th className="px-3 py-3">Voice</th>
                 <th className="px-3 py-3">SFX</th>
+                <th className="px-3 py-3">Theme</th>
                 <th className="px-3 py-3">Gallery</th>
                 <th className="px-3 py-3">Video</th>
                 <th className="px-3 py-3">Home</th>
@@ -157,6 +158,7 @@ export default async function AdminPage() {
                 const identityReady = Boolean(character.image_url && character.banner_url);
                 const voiceReady = voices.has(character.id);
                 const sfxReady = assetKinds.includes("sfx");
+                const themeReady = assetKinds.includes("theme");
                 const galleryCount = assetKinds.filter((kind) => kind === "gallery").length;
                 const videoReady = assetKinds.includes("video");
                 const slot = slots.get(character.id);
@@ -169,6 +171,7 @@ export default async function AdminPage() {
                     <td className="px-3"><StatusDot ready={identityReady} label={identityReady ? "Ready" : "Missing"} /></td>
                     <td className="px-3"><StatusDot ready={voiceReady} label={voiceReady ? "Locked" : "Create"} /></td>
                     <td className="px-3"><StatusDot ready={sfxReady} label={sfxReady ? "Ready" : "Create"} /></td>
+                    <td className="px-3"><StatusDot ready={themeReady} label={themeReady ? "Ready" : "Create"} /></td>
                     <td className="px-3"><StatusDot ready={galleryCount >= 3} label={`${galleryCount}/3`} /></td>
                     <td className="px-3"><StatusDot ready={videoReady} label={videoReady ? "Ready" : "Create"} /></td>
                     <td className="px-3">

@@ -8,6 +8,7 @@ type ProductionState = {
   voiceId: string | null;
   latestDialogueUrl: string | null;
   latestSfxUrl: string | null;
+  latestThemeUrl: string | null;
   latestImageUrl: string | null;
   latestVideoUrl: string | null;
 };
@@ -111,6 +112,10 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     `${character.sfxDesc}. A distinctive five-second cinematic signature for ${character.name}; clean foreground effect, subtle room tone, no speech.`
   );
   const [sfxUrl, setSfxUrl] = useState("");
+  const [themePrompt, setThemePrompt] = useState(
+    `${character.themeDesc}. A distinctive 12-second instrumental character theme for ${character.name}; cinematic, memorable, no vocals, clean ending.`
+  );
+  const [themeUrl, setThemeUrl] = useState("");
   const [imagePrompt, setImagePrompt] = useState(
     `${identity} Cinematic 16:9 production still: inside a shadowy old cinema projection booth at night, she turns toward camera with alert confidence, practical tungsten light, fine film grain, realistic skin and fabric, no text, no watermark.`
   );
@@ -135,6 +140,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         }
         if (production.latestDialogueUrl) setSpeechUrl(production.latestDialogueUrl);
         if (production.latestSfxUrl) setSfxUrl(production.latestSfxUrl);
+        if (production.latestThemeUrl) setThemeUrl(production.latestThemeUrl);
         if (production.latestImageUrl) {
           setGeneratedImage(production.latestImageUrl);
           if (!character.galleryUrls?.includes(production.latestImageUrl)) {
@@ -161,7 +167,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     return response.json();
   }
 
-  async function audioAction(action: "speech" | "sfx", payload: Record<string, unknown>) {
+  async function audioAction(action: "speech" | "sfx" | "theme", payload: Record<string, unknown>) {
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -231,6 +237,13 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     });
   }
 
+  function generateTheme() {
+    void run("theme", async () => {
+      setThemeUrl(await audioAction("theme", { prompt: themePrompt }));
+      setMessage("The character theme was generated, archived to the CDN, and added to the public Sound Profile.");
+    });
+  }
+
   function generateImage() {
     void run("image", async () => {
       const data = (await jsonAction("image", { prompt: imagePrompt })) as { url: string };
@@ -273,6 +286,9 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     setSpeechText(scene.line);
     setSfxPrompt(
       `${scene.sound} Preserve ${character.name}'s signature sound: ${character.sfxDesc}. Five seconds, clean foreground mix, no speech.`
+    );
+    setThemePrompt(
+      `${character.themeDesc}. A 12-second instrumental score for the scene "${scene.name}" starring ${character.name}; cinematic, emotionally specific, memorable motif, no vocals, clean ending.`
     );
     setImagePrompt(
       `${identity} Cinematic 16:9 production still: ${scene.still}. Realistic skin and fabric, expressive natural pose, practical lighting, fine film grain, no text, no watermark.`
@@ -349,7 +365,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
               )}
             </div>
             <p className="text-xs text-grey mt-1">
-              One click coordinates dialogue, SFX, still, and video prompts. Nothing is charged until you generate.
+              One click coordinates dialogue, SFX, theme, still, and video prompts. Nothing is charged until you generate.
             </p>
           </div>
           <button
@@ -405,9 +421,20 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
         </div>
 
+        <div className="border border-line rounded-md p-4 flex flex-col gap-3">
+          <h3 className="font-semibold text-sm">4. Theme score</h3>
+          <input data-scene-field="theme" value={themePrompt} onChange={(event) => setThemePrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={generateTheme} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+              {busy === "theme" ? "Composing theme..." : "Generate 12-second theme"}
+            </button>
+            {themeUrl && <audio controls preload="metadata" src={themeUrl} className="h-9 flex-1 min-w-64" />}
+          </div>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-5">
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
-            <h3 className="font-semibold text-sm">4. Consistent scene still</h3>
+            <h3 className="font-semibold text-sm">5. Consistent scene still</h3>
             <textarea data-scene-field="image" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateImage} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "image" ? "Seedream is creating..." : "Generate scene image"}
@@ -437,7 +464,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
 
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
-            <h3 className="font-semibold text-sm">5. Animate a five-second scene</h3>
+            <h3 className="font-semibold text-sm">6. Animate a five-second scene</h3>
             <textarea data-scene-field="video" value={scenePrompt} onChange={(event) => setScenePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateVideo} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "video" ? "Seedance is rendering..." : "Generate 5-second video"}

@@ -48,6 +48,7 @@ async function main() {
     ),
     await mediaCheck("Dialogue on CDN", find("dialogue", "elevenlabs"), "audio/"),
     await mediaCheck("Signature SFX on CDN", find("sfx", "elevenlabs"), "audio/"),
+    await mediaCheck("Theme score on CDN", find("theme", "elevenlabs"), "audio/"),
     await mediaCheck("Uploaded reference on CDN", find("gallery", "upload"), "image/"),
     await mediaCheck("Seedream image on CDN", find("gallery", "byteplus"), "image/"),
     await mediaCheck("Seedance video on CDN", find("video", "byteplus"), "video/"),

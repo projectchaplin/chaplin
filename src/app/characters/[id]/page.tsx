@@ -7,7 +7,7 @@ import { useChaplinStore } from "@/lib/store";
 import { getCharacter, getUser, resumeForCharacter, ledgerForCharacter } from "@/lib/selectors";
 import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
-import VoicePlayButton from "@/components/VoicePlayButton";
+import CharacterSoundProfile from "@/components/CharacterSoundProfile";
 import EarningsSparkline from "@/components/EarningsSparkline";
 import CharacterGallery from "@/components/CharacterGallery";
 import DeveloperAccessCard from "@/components/DeveloperAccessCard";
@@ -98,9 +98,9 @@ export default function CharacterProfilePage() {
                 <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
                 <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
               </div>
-              <div className="mt-2">
-                <VoicePlayButton durationSec={4} label={`Hear ${character.name.split(" ")[0]}`} compact />
-              </div>
+              <a href="#sound-profile" className="mt-2 self-start inline-flex items-center gap-2 rounded-full border border-accent/60 px-3 py-1.5 text-xs text-accent hover:bg-accent/10">
+                ▶ Hear {character.name.split(" ")[0]}
+              </a>
             </div>
           </div>
           <div className="grid grid-cols-3 divide-x divide-line border-t border-line">
@@ -143,7 +143,9 @@ export default function CharacterProfilePage() {
               <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
             </div>
 
-            <VoicePlayButton durationSec={4} label={`Hear ${character.name.split(" ")[0]}`} />
+            <a href="#sound-profile" className="inline-flex items-center gap-2 rounded-full border border-accent/60 px-3.5 py-1.5 text-sm text-accent hover:bg-accent/10">
+              ▶ Hear {character.name.split(" ")[0]}
+            </a>
           </div>
 
           <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40">
@@ -164,7 +166,7 @@ export default function CharacterProfilePage() {
       )}
 
       {canProduce && (
-        <div className="mt-6">
+        <div id="production-studio" className="mt-6 scroll-mt-24">
           <CharacterProductionStudio character={character} />
         </div>
       )}
@@ -183,26 +185,7 @@ export default function CharacterProfilePage() {
             <CharacterGallery name={character.name} images={character.galleryUrls} />
           )}
 
-          <section className="poster-card rounded-md p-5 flex flex-col gap-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-grey">
-              Sound profile
-            </h2>
-            <div>
-              <p className="text-[11px] text-grey mb-1">Voice</p>
-              <p className="text-sm leading-relaxed mb-2">{character.voiceDesc}</p>
-              <VoicePlayButton durationSec={4} label="Hear voice" compact />
-            </div>
-            <div>
-              <p className="text-[11px] text-grey mb-1">Signature SFX</p>
-              <p className="text-sm leading-relaxed mb-2">{character.sfxDesc}</p>
-              <VoicePlayButton durationSec={2} label="Hear SFX" compact />
-            </div>
-            <div>
-              <p className="text-[11px] text-grey mb-1">Theme score</p>
-              <p className="text-sm leading-relaxed mb-2">{character.themeDesc}</p>
-              <VoicePlayButton durationSec={6} label="Hear theme" compact />
-            </div>
-          </section>
+          <CharacterSoundProfile character={character} canProduce={canProduce} />
 
           <section className="poster-card rounded-md p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-grey mb-2">

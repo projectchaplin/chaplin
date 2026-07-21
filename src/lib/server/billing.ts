@@ -28,6 +28,9 @@ const ELEVEN_TTS_USD_PER_1K_CHARACTERS = Number(
 const ELEVEN_SFX_USD_PER_MINUTE = Number(
   process.env.ELEVEN_SFX_USD_PER_MINUTE ?? "0.12"
 );
+const ELEVEN_MUSIC_USD_PER_MINUTE = Number(
+  process.env.ELEVEN_MUSIC_USD_PER_MINUTE ?? "0.15"
+);
 const SEEDREAM_USD_PER_IMAGE = Number(process.env.SEEDREAM_USD_PER_IMAGE ?? "0.04");
 const SEEDANCE_USD_PER_SECOND = Number(process.env.SEEDANCE_USD_PER_SECOND ?? "0.10");
 const NORMALIZED_TOKENS_PER_USD = Number(process.env.CHAPLIN_TOKENS_PER_USD ?? "1000");
@@ -88,6 +91,9 @@ export async function calculateGenerationBilling(input: {
   } else if (input.kind === "sfx") {
     costUsd = ((usage.durationSeconds ?? 0) / 60) * ELEVEN_SFX_USD_PER_MINUTE;
     pricingNote = `ElevenLabs Sound Effects rate-card estimate at $${ELEVEN_SFX_USD_PER_MINUTE}/minute.`;
+  } else if (input.kind === "theme") {
+    costUsd = ((usage.durationSeconds ?? 0) / 60) * ELEVEN_MUSIC_USD_PER_MINUTE;
+    pricingNote = `ElevenLabs Music rate-card estimate at $${ELEVEN_MUSIC_USD_PER_MINUTE}/minute.`;
   } else if (input.kind === "gallery") {
     costUsd = (usage.imageCount ?? 1) * SEEDREAM_USD_PER_IMAGE;
     pricingNote = `Seedream estimate at $${SEEDREAM_USD_PER_IMAGE}/image; override with SEEDREAM_USD_PER_IMAGE when your ModelArk contract differs.`;
