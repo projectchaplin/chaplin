@@ -37,6 +37,8 @@ type VoicePreview = {
 
 const DEFAULT_LINE =
   "You brought the Thakur's men. I brought an exit. Guess who planned better. Now keep up. The doors close in five seconds, and I do not wait twice.";
+const SEEDANCE_ACTIVATION_URL =
+  "https://console.byteplus.com/ark/region%3Aark%2Bap-southeast-1/model/detail?Id=seedance-1-5-pro";
 
 const VOICE_PRESENTATION = {
   feminine: "An adult woman with a clearly feminine vocal identity and natural feminine resonance",
@@ -263,6 +265,24 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       </div>
 
       <div className="p-5 sm:p-6 flex flex-col gap-7">
+        {seedModelsNeedActivation && (
+          <div className="rounded-md border border-amber-500/60 bg-amber-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-500">Seedance 1.5 Pro needs account activation</p>
+              <p className="text-xs text-grey mt-1">
+                The API key is valid, but BytePlus is refusing video jobs until this model is enabled for the account. Image, voice, SFX, and CDN uploads remain operational.
+              </p>
+            </div>
+            <a
+              href={SEEDANCE_ACTIVATION_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 rounded-full border border-amber-500 px-4 py-2 text-xs font-semibold text-amber-500 hover:bg-amber-500/10"
+            >
+              Activate Seedance ↗
+            </a>
+          </div>
+        )}
         <div className="grid md:grid-cols-2 gap-5">
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-2">

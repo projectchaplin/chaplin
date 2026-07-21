@@ -6,6 +6,9 @@ import AdminRefreshButton from "@/components/AdminRefreshButton";
 
 export const dynamic = "force-dynamic";
 
+const SEEDANCE_ACTIVATION_URL =
+  "https://console.byteplus.com/ark/region%3Aark%2Bap-southeast-1/model/detail?Id=seedance-1-5-pro";
+
 function number(value: number | string | null | undefined) {
   return value == null ? 0 : Number(value);
 }
@@ -50,6 +53,10 @@ export default async function AdminPage() {
   const totalInr = data.jobs.reduce((total, job) => total + number(job.cost_inr), 0);
   const totalTokens = data.jobs.reduce((total, job) => total + number(job.normalized_tokens), 0);
   const costedJobs = data.jobs.filter((job) => job.cost_usd != null).length;
+  const latestSeedanceJob = data.jobs.find((job) => job.model === "seedance-1-5-pro-251215");
+  const seedanceNeedsActivation =
+    latestSeedanceJob?.status === "failed" &&
+    /not activated|activate the model/i.test(latestSeedanceJob.error_message ?? "");
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 w-full min-w-0 overflow-hidden">
@@ -64,6 +71,25 @@ export default async function AdminPage() {
           <Link href="/characters/new" className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold">+ Create character</Link>
         </div>
       </div>
+
+      {seedanceNeedsActivation && (
+        <div className="mb-8 rounded-md border border-amber-500/60 bg-amber-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-amber-500">Video pipeline action required</p>
+            <p className="text-xs text-grey mt-1">
+              Seedance 1.5 Pro is configured, but BytePlus has not activated it for this account. The failed request remains recorded below with its trace ID.
+            </p>
+          </div>
+          <a
+            href={SEEDANCE_ACTIVATION_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 rounded-full border border-amber-500 px-4 py-2 text-xs font-semibold text-amber-500 hover:bg-amber-500/10"
+          >
+            Activate in BytePlus ↗
+          </a>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         {[
