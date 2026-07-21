@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useChaplinStore } from "@/lib/store";
 import {
@@ -14,7 +14,7 @@ import {
 import CharacterCard from "@/components/CharacterCard";
 import PosterCard from "@/components/PosterCard";
 import Carousel from "@/components/Carousel";
-import HeroGridCard from "@/components/HeroGridCard";
+import HeroGridCard, { type HomepageBroll } from "@/components/HeroGridCard";
 import SectionHeading from "@/components/SectionHeading";
 import Avatar from "@/components/Avatar";
 import { IconMask, IconFilm, IconTrophy } from "@/components/Icons";
@@ -72,7 +72,49 @@ export default function HomePage() {
   const liveAvatars = world.characters.slice(0, 6);
 
   const [activeGridId, setActiveGridId] = useState<string | null>(null);
-  const currentFeaturedId = activeGridId ?? featured?.id;
+  const [automaticGridId, setAutomaticGridId] = useState<string | null>(null);
+  const [brolls, setBrolls] = useState<HomepageBroll[]>([]);
+  const brollByCharacter = new Map(brolls.map((broll) => [broll.characterId, broll]));
+  const readyBrollIds = gridChars
+    .filter((character) => brollByCharacter.get(character.id)?.videoUrl)
+    .map((character) => character.id);
+  const validAutomaticGridId = automaticGridId && readyBrollIds.includes(automaticGridId)
+    ? automaticGridId
+    : null;
+  const currentFeaturedId = activeGridId ?? validAutomaticGridId ?? readyBrollIds[0] ?? featured?.id;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function loadBrolls() {
+      fetch("/api/broll", { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error(`B-roll manifest returned ${response.status}.`);
+          return response.json();
+        })
+        .then((data: { characters?: HomepageBroll[] }) => {
+          if (!cancelled) setBrolls(data.characters ?? []);
+        })
+        .catch(() => {
+          if (!cancelled) setBrolls([]);
+        });
+    }
+
+    loadBrolls();
+    window.addEventListener("chaplin:media-updated", loadBrolls);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("chaplin:media-updated", loadBrolls);
+    };
+  }, []);
+
+  function advanceBroll(completedCharacterId: string) {
+    if (readyBrollIds.length < 2) return;
+    const currentIndex = readyBrollIds.indexOf(completedCharacterId);
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % readyBrollIds.length;
+    setActiveGridId(null);
+    setAutomaticGridId(readyBrollIds[nextIndex]);
+  }
 
   // The featured tile eats 4 cells (2x2) instead of 1, so a 4-column grid can
   // land short of a full row. Fill the remainder with CTA tiles instead of
@@ -189,6 +231,8 @@ export default function HomePage() {
                     character={c}
                     active={c.id === currentFeaturedId}
                     onActivate={() => setActiveGridId(c.id)}
+                    broll={brollByCharacter.get(c.id)}
+                    onPlaybackComplete={advanceBroll}
                   />
                 ))}
                 {Array.from({ length: fillerCount }).map((_, i) => (

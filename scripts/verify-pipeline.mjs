@@ -19,13 +19,15 @@ async function mediaCheck(name, asset, expectedType) {
 }
 
 async function main() {
-  const [adminResponse, logsResponse, stateResponse] = await Promise.all([
+  const [adminResponse, logsResponse, brollResponse, stateResponse] = await Promise.all([
     fetch(`${baseUrl}/admin`),
     fetch(`${baseUrl}/admin/logs`),
+    fetch(`${baseUrl}/api/broll`),
     fetch(`${baseUrl}/api/generate?characterId=${encodeURIComponent(characterId)}`),
   ]);
   const adminHtml = await adminResponse.text();
   const logsHtml = await logsResponse.text();
+  const brollState = brollResponse.ok ? await brollResponse.json() : { characters: [] };
   if (!stateResponse.ok) throw new Error(`Production state returned ${stateResponse.status}`);
   const state = await stateResponse.json();
   const assets = state.production?.assets ?? [];
@@ -41,6 +43,11 @@ async function main() {
       "USD · INR · normalized tokens · provider usage"
     ),
     check("Supabase connection", state.database, state.database ? "configured" : "missing"),
+    check(
+      "Homepage B-roll playlist",
+      brollResponse.ok && brollState.characters?.length >= 2 && brollState.characters.every((item) => item.videoUrl?.startsWith("https://")),
+      `${brollState.characters?.length ?? 0} production-ready videos`
+    ),
     check("Locked ElevenLabs voice", state.production?.voiceId, state.production?.voiceId ? "present" : "missing"),
     check(
       "Dialogue voice continuity",

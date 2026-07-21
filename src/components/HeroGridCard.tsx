@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { motion } from "framer-motion";
 import type { Character } from "@/lib/types";
 import { ARCHETYPE_LABEL, ARCHETYPE_HUE, hsl } from "@/lib/format";
@@ -15,63 +15,44 @@ function pauseAudioRefs(
   themeRef.current?.pause();
 }
 
+export type HomepageBroll = {
+  characterId: string;
+  videoUrl: string | null;
+  dialogueUrl: string | null;
+  themeUrl: string | null;
+};
+
 export default function HeroGridCard({
   character,
   active = false,
   onActivate,
+  broll,
+  onPlaybackComplete,
 }: {
   character: Character;
   active?: boolean;
   onActivate?: () => void;
+  broll?: HomepageBroll;
+  onPlaybackComplete?: (characterId: string) => void;
 }) {
   const hue = ARCHETYPE_HUE[character.archetype];
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const dialogueRef = useRef<HTMLAudioElement | null>(null);
   const themeRef = useRef<HTMLAudioElement | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [production, setProduction] = useState<{
-    latestVideoUrl: string | null;
-    latestDialogueUrl: string | null;
-    latestThemeUrl: string | null;
-  } | null>(null);
   const [playingWithSound, setPlayingWithSound] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-
-    function loadBroll() {
-      fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`, { cache: "no-store" })
-        .then((response) => {
-          if (!response.ok) throw new Error(`B-roll state returned ${response.status}.`);
-          return response.json();
-        })
-        .then((data: { production?: typeof production }) => {
-          if (!cancelled) setProduction(data.production ?? null);
-        })
-        .catch(() => {
-          if (!cancelled) setProduction(null);
-        });
-    }
-
-    function handleMediaUpdated(event: Event) {
-      const detail = (event as CustomEvent<{ characterId?: string }>).detail;
-      if (detail?.characterId === character.id) loadBroll();
-    }
-
-    loadBroll();
-    window.addEventListener("chaplin:media-updated", handleMediaUpdated);
     return () => {
-      cancelled = true;
       if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
       pauseAudioRefs(dialogueRef, themeRef);
-      window.removeEventListener("chaplin:media-updated", handleMediaUpdated);
     };
-  }, [active, character.id]);
+  }, [active, character.id, broll?.videoUrl]);
 
-  const videoSource = production?.latestVideoUrl ?? character.videoUrl ?? null;
-  const dialogueSource = production?.latestDialogueUrl ?? null;
-  const themeSource = production?.latestThemeUrl ?? null;
+  const videoSource = broll?.videoUrl ?? character.videoUrl ?? null;
+  const dialogueSource = broll?.dialogueUrl ?? null;
+  const themeSource = broll?.themeUrl ?? null;
   const hasSound = Boolean(dialogueSource || themeSource || videoSource);
 
   function stopSound() {
@@ -124,6 +105,7 @@ export default function HeroGridCard({
       layout
       transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
       className={`relative rounded-lg ${active ? "col-span-2 row-span-2" : ""}`}
+      data-hero-character-id={character.id}
       style={
         active
           ? { boxShadow: "0 0 36px var(--accent-secondary-glow)" }
@@ -131,6 +113,13 @@ export default function HeroGridCard({
       }
     >
       {active && <span className="hero-active-border" aria-hidden />}
+      {active && videoSource && (
+        <span
+          className={`broll-progress-border ${progress > 0.92 ? "broll-progress-ending" : ""}`}
+          style={{ "--broll-progress": `${Math.max(0, Math.min(1, progress)) * 360}deg` } as CSSProperties}
+          aria-hidden
+        />
+      )}
       <Link
         href={`/characters/${character.id}`}
         onMouseEnter={onActivate}
@@ -155,14 +144,27 @@ export default function HeroGridCard({
               }}
             />
           )}
-          {videoSource && (
+          {active && videoSource && (
             <video
               ref={videoRef}
               src={videoSource}
               autoPlay
               muted
-              loop
               playsInline
+              preload="auto"
+              onLoadedMetadata={() => {
+                setProgress(0);
+                setPlayingWithSound(false);
+              }}
+              onTimeUpdate={(event) => {
+                const video = event.currentTarget;
+                setProgress(video.duration ? video.currentTime / video.duration : 0);
+              }}
+              onEnded={() => {
+                setProgress(1);
+                stopSound();
+                onPlaybackComplete?.(character.id);
+              }}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out ${
                 active ? "opacity-100" : "opacity-0"
               }`}
@@ -205,6 +207,11 @@ export default function HeroGridCard({
             </button>
           )}
         </div>
+      )}
+      {active && videoSource && (
+        <span className="absolute inset-x-2 bottom-1 z-30 h-0.5 overflow-hidden rounded-full bg-white/20" data-broll-timing-bar>
+          <span className="block h-full rounded-full bg-accent transition-[width] duration-100" style={{ width: `${progress * 100}%` }} />
+        </span>
       )}
       {dialogueSource && <audio ref={dialogueRef} src={dialogueSource} preload="metadata" />}
       {themeSource && <audio ref={themeRef} src={themeSource} preload="metadata" />}

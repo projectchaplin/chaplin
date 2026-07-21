@@ -201,8 +201,10 @@ async function main() {
         const activeCard = reel?.closest("div.relative");
         const video = activeCard?.querySelector("video");
         return reel ? {
+          characterId: activeCard?.dataset.heroCharacterId ?? null,
           videoSource: video?.currentSrc || video?.src || null,
           soundControl: Boolean(reel.querySelector('button[aria-label*="B-roll with sound"]')),
+          timingBar: Boolean(activeCard?.querySelector("[data-broll-timing-bar]")),
         } : null;
       })()`);
       if (homeBroll?.videoSource?.startsWith("https://")) break;
@@ -210,8 +212,32 @@ async function main() {
     }
     checks.push(result(
       "Homepage uses persisted B-roll",
-      homeBroll?.videoSource?.startsWith("https://"),
-      homeBroll?.videoSource ? "active tile playing Supabase CDN video" : "active tile has no persisted video"
+      homeBroll?.videoSource?.startsWith("https://") && homeBroll.timingBar,
+      homeBroll?.videoSource ? "active tile playing Supabase CDN video · pink timing bar" : "active tile has no persisted video"
+    ));
+    const completedBrollId = homeBroll?.characterId;
+    const endedDispatched = await cdp.evaluate(`(() => {
+      const reel = document.querySelector("[data-home-broll]");
+      const card = reel?.closest("[data-hero-character-id]");
+      const video = card?.querySelector("video");
+      if (!video) return false;
+      video.dispatchEvent(new Event("ended"));
+      return true;
+    })()`);
+    await sleep(1200);
+    const nextBroll = await cdp.evaluate(`(() => {
+      const reel = document.querySelector("[data-home-broll]");
+      const card = reel?.closest("[data-hero-character-id]");
+      const video = card?.querySelector("video");
+      return reel ? {
+        characterId: card?.dataset.heroCharacterId ?? null,
+        videoSource: video?.currentSrc || video?.src || null,
+      } : null;
+    })()`);
+    checks.push(result(
+      "B-roll carousel advances on completion",
+      endedDispatched && completedBrollId && nextBroll?.characterId !== completedBrollId && nextBroll?.videoSource?.startsWith("https://"),
+      completedBrollId && nextBroll?.characterId ? `${completedBrollId} → ${nextBroll.characterId}` : "ready-video handoff failed"
     ));
 
     const makerClicked = await cdp.evaluate(`(() => {

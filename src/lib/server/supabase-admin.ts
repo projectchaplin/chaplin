@@ -275,6 +275,38 @@ export async function getCharacterProductionState(characterId: string) {
   };
 }
 
+export async function getHomepageBrollState() {
+  const supabase = adminClient();
+  const { data, error } = await supabase
+    .from("media_assets")
+    .select("character_id,kind,url,created_at")
+    .in("kind", ["video", "dialogue", "theme"])
+    .not("character_id", "is", null)
+    .order("created_at", { ascending: false });
+  assert(error, "Load homepage B-roll");
+
+  const characters = new Map<string, {
+    characterId: string;
+    videoUrl: string | null;
+    dialogueUrl: string | null;
+    themeUrl: string | null;
+  }>();
+  for (const asset of data ?? []) {
+    if (!asset.character_id) continue;
+    const entry = characters.get(asset.character_id) ?? {
+      characterId: asset.character_id,
+      videoUrl: null,
+      dialogueUrl: null,
+      themeUrl: null,
+    };
+    if (asset.kind === "video" && !entry.videoUrl) entry.videoUrl = asset.url;
+    if (asset.kind === "dialogue" && !entry.dialogueUrl) entry.dialogueUrl = asset.url;
+    if (asset.kind === "theme" && !entry.themeUrl) entry.themeUrl = asset.url;
+    characters.set(asset.character_id, entry);
+  }
+  return [...characters.values()].filter((entry) => entry.videoUrl);
+}
+
 export async function getCharacterProviderHealth(characterId: string) {
   const supabase = adminClient();
   const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
