@@ -32,9 +32,7 @@ export default function HomePage() {
           <>
             CREATE AND MONETIZE
             <br />
-            YOUR AI CHARACTERS
-            <br />
-            OR AI ACTORS
+            AI CHARACTERS
           </>
         ),
         description:
@@ -49,7 +47,7 @@ export default function HomePage() {
           <>
             CASTING FOR
             <br />
-            AI CHARACTERS
+            AI ACTORS
           </>
         ),
         description:

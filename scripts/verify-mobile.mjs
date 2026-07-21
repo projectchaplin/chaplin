@@ -192,7 +192,7 @@ async function main() {
     const checks = [];
 
     await cdp.navigate(`${baseUrl}/`);
-    const caster = await pageState(cdp, ["CASTING FOR", "AI CHARACTERS", "Browse AI Characters", "Create a Casting"]);
+    const caster = await pageState(cdp, ["CASTING FOR", "AI ACTORS", "Browse AI Characters", "Create a Casting"]);
     checks.push(result("Caster homepage at 390px", caster.required && !caster.overflow, pageDetail(caster)));
 
     const makerClicked = await cdp.evaluate(`(() => {
@@ -202,7 +202,7 @@ async function main() {
       return true;
     })()`);
     await sleep(500);
-    const maker = await pageState(cdp, ["CREATE AND MONETIZE", "YOUR AI CHARACTERS", "OR AI ACTORS", "Create an AI Actor", "Open Maker Studio"]);
+    const maker = await pageState(cdp, ["CREATE AND MONETIZE", "AI CHARACTERS", "Create an AI Actor", "Open Maker Studio"]);
     checks.push(result("Maker homepage at 390px", makerClicked && maker.required && !maker.overflow, pageDetail(maker)));
 
     await cdp.evaluate(`(() => {
