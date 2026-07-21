@@ -96,26 +96,26 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-5 gap-10 items-center">
             <div className="lg:col-span-5 flex justify-end">
               <div
-                className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper-dim p-1 w-full sm:w-[26rem]"
+                className="grid grid-cols-2 gap-1 rounded-md border border-line bg-paper-dim p-1 w-full max-w-[19rem] ml-auto"
                 aria-label="Choose how you want to use Chaplin"
               >
                 <button
                   type="button"
                   aria-pressed={!isMaker}
                   onClick={() => world.switchDemoRole("caster")}
-                  className={`rounded-md px-3 py-2.5 text-left transition-colors ${!isMaker ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
+                  className={`rounded px-3 py-1.5 text-left transition-colors ${!isMaker ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
                 >
-                  <span className="block text-xs font-semibold uppercase tracking-[0.14em]">Caster</span>
-                  <span className={`block text-[10px] mt-0.5 ${!isMaker ? "text-paper/75" : "text-grey"}`}>Cast a character</span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em]">Caster</span>
+                  <span className={`block text-[9px] mt-0.5 ${!isMaker ? "text-paper/75" : "text-grey"}`}>Cast a character</span>
                 </button>
                 <button
                   type="button"
                   aria-pressed={isMaker}
                   onClick={() => world.switchDemoRole("maker")}
-                  className={`rounded-md px-3 py-2.5 text-left transition-colors ${isMaker ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
+                  className={`rounded px-3 py-1.5 text-left transition-colors ${isMaker ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
                 >
-                  <span className="block text-xs font-semibold uppercase tracking-[0.14em]">Maker</span>
-                  <span className={`block text-[10px] mt-0.5 ${isMaker ? "text-paper/75" : "text-grey"}`}>Make and monetize</span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em]">Maker</span>
+                  <span className={`block text-[9px] mt-0.5 ${isMaker ? "text-paper/75" : "text-grey"}`}>Make and monetize</span>
                 </button>
               </div>
             </div>
