@@ -293,7 +293,7 @@ async function main() {
     })()`);
     checks.push(result(
       "In-video audio controls",
-      heroAudio?.present && heroAudio?.source?.startsWith("https://") && ["scene", "voice", "sfx", "theme"].every((mode) => heroAudio?.modes?.includes(mode)),
+      heroAudio?.present && heroAudio?.source?.startsWith("https://") && ["voice", "sfx", "theme"].every((mode) => heroAudio?.modes?.includes(mode)) && !heroAudio?.modes?.includes("scene"),
       heroAudio?.present ? `${heroAudio.modes.join(" · ")} · persisted voice loaded` : "in-video audio controls missing"
     ));
     const brollState = await cdp.evaluate(`(() => {
@@ -302,7 +302,7 @@ async function main() {
       return {
         video: Boolean(reel.querySelector("video")),
         audioTracks: reel.querySelectorAll("audio").length,
-        soundControl: Boolean(reel.querySelector('[data-audio-mode="scene"]')),
+        soundControl: ["voice", "sfx", "theme"].every((mode) => Boolean(reel.querySelector('[data-audio-mode="' + mode + '"]'))),
         punchline: Boolean(document.querySelector("[data-broll-punchline]")),
       };
     })()`);

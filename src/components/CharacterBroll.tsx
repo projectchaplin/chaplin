@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { Character } from "@/lib/types";
-import { IconFilm, IconMicrophone, IconMusic, IconWaveform } from "@/components/Icons";
+import { IconMicrophone, IconMusic, IconWaveform } from "@/components/Icons";
 
 type BrollState = {
   latestVideoUrl: string | null;
@@ -12,14 +12,12 @@ type BrollState = {
   latestThemeUrl: string | null;
 };
 
-type AudioMode = "scene" | "voice" | "sfx" | "theme";
+type AudioMode = "voice" | "sfx" | "theme";
 
 export default function CharacterBroll({ character }: { character: Character }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const dialogueRef = useRef<HTMLAudioElement | null>(null);
   const sfxRef = useRef<HTMLAudioElement | null>(null);
   const themeRef = useRef<HTMLAudioElement | null>(null);
-  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [production, setProduction] = useState<BrollState | null>(null);
   const [playingMode, setPlayingMode] = useState<AudioMode | null>(null);
 
@@ -49,7 +47,6 @@ export default function CharacterBroll({ character }: { character: Character }) 
     window.addEventListener("chaplin:media-updated", handleMediaUpdated);
     return () => {
       cancelled = true;
-      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
       window.removeEventListener("chaplin:media-updated", handleMediaUpdated);
     };
   }, [character.id]);
@@ -59,48 +56,15 @@ export default function CharacterBroll({ character }: { character: Character }) 
   const sfxSource = production?.latestSfxUrl ?? null;
   const themeSource = production?.latestThemeUrl ?? null;
   const posterSource = character.bannerUrl ?? character.imageUrl ?? null;
-  const hasSound = Boolean(dialogueSource || themeSource);
 
   function stopSound() {
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     dialogueRef.current?.pause();
     sfxRef.current?.pause();
     themeRef.current?.pause();
-    if (videoRef.current) videoRef.current.muted = true;
     setPlayingMode(null);
   }
 
-  async function playBroll() {
-    if (playingMode === "scene") {
-      stopSound();
-      return;
-    }
-
-    stopSound();
-
-    const video = videoRef.current;
-    const dialogue = dialogueRef.current;
-    const theme = themeRef.current;
-    if (video) {
-      video.currentTime = 0;
-      video.muted = true;
-      await video.play().catch(() => undefined);
-    }
-    if (theme) {
-      theme.currentTime = 0;
-      theme.volume = 0.24;
-      await theme.play().catch(() => undefined);
-    }
-    if (dialogue) {
-      dialogue.currentTime = 0;
-      dialogue.volume = 1;
-      await dialogue.play().catch(() => undefined);
-    }
-    setPlayingMode("scene");
-    stopTimerRef.current = setTimeout(stopSound, 5500);
-  }
-
-  async function playTrack(mode: Exclude<AudioMode, "scene">) {
+  async function playTrack(mode: AudioMode) {
     if (playingMode === mode) {
       stopSound();
       return;
@@ -116,10 +80,9 @@ export default function CharacterBroll({ character }: { character: Character }) 
   }
 
   const audioControls = [
-    { mode: "scene" as const, label: "Play full scene", icon: IconFilm, available: hasSound },
-    { mode: "voice" as const, label: `Play ${character.name.split(" ")[0]}'s voice`, icon: IconMicrophone, available: Boolean(dialogueSource) },
-    { mode: "sfx" as const, label: "Play signature SFX", icon: IconWaveform, available: Boolean(sfxSource) },
-    { mode: "theme" as const, label: "Play theme music", icon: IconMusic, available: Boolean(themeSource) },
+    { mode: "voice" as const, label: `Hear ${character.name.split(" ")[0]} speak`, shortLabel: "Voice", icon: IconMicrophone, available: Boolean(dialogueSource) },
+    { mode: "theme" as const, label: "Listen to the theme", shortLabel: "Theme", icon: IconMusic, available: Boolean(themeSource) },
+    { mode: "sfx" as const, label: "Listen to the effects", shortLabel: "Effects", icon: IconWaveform, available: Boolean(sfxSource) },
   ].filter((control) => control.available);
 
   return (
@@ -144,7 +107,6 @@ export default function CharacterBroll({ character }: { character: Character }) 
       )}
       {videoSource && (
         <video
-          ref={videoRef}
           src={videoSource}
           autoPlay
           muted
@@ -159,14 +121,9 @@ export default function CharacterBroll({ character }: { character: Character }) 
       {themeSource && <audio ref={themeRef} src={themeSource} preload="metadata" onEnded={() => setPlayingMode(null)} data-broll-track="theme" />}
 
       <div className="absolute inset-0 bg-gradient-to-r from-black/92 via-black/55 sm:via-black/45 to-transparent" />
-      <div className="absolute right-3 top-3 sm:right-5 sm:top-5 z-20">
-        <span className="rounded-full border border-white/25 bg-black/35 backdrop-blur-md px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-white/75">
-          B-roll · 5 sec
-        </span>
-      </div>
       {audioControls.length > 0 && (
         <div className="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2 sm:right-5" data-broll-audio-controls>
-          {audioControls.map(({ mode, label, icon: Icon }) => {
+          {audioControls.map(({ mode, label, shortLabel, icon: Icon }) => {
             const active = playingMode === mode;
             return (
               <div key={mode} className="group relative flex justify-end">
@@ -175,16 +132,17 @@ export default function CharacterBroll({ character }: { character: Character }) 
                 </span>
                 <button
                   type="button"
-                  onClick={mode === "scene" ? playBroll : () => playTrack(mode)}
+                  onClick={() => playTrack(mode)}
                   aria-label={active ? `Pause ${label.toLowerCase()}` : label}
                   data-audio-mode={mode}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-all sm:h-10 sm:w-10 ${
+                  className={`flex h-9 items-center justify-center gap-2 rounded-full border px-2.5 shadow-lg backdrop-blur-md transition-all sm:h-10 sm:px-3 ${
                     active
                       ? "scale-105 border-accent bg-accent text-white"
                       : "border-white/30 bg-black/45 text-white/85 hover:scale-105 hover:border-accent hover:bg-black/70 hover:text-white"
                   }`}
                 >
                   {active ? <span className="text-xs">Ⅱ</span> : <Icon className="h-4 w-4" />}
+                  <span className="hidden text-[10px] font-semibold sm:inline">{active ? "Pause" : shortLabel}</span>
                 </button>
               </div>
             );
