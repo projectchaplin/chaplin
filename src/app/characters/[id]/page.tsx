@@ -2,7 +2,6 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { useChaplinStore } from "@/lib/store";
 import { getCharacter, getUser, resumeForCharacter, ledgerForCharacter } from "@/lib/selectors";
 import Avatar from "@/components/Avatar";
@@ -12,6 +11,7 @@ import EarningsSparkline from "@/components/EarningsSparkline";
 import CharacterGallery from "@/components/CharacterGallery";
 import DeveloperAccessCard from "@/components/DeveloperAccessCard";
 import CharacterProductionStudio from "@/components/CharacterProductionStudio";
+import CharacterBroll from "@/components/CharacterBroll";
 import { IconArrowLeft } from "@/components/Icons";
 import {
   ARCHETYPE_HUE,
@@ -60,25 +60,7 @@ export default function CharacterProfilePage() {
       {character.bannerUrl ? (
         <div className="poster-card rounded-md overflow-hidden">
           <div className="relative w-full aspect-[4/3] sm:aspect-[16/7] lg:aspect-[2/1]">
-            <Image
-              src={character.bannerUrl}
-              alt={character.name}
-              fill
-              sizes="(max-width: 768px) 100vw, 768px"
-              className="object-cover object-[68%_center]"
-              priority
-            />
-            {character.videoUrl && (
-              <video
-                src={character.videoUrl}
-                autoPlay
-                muted
-                loop
-                playsInline
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/92 via-black/55 sm:via-black/45 to-transparent" />
+            <CharacterBroll character={character} />
             <div className="absolute inset-0 flex flex-col justify-end gap-2 p-5 sm:p-8 max-w-[75%] sm:max-w-[52%]">
               <h1 className="reel-title text-2xl sm:text-4xl leading-tight text-ink">
                 {character.name}
@@ -91,7 +73,7 @@ export default function CharacterProfilePage() {
                   </Link>
                 </span>
               )}
-              <p className="italic text-ink/80 text-sm sm:text-base leading-snug">
+              <p data-broll-punchline className="italic text-ink/80 text-sm sm:text-base leading-snug">
                 &ldquo;{character.tagline}&rdquo;
               </p>
               <div className="flex flex-wrap gap-1.5 mt-1">
@@ -119,12 +101,13 @@ export default function CharacterProfilePage() {
           </div>
         </div>
       ) : (
-        <div className="poster-card rounded-md p-6 flex flex-col md:flex-row gap-6">
-          <span className="accent-ring shrink-0 self-start">
+        <div className="poster-card rounded-md p-6 flex flex-col md:flex-row gap-6 relative overflow-hidden min-h-72">
+          <CharacterBroll character={character} />
+          <span className="accent-ring shrink-0 self-start relative z-10 mt-auto">
             <Avatar hue={character.avatarHue} label={character.name} src={character.imageUrl} size={96} />
           </span>
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 relative z-10 mt-auto">
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h1 className="reel-title text-3xl">{character.name}</h1>
               {maker && (
@@ -136,7 +119,7 @@ export default function CharacterProfilePage() {
                 </span>
               )}
             </div>
-            <p className="italic text-grey mb-3">&ldquo;{character.tagline}&rdquo;</p>
+            <p data-broll-punchline className="italic text-grey mb-3">&ldquo;{character.tagline}&rdquo;</p>
 
             <div className="flex flex-wrap gap-1.5 mb-4">
               <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
@@ -148,7 +131,7 @@ export default function CharacterProfilePage() {
             </a>
           </div>
 
-          <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40">
+          <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40 relative z-10 mt-auto">
             <div>
               <p className="text-xl font-semibold">{character.stats.castings}</p>
               <p className="text-[11px] text-grey uppercase tracking-wide">Castings</p>

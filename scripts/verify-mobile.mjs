@@ -216,6 +216,21 @@ async function main() {
     })()`);
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
     const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
+    const brollState = await cdp.evaluate(`(() => {
+      const reel = document.querySelector("[data-character-broll]");
+      if (!reel) return null;
+      return {
+        video: Boolean(reel.querySelector("video")),
+        audioTracks: reel.querySelectorAll("audio").length,
+        soundControl: Boolean(reel.querySelector('button[aria-label*="b-roll with sound"]')),
+        punchline: Boolean(document.querySelector("[data-broll-punchline]")),
+      };
+    })()`);
+    checks.push(result(
+      "Character B-roll intro",
+      brollState?.video && brollState.audioTracks >= 2 && brollState.soundControl && brollState.punchline,
+      brollState ? `video · ${brollState.audioTracks} synchronized audio tracks · punchline` : "B-roll reel not found"
+    ));
     const sceneBefore = await cdp.evaluate(`(() => Object.fromEntries(
       [...document.querySelectorAll("[data-scene-field]")].map((field) => [field.dataset.sceneField, field.value])
     ))()`);
