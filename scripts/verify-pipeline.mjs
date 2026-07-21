@@ -29,6 +29,7 @@ async function main() {
   const assets = state.production?.assets ?? [];
   const find = (kind, provider) =>
     assets.find((asset) => asset.kind === kind && asset.provider === provider);
+  const dialogue = find("dialogue", "elevenlabs");
 
   const results = [
     check("Admin control room", adminResponse.ok && adminHtml.includes("ADMIN CONTROL ROOM"), `${adminResponse.status}`),
@@ -40,13 +41,20 @@ async function main() {
     check("Supabase connection", state.database, state.database ? "configured" : "missing"),
     check("Locked ElevenLabs voice", state.production?.voiceId, state.production?.voiceId ? "present" : "missing"),
     check(
+      "Dialogue voice continuity",
+      dialogue?.metadata?.voiceId === state.production?.voiceId && dialogue?.metadata?.model === "eleven_multilingual_v2",
+      dialogue?.metadata?.voiceId === state.production?.voiceId
+        ? `${dialogue.metadata.model} · locked voice recorded`
+        : "latest dialogue does not match the active locked voice"
+    ),
+    check(
       "ElevenLabs provider run",
       state.providers?.elevenLabs?.hasSucceeded,
       state.providers?.elevenLabs?.hasSucceeded
         ? `successful run recorded${state.providers.elevenLabs.status === "succeeded" ? "" : `; latest ${state.providers.elevenLabs.status}`}`
         : state.providers?.elevenLabs?.status ?? "not run"
     ),
-    await mediaCheck("Dialogue on CDN", find("dialogue", "elevenlabs"), "audio/"),
+    await mediaCheck("Dialogue on CDN", dialogue, "audio/"),
     await mediaCheck("Signature SFX on CDN", find("sfx", "elevenlabs"), "audio/"),
     await mediaCheck("Theme score on CDN", find("theme", "elevenlabs"), "audio/"),
     await mediaCheck("Uploaded reference on CDN", find("gallery", "upload"), "image/"),

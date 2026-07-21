@@ -19,6 +19,13 @@ const ELEVEN_API = "https://api.elevenlabs.io/v1";
 const MODEL_ARK_API = "https://ark.ap-southeast.bytepluses.com/api/v3";
 const SEEDREAM_MODEL = "seedream-4-5-251128";
 const SEEDANCE_MODEL = "seedance-1-5-pro-251215";
+const DIALOGUE_MODEL = "eleven_multilingual_v2";
+const DIALOGUE_VOICE_SETTINGS = {
+  stability: 0.78,
+  similarity_boost: 0.9,
+  style: 0,
+  use_speaker_boost: true,
+};
 
 type Input = Record<string, unknown>;
 
@@ -69,6 +76,15 @@ function headerNumber(response: Response, name: string) {
   if (raw == null || raw === "") return undefined;
   const value = Number(raw);
   return Number.isFinite(value) ? value : undefined;
+}
+
+function stableVoiceSeed(characterId: string) {
+  let hash = 2166136261;
+  for (const character of characterId) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function recordNumber(record: Record<string, unknown> | undefined, ...keys: string[]) {
@@ -183,19 +199,38 @@ export async function POST(request: Request) {
     }
 
     if (action === "speech") {
-      const voiceId = text(input, "voiceId", 1, 200);
       const speechText = text(input, "speechText", 1, 5000);
-      jobId = await beginGeneration({ characterId, kind: "dialogue", provider: "elevenlabs", model: "eleven_v3", prompt: speechText });
+      const production = await getCharacterProductionState(characterId);
+      const voiceId = production.voiceId;
+      if (!voiceId) throw new Error("This character has no active locked voice. Lock a voice before generating dialogue.");
+      const seed = stableVoiceSeed(characterId);
+      jobId = await beginGeneration({ characterId, kind: "dialogue", provider: "elevenlabs", model: DIALOGUE_MODEL, prompt: speechText });
       const response = await eleven(`/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
         text: speechText,
-        model_id: "eleven_v3",
+        model_id: DIALOGUE_MODEL,
+        voice_settings: DIALOGUE_VOICE_SETTINGS,
+        seed,
       });
       const bytes = await response.arrayBuffer();
-      const asset = await saveMediaAsset({ characterId, kind: "dialogue", provider: "elevenlabs", bytes, contentType: "audio/mpeg", prompt: speechText });
+      const voiceMetadata = {
+        voiceId,
+        model: DIALOGUE_MODEL,
+        seed,
+        voiceSettings: DIALOGUE_VOICE_SETTINGS,
+      };
+      const asset = await saveMediaAsset({
+        characterId,
+        kind: "dialogue",
+        provider: "elevenlabs",
+        bytes,
+        contentType: "audio/mpeg",
+        prompt: speechText,
+        metadata: voiceMetadata,
+      });
       await completeGeneration(
         jobId,
         asset.id,
-        undefined,
+        voiceMetadata,
         await calculateGenerationBilling({
           kind: "dialogue",
           usage: {
@@ -205,7 +240,15 @@ export async function POST(request: Request) {
         }),
         response.headers.get("request-id")
       );
-      return new Response(bytes, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Asset-Url": asset.url } });
+      return new Response(bytes, {
+        headers: {
+          "Content-Type": "audio/mpeg",
+          "Cache-Control": "no-store",
+          "X-Asset-Url": asset.url,
+          "X-Voice-Id": voiceId,
+          "X-Voice-Model": DIALOGUE_MODEL,
+        },
+      });
     }
 
     if (action === "sfx") {

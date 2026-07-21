@@ -249,9 +249,9 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       return;
     }
     void run("speech", async () => {
-      setSpeechUrl(await audioAction("speech", { voiceId: character.voiceId, speechText }));
+      setSpeechUrl(await audioAction("speech", { speechText }));
       await refreshHistory();
-      setMessage("Dialogue generated with the character's locked ElevenLabs voice.");
+      setMessage("Dialogue generated from the server-verified locked voice in continuity mode.");
     });
   }
 
@@ -442,6 +442,11 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <button onClick={generateSpeech} disabled={!elevenReady || Boolean(busy) || !character.voiceId} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "speech" ? "Performing line..." : "Generate dialogue"}
             </button>
+            {character.voiceId && (
+              <p className="text-[10px] uppercase tracking-[0.12em] text-emerald-600">
+                Locked voice · {character.voiceId.slice(-6)} · continuity mode
+              </p>
+            )}
             {speechUrl ? <MediaPlayer src={speechUrl} label={`${character.name} dialogue`} compact /> : <p className="text-xs text-grey">Lock one voice once; reuse it across every story and language.</p>}
           </div>
         </div>
