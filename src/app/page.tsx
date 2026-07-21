@@ -97,7 +97,7 @@ export default function HomePage() {
             {/* Copy */}
             <div className="lg:col-span-2 min-w-0">
               <div
-                className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper-dim p-1 mb-7 max-w-md"
+                className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper-dim p-1 mb-7 w-full sm:w-[26rem] sm:ml-auto"
                 aria-label="Choose how you want to use Chaplin"
               >
                 <button
