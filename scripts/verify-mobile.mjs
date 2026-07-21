@@ -285,6 +285,17 @@ async function main() {
     ));
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
     const production = await pageState(cdp, ["AI ACTOR PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
+    const heroAudio = await cdp.evaluate(`(() => {
+      const dock = document.querySelector("[data-hero-audio-player]");
+      const audio = dock?.querySelector("audio");
+      const tracks = [...(dock?.querySelectorAll("button") ?? [])].map((button) => button.textContent?.trim()).filter(Boolean);
+      return { present: Boolean(dock), source: audio?.currentSrc || audio?.getAttribute("src") || null, tracks };
+    })()`);
+    checks.push(result(
+      "Profile hero audio dock",
+      heroAudio?.present && heroAudio?.source?.startsWith("https://") && heroAudio?.tracks?.includes("VOICE"),
+      heroAudio?.present ? `${heroAudio.tracks.join(" · ")} · persisted voice loaded` : "hero audio dock missing"
+    ));
     const brollState = await cdp.evaluate(`(() => {
       const reel = document.querySelector("[data-character-broll]");
       if (!reel) return null;

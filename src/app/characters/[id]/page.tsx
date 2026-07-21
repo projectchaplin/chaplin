@@ -12,6 +12,7 @@ import CharacterGallery from "@/components/CharacterGallery";
 import DeveloperAccessCard from "@/components/DeveloperAccessCard";
 import CharacterProductionStudio from "@/components/CharacterProductionStudio";
 import CharacterBroll from "@/components/CharacterBroll";
+import CharacterHeroAudio from "@/components/CharacterHeroAudio";
 import { IconArrowLeft } from "@/components/Icons";
 import {
   ARCHETYPE_HUE,
@@ -80,9 +81,7 @@ export default function CharacterProfilePage() {
                 <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
                 <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
               </div>
-              <a href="#sound-profile" className="mt-2 self-start inline-flex items-center gap-2 rounded-full border border-accent/60 px-3 py-1.5 text-xs text-accent hover:bg-accent/10">
-                ▶ Hear {character.name.split(" ")[0]}
-              </a>
+              <CharacterHeroAudio character={character} />
             </div>
           </div>
           <div className="grid grid-cols-3 divide-x divide-line border-t border-line">
@@ -126,9 +125,7 @@ export default function CharacterProfilePage() {
               <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
             </div>
 
-            <a href="#sound-profile" className="inline-flex items-center gap-2 rounded-full border border-accent/60 px-3.5 py-1.5 text-sm text-accent hover:bg-accent/10">
-              ▶ Hear {character.name.split(" ")[0]}
-            </a>
+            <CharacterHeroAudio character={character} />
           </div>
 
           <div className="flex md:flex-col gap-4 md:gap-2 md:text-right shrink-0 md:w-40 relative z-10 mt-auto">
