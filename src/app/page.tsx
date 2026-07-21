@@ -22,6 +22,42 @@ import { compactNumber, money } from "@/lib/format";
 
 export default function HomePage() {
   const world = useChaplinStore((s) => s);
+  const audience = world.activeRole === "maker" ? "maker" : "caster";
+  const isMaker = audience === "maker";
+
+  const hero = isMaker
+    ? {
+        eyebrow: "Build. Own. Earn.",
+        heading: (
+          <>
+            CREATE AND MONETIZE
+            <br />
+            YOUR AI CHARACTERS
+            <br />
+            OR AI ACTORS
+          </>
+        ),
+        description:
+          "Build original AI actors with a consistent identity, voice, SFX, images, and video. Publish them for casting and earn every time they perform.",
+        primary: { href: "/characters/new", label: "Create an AI Actor" },
+        secondary: { href: "/studio", label: "Open Maker Studio" },
+        tertiary: { href: "/ledger", label: "See how royalties work" },
+      }
+    : {
+        eyebrow: "Discover. Cast. Create.",
+        heading: (
+          <>
+            CASTING FOR
+            <br />
+            AI CHARACTERS
+          </>
+        ),
+        description:
+          "Discover production-ready AI actors with consistent voices and visual identities. Cast them into your story, scene, campaign, or film.",
+        primary: { href: "/characters", label: "Browse AI Characters" },
+        secondary: { href: "/studio/write", label: "Create a Casting" },
+        tertiary: { href: "/stories", label: "See stories in production" },
+      };
 
   const stories = recentStories(world, 6);
   const shelfPicks = availableForCasting(world, 8);
@@ -61,60 +97,80 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-6 py-12 sm:py-16">
           <div className="grid lg:grid-cols-5 gap-10 items-center">
             {/* Copy */}
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 min-w-0">
+              <div
+                className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper-dim p-1 mb-7 max-w-md"
+                aria-label="Choose how you want to use Chaplin"
+              >
+                <button
+                  type="button"
+                  aria-pressed={!isMaker}
+                  onClick={() => world.switchDemoRole("caster")}
+                  className={`rounded-md px-3 py-2.5 text-left transition-colors ${!isMaker ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
+                >
+                  <span className="block text-xs font-semibold uppercase tracking-[0.14em]">Caster</span>
+                  <span className={`block text-[10px] mt-0.5 ${!isMaker ? "text-paper/75" : "text-grey"}`}>Cast a character</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={isMaker}
+                  onClick={() => world.switchDemoRole("maker")}
+                  className={`rounded-md px-3 py-2.5 text-left transition-colors ${isMaker ? "bg-accent text-paper shadow-sm" : "text-grey hover:text-ink"}`}
+                >
+                  <span className="block text-xs font-semibold uppercase tracking-[0.14em]">Maker</span>
+                  <span className={`block text-[10px] mt-0.5 ${isMaker ? "text-paper/75" : "text-grey"}`}>Make and monetize</span>
+                </button>
+              </div>
               <p className="accent-text text-xs uppercase tracking-[0.3em] mb-4 font-semibold">
-                Create. Cast. Own.
+                {hero.eyebrow}
               </p>
-              <h1 className="marquee-title text-5xl sm:text-6xl leading-none mb-5">
-                CASTING PLATFORM
-                <br />
-                FOR AI ACTORS
+              <h1 className={`marquee-title leading-none mb-5 break-words ${isMaker ? "text-4xl sm:text-5xl" : "text-4xl sm:text-6xl"}`}>
+                {hero.heading}
               </h1>
               <p className="text-sm sm:text-base text-grey mb-7 max-w-md">
-                Create a character once. Cast it into any story. Earn every
-                time it performs.
+                {hero.description}
               </p>
               <div className="flex flex-wrap items-center gap-3 mb-5">
                 <Link
-                  href="/characters"
+                  href={hero.primary.href}
                   className="accent-btn font-semibold px-6 py-2.5 rounded-full hover:opacity-90 transition-opacity"
                 >
-                  Browse Characters
+                  {hero.primary.label}
                 </Link>
                 <Link
-                  href="/studio/write"
+                  href={hero.secondary.href}
                   className="border border-line px-6 py-2.5 rounded-full hover:border-accent hover:text-accent-light transition-colors"
                 >
-                  Start a Story
+                  {hero.secondary.label}
                 </Link>
               </div>
               <Link
-                href="/characters/new"
+                href={hero.tertiary.href}
                 className="text-sm text-grey hover:text-accent inline-flex items-center gap-1 mb-8"
               >
-                Create a Character <span aria-hidden>→</span>
+                {hero.tertiary.label} <span aria-hidden>→</span>
               </Link>
 
-              <div className="grid grid-cols-3 gap-4 poster-card rounded-md p-4">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 poster-card rounded-md p-4">
+                <div className="min-w-0">
                   <IconMask className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">Character Makers</p>
+                  <p className="text-xs font-semibold">{isMaker ? "Build Identity" : "Discover Talent"}</p>
                   <p className="text-[10px] text-grey leading-snug">
-                    Create and own original characters
+                    {isMaker ? "Create and own original AI actors" : "Find production-ready AI actors"}
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <IconFilm className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">Story Makers</p>
+                  <p className="text-xs font-semibold">{isMaker ? "Produce Assets" : "Cast Into Stories"}</p>
                   <p className="text-[10px] text-grey leading-snug">
-                    Cast into unlimited stories
+                    {isMaker ? "Voice, SFX, images, and video" : "Build scenes with consistent talent"}
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <IconTrophy className="w-5 h-5 text-accent mb-1.5" />
-                  <p className="text-xs font-semibold">Royalties</p>
+                  <p className="text-xs font-semibold">{isMaker ? "Earn Royalties" : "Clear Licensing"}</p>
                   <p className="text-[10px] text-grey leading-snug">
-                    Earn from every performance
+                    {isMaker ? "Monetize every performance" : "Know the terms before you cast"}
                   </p>
                 </div>
               </div>
@@ -137,12 +193,12 @@ export default function HomePage() {
                 {Array.from({ length: fillerCount }).map((_, i) => (
                   <Link
                     key={`filler-${i}`}
-                    href="/characters/new"
+                    href={isMaker ? "/characters/new" : "/characters"}
                     className="rounded-lg border border-dashed border-line flex flex-col items-center justify-center gap-1 text-grey hover:border-accent hover:text-accent transition-colors p-2 text-center"
                   >
-                    <span className="text-lg leading-none">+</span>
+                    <span className="text-lg leading-none">{isMaker ? "+" : "→"}</span>
                     <span className="text-[8px] sm:text-[9px] leading-tight">
-                      Create a Character
+                      {isMaker ? "Create a Character" : "Browse all actors"}
                     </span>
                   </Link>
                 ))}
