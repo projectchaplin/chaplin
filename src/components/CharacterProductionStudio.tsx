@@ -34,11 +34,48 @@ type VoicePreview = {
   media_type?: string;
   duration_secs?: number;
 };
+type MagicScene = {
+  name: string;
+  line: string;
+  still: string;
+  motion: string;
+  sound: string;
+};
 
 const DEFAULT_LINE =
   "You brought the Thakur's men. I brought an exit. Guess who planned better. Now keep up. The doors close in five seconds, and I do not wait twice.";
 const SEEDANCE_ACTIVATION_URL =
   "https://console.byteplus.com/ark/region%3Aark%2Bap-southeast-1/model/detail?Id=seedance-1-5-pro";
+const MAGIC_SCENES: MagicScene[] = [
+  {
+    name: "Midnight Escape",
+    line: "You brought the guards. I brought an exit. Keep up—the doors close in five seconds.",
+    still: "inside a shadowy old cinema projection booth at night, turning toward camera with alert confidence as dust catches the projector beam",
+    motion: "A hidden glass panel slides open. The character turns sharply toward camera, gives a knowing half-smile, and steps toward the escape route as the camera makes a slow controlled push-in.",
+    sound: "A glass mechanism slides open, followed by a restrained projector hum and one decisive footstep.",
+  },
+  {
+    name: "Monsoon Rendezvous",
+    line: "You came alone. Good. That means we still have a chance to leave before the last train.",
+    still: "beneath an old railway canopy during monsoon rain, waiting beside a brass station clock with wet reflections across the platform",
+    motion: "Rain sweeps across the empty platform. The character looks up from the station clock, meets the camera, and takes one measured step forward while the last train glows in the distance.",
+    sound: "Monsoon rain on a metal canopy, a distant train brake, and a soft clock mechanism.",
+  },
+  {
+    name: "Rooftop Signal",
+    line: "Look at the city. Everyone is hiding something. Tonight, we decide what survives.",
+    still: "on a moonlit Lucknow rooftop above the old city, holding a small signal lamp while fabric moves in the night wind",
+    motion: "The signal lamp flickers on. The character crosses the rooftop into moonlight, turns toward camera, and raises the lamp as the skyline falls softly out of focus.",
+    sound: "A match strike, a low night wind, distant city ambience, and one soft signal bell.",
+  },
+  {
+    name: "Gallery Switch",
+    line: "The original was never in that case. But thank you for showing me who wanted it.",
+    still: "in a grand museum corridor after hours, standing beside an open display case under pools of warm security light",
+    motion: "A security light sweeps across the corridor. The character closes an empty display case, reveals a concealed object with a subtle gesture, and walks past camera without breaking composure.",
+    sound: "A display latch clicks shut, a quiet security scanner passes, and footsteps recede across polished stone.",
+  },
+];
 
 const VOICE_PRESENTATION = {
   feminine: "An adult woman with a clearly feminine vocal identity and natural feminine resonance",
@@ -82,6 +119,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   );
   const [generatedImage, setGeneratedImage] = useState("");
   const [generatedVideo, setGeneratedVideo] = useState("");
+  const [magicSceneIndex, setMagicSceneIndex] = useState(-1);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
@@ -228,6 +266,23 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     });
   }
 
+  function applyMagicScene() {
+    const nextIndex = (magicSceneIndex + 1) % MAGIC_SCENES.length;
+    const scene = MAGIC_SCENES[nextIndex];
+    setMagicSceneIndex(nextIndex);
+    setSpeechText(scene.line);
+    setSfxPrompt(
+      `${scene.sound} Preserve ${character.name}'s signature sound: ${character.sfxDesc}. Five seconds, clean foreground mix, no speech.`
+    );
+    setImagePrompt(
+      `${identity} Cinematic 16:9 production still: ${scene.still}. Realistic skin and fabric, expressive natural pose, practical lighting, fine film grain, no text, no watermark.`
+    );
+    setScenePrompt(
+      `${identity} Five-second cinematic shot. ${scene.motion} ${character.name} says: "${scene.line}" Preserve the signature sound ${character.sfxDesc.toLowerCase()} and score language ${character.themeDesc.toLowerCase()}. Synchronized dialogue and environmental audio, no text, no watermark.`
+    );
+    setMessage(`Magic Scene loaded: ${scene.name}. Review the coordinated prompts, then generate the assets you need.`);
+  }
+
   const seedModelsReady = status?.seedModels ?? false;
   const elevenReady = status?.elevenLabs ?? false;
   const elevenOperational =
@@ -283,6 +338,30 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             </a>
           </div>
         )}
+        <div className="rounded-md border border-accent/40 bg-accent/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold">Quick scene change</p>
+              {magicSceneIndex >= 0 && (
+                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[9px] uppercase tracking-wide text-accent">
+                  {MAGIC_SCENES[magicSceneIndex].name}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-grey mt-1">
+              One click coordinates dialogue, SFX, still, and video prompts. Nothing is charged until you generate.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={applyMagicScene}
+            disabled={Boolean(busy)}
+            data-action="magic-scene"
+            className="shrink-0 rounded-full bg-accent text-paper px-4 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-40"
+          >
+            ✦ Magic Scene
+          </button>
+        </div>
         <div className="grid md:grid-cols-2 gap-5">
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-2">
@@ -307,7 +386,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
             <h3 className="font-semibold text-sm">2. Dialogue in her voice</h3>
-            <textarea value={speechText} onChange={(event) => setSpeechText(event.target.value)} rows={5} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
+            <textarea data-scene-field="dialogue" value={speechText} onChange={(event) => setSpeechText(event.target.value)} rows={5} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateSpeech} disabled={!elevenReady || Boolean(busy) || !character.voiceId} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "speech" ? "Performing line..." : "Generate dialogue"}
             </button>
@@ -317,7 +396,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
         <div className="border border-line rounded-md p-4 flex flex-col gap-3">
           <h3 className="font-semibold text-sm">3. Signature SFX</h3>
-          <input value={sfxPrompt} onChange={(event) => setSfxPrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
+          <input data-scene-field="sfx" value={sfxPrompt} onChange={(event) => setSfxPrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={generateSfx} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "sfx" ? "Building sound..." : "Generate 5-second SFX"}
@@ -329,7 +408,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         <div className="grid md:grid-cols-2 gap-5">
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
             <h3 className="font-semibold text-sm">4. Consistent scene still</h3>
-            <textarea value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
+            <textarea data-scene-field="image" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateImage} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "image" ? "Seedream is creating..." : "Generate scene image"}
             </button>
@@ -359,7 +438,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
           <div className="border border-line rounded-md p-4 flex flex-col gap-3">
             <h3 className="font-semibold text-sm">5. Animate a five-second scene</h3>
-            <textarea value={scenePrompt} onChange={(event) => setScenePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
+            <textarea data-scene-field="video" value={scenePrompt} onChange={(event) => setScenePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateVideo} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "video" ? "Seedance is rendering..." : "Generate 5-second video"}
             </button>

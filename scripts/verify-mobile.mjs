@@ -215,7 +215,33 @@ async function main() {
       return true;
     })()`);
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
-    const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Generate dialogue", "Generate 5-second video"]);
+    const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 5-second video"]);
+    const sceneBefore = await cdp.evaluate(`(() => Object.fromEntries(
+      [...document.querySelectorAll("[data-scene-field]")].map((field) => [field.dataset.sceneField, field.value])
+    ))()`);
+    const magicClicked = await cdp.evaluate(`(() => {
+      const button = document.querySelector('[data-action="magic-scene"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await sleep(300);
+    const sceneAfter = await cdp.evaluate(`(() => ({
+      fields: Object.fromEntries(
+        [...document.querySelectorAll("[data-scene-field]")].map((field) => [field.dataset.sceneField, field.value])
+      ),
+      label: document.body.innerText.includes("Midnight Escape"),
+    }))()`);
+    const coordinatedFields = ["dialogue", "sfx", "image", "video"];
+    const sceneChanged =
+      magicClicked &&
+      sceneAfter.label &&
+      coordinatedFields.every((field) => sceneBefore[field] && sceneAfter.fields[field] && sceneBefore[field] !== sceneAfter.fields[field]);
+    checks.push(result(
+      "Magic Scene coordinates prompts",
+      sceneChanged,
+      sceneChanged ? "dialogue · SFX · still · video updated together" : "one or more scene fields did not update"
+    ));
     let videoState = null;
     for (let attempt = 0; attempt < 24; attempt += 1) {
       videoState = await cdp.evaluate(`(() => {
