@@ -263,10 +263,16 @@ export async function getCharacterProductionState(characterId: string) {
   assert(voice.error, "Load character voice");
   assert(assets.error, "Load character media");
   const rows = assets.data ?? [];
+  const activeVoiceId = voice.data?.provider_voice_id ?? null;
+  const latestDialogue = rows.find((asset) => {
+    if (asset.kind !== "dialogue" || !activeVoiceId) return false;
+    const metadata = asset.metadata as Record<string, unknown> | null;
+    return metadata?.voiceId === activeVoiceId;
+  });
   return {
-    voiceId: voice.data?.provider_voice_id ?? null,
+    voiceId: activeVoiceId,
     voicePreviewUrl: voice.data?.preview_url ?? null,
-    latestDialogueUrl: rows.find((asset) => asset.kind === "dialogue")?.url ?? null,
+    latestDialogueUrl: latestDialogue?.url ?? null,
     latestSfxUrl: rows.find((asset) => asset.kind === "sfx")?.url ?? null,
     latestThemeUrl: rows.find((asset) => asset.kind === "theme")?.url ?? null,
     latestImageUrl: rows.find((asset) => asset.kind === "gallery")?.url ?? null,
@@ -277,13 +283,21 @@ export async function getCharacterProductionState(characterId: string) {
 
 export async function getHomepageBrollState() {
   const supabase = adminClient();
-  const { data, error } = await supabase
-    .from("media_assets")
-    .select("character_id,kind,url,created_at")
-    .in("kind", ["video", "dialogue", "theme"])
-    .not("character_id", "is", null)
-    .order("created_at", { ascending: false });
-  assert(error, "Load homepage B-roll");
+  const [assets, voices] = await Promise.all([
+    supabase
+      .from("media_assets")
+      .select("character_id,kind,url,metadata,created_at")
+      .in("kind", ["video", "dialogue", "theme"])
+      .not("character_id", "is", null)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("character_voices")
+      .select("character_id,provider_voice_id")
+      .eq("status", "active"),
+  ]);
+  assert(assets.error, "Load homepage B-roll");
+  assert(voices.error, "Load homepage B-roll voices");
+  const activeVoices = new Map((voices.data ?? []).map((voice) => [voice.character_id, voice.provider_voice_id]));
 
   const characters = new Map<string, {
     characterId: string;
@@ -291,7 +305,7 @@ export async function getHomepageBrollState() {
     dialogueUrl: string | null;
     themeUrl: string | null;
   }>();
-  for (const asset of data ?? []) {
+  for (const asset of assets.data ?? []) {
     if (!asset.character_id) continue;
     const entry = characters.get(asset.character_id) ?? {
       characterId: asset.character_id,
@@ -300,7 +314,10 @@ export async function getHomepageBrollState() {
       themeUrl: null,
     };
     if (asset.kind === "video" && !entry.videoUrl) entry.videoUrl = asset.url;
-    if (asset.kind === "dialogue" && !entry.dialogueUrl) entry.dialogueUrl = asset.url;
+    if (asset.kind === "dialogue" && !entry.dialogueUrl) {
+      const metadata = asset.metadata as Record<string, unknown> | null;
+      if (metadata?.voiceId === activeVoices.get(asset.character_id)) entry.dialogueUrl = asset.url;
+    }
     if (asset.kind === "theme" && !entry.themeUrl) entry.themeUrl = asset.url;
     characters.set(asset.character_id, entry);
   }

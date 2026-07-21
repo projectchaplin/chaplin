@@ -349,7 +349,8 @@ export async function POST(request: Request) {
     }
 
     if (action === "video") {
-      const prompt = text(input, "prompt", 10, 3000);
+      const requestedPrompt = text(input, "prompt", 10, 3000);
+      const prompt = `${requestedPrompt} Audio policy: create a silent visual performance plate only. Do not generate speech, dialogue, vocals, music, or a substitute character voice; Chaplin mixes the locked ElevenLabs voice and character theme separately.`;
       jobId = await beginGeneration({ characterId, kind: "video", provider: "byteplus", model: SEEDANCE_MODEL, prompt });
       const reference = typeof input.referenceImage === "string" ? input.referenceImage : "";
       const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
@@ -362,7 +363,7 @@ export async function POST(request: Request) {
         resolution: "720p",
         duration: 5,
         ratio: "16:9",
-        generate_audio: true,
+        generate_audio: false,
         watermark: false,
       });
       const created = createdResponse.data;

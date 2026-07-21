@@ -45,6 +45,8 @@ export interface Character {
   voiceId?: string; // ElevenLabs voice locked to this character
   sfxDesc: string; // signature sound effect, same mock pattern as voiceDesc
   themeDesc: string; // signature background score, same mock pattern as voiceDesc
+  brollLine?: string; // short signature punchline performed in the character's locked voice
+  brollScene?: string; // character-specific visual setup for the five-second profile reel
   avatarHue: number; // fallback color when imageUrl is unset (e.g. freshly built characters)
   imageUrl?: string;
   bannerUrl?: string; // wide cast-photo with negative space, used on the profile hero

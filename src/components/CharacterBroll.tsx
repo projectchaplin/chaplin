@@ -53,7 +53,7 @@ export default function CharacterBroll({ character }: { character: Character }) 
   const dialogueSource = production?.latestDialogueUrl ?? null;
   const themeSource = production?.latestThemeUrl ?? null;
   const posterSource = character.bannerUrl ?? character.imageUrl ?? null;
-  const hasSound = Boolean(dialogueSource || themeSource || videoSource);
+  const hasSound = Boolean(dialogueSource || themeSource);
 
   function stopSound() {
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
@@ -74,7 +74,7 @@ export default function CharacterBroll({ character }: { character: Character }) 
     const theme = themeRef.current;
     if (video) {
       video.currentTime = 0;
-      video.muted = Boolean(dialogue || theme);
+      video.muted = true;
       await video.play().catch(() => undefined);
     }
     if (theme) {

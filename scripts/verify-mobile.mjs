@@ -259,6 +259,20 @@ async function main() {
       document.cookie = "chaplin-demo-role=admin; path=/; max-age=31536000; SameSite=Lax";
       return true;
     })()`);
+    await cdp.navigate(`${baseUrl}/characters/c-bramble`);
+    await pageState(cdp, ["CAPTAIN VIKRANT SURI", "Generate dialogue", "Generate 5-second video"]);
+    const vikrantIdentity = await cdp.evaluate(`(() => ({
+      dialogue: document.querySelector('[data-scene-field="dialogue"]')?.value ?? "",
+      video: document.querySelector('[data-scene-field="video"]')?.value ?? "",
+    }))()`);
+    checks.push(result(
+      "Character-specific voice and B-roll prompts",
+      vikrantIdentity.dialogue.includes("Storms do not ask permission") &&
+        vikrantIdentity.video.includes("Konkan lighthouse") &&
+        vikrantIdentity.video.includes("no generated voice") &&
+        !vikrantIdentity.video.includes("glass display case"),
+      vikrantIdentity.dialogue.includes("Storms do not ask permission") ? "Vikrant line · scene · silent dubbing plate" : "Vikrant inherited another character's prompt"
+    ));
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
     const production = await pageState(cdp, ["CHARACTER PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
     const brollState = await cdp.evaluate(`(() => {

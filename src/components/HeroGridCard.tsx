@@ -53,7 +53,7 @@ export default function HeroGridCard({
   const videoSource = broll?.videoUrl ?? character.videoUrl ?? null;
   const dialogueSource = broll?.dialogueUrl ?? null;
   const themeSource = broll?.themeUrl ?? null;
-  const hasSound = Boolean(dialogueSource || themeSource || videoSource);
+  const hasSound = Boolean(dialogueSource || themeSource);
 
   function stopSound() {
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
@@ -70,7 +70,7 @@ export default function HeroGridCard({
     }
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
-      videoRef.current.muted = Boolean(dialogueSource || themeSource);
+      videoRef.current.muted = true;
       await videoRef.current.play().catch(() => undefined);
     }
     if (themeRef.current) {

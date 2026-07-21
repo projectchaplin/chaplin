@@ -56,10 +56,9 @@ type MagicScene = {
   sound: string;
 };
 
-const DEFAULT_LINE =
-  "You brought the Thakur's men. I brought an exit. Guess who planned better. Now keep up. The doors close in five seconds, and I do not wait twice.";
 const SEEDANCE_ACTIVATION_URL =
   "https://console.byteplus.com/ark/region%3Aark%2Bap-southeast-1/model/detail?Id=seedance-1-5-pro";
+const MAGIC_LINE_ENDINGS = ["Move.", "Now.", "Watch closely.", "Remember that."];
 const MAGIC_SCENES: MagicScene[] = [
   {
     name: "Midnight Escape",
@@ -113,13 +112,16 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       `Keep the same face, age, wardrobe language, voice identity, and cinematic world in every generation.`,
     [character]
   );
+  const brollLine = character.brollLine ?? character.tagline;
+  const brollScene = character.brollScene ?? `in a cinematic setting that expresses ${character.personality.toLowerCase()}`;
+  const subjectPronoun = character.voiceGender === "feminine" ? "she" : character.voiceGender === "masculine" ? "he" : "they";
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [voiceDescription, setVoiceDescription] = useState(
     `${VOICE_PRESENTATION[character.voiceGender ?? "androgynous"]}. ${character.voiceDesc}. Indian English with natural Hindi and Urdu pronunciation, emotionally controlled, unmistakable and repeatable. This is an original fictional voice, not an imitation of a real person.`
   );
-  const [previewText, setPreviewText] = useState(DEFAULT_LINE);
+  const [previewText, setPreviewText] = useState(brollLine);
   const [previews, setPreviews] = useState<VoicePreview[]>([]);
-  const [speechText, setSpeechText] = useState(DEFAULT_LINE);
+  const [speechText, setSpeechText] = useState(brollLine);
   const [speechUrl, setSpeechUrl] = useState("");
   const [sfxPrompt, setSfxPrompt] = useState(
     `${character.sfxDesc}. A distinctive five-second cinematic signature for ${character.name}; clean foreground effect, subtle room tone, no speech.`
@@ -130,10 +132,10 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   );
   const [themeUrl, setThemeUrl] = useState("");
   const [imagePrompt, setImagePrompt] = useState(
-    `${identity} Cinematic 16:9 production still: inside a shadowy old cinema projection booth at night, she turns toward camera with alert confidence, practical tungsten light, fine film grain, realistic skin and fabric, no text, no watermark.`
+    `${identity} Cinematic 16:9 production still: ${brollScene}. ${subjectPronoun} turns toward camera in character, practical motivated lighting, fine film grain, realistic skin and fabric, no text, no watermark.`
   );
   const [scenePrompt, setScenePrompt] = useState(
-    `${identity} Five-second cinematic shot. She hears a glass display case slide open, turns sharply toward camera, then says: "You brought the men. I brought an exit." Slow controlled push-in, practical tungsten light, fabric movement, ${character.sfxDesc.toLowerCase()}, ${character.themeDesc.toLowerCase()}.`
+    `${identity} Five-second cinematic visual performance: ${brollScene}. ${subjectPronoun} turns toward camera and silently performs one short punchline for later dubbing. Slow controlled push-in, natural fabric movement, strong final look to camera. Silent performance plate only: no speech, no generated voice, no vocals, no subtitles, no text, no watermark. Dialogue will be supplied separately using ${character.name}'s locked ElevenLabs voice.`
   );
   const [generatedImage, setGeneratedImage] = useState("");
   const [generatedVideo, setGeneratedVideo] = useState("");
@@ -313,7 +315,10 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     const nextIndex = (magicSceneIndex + 1) % MAGIC_SCENES.length;
     const scene = MAGIC_SCENES[nextIndex];
     setMagicSceneIndex(nextIndex);
-    setSpeechText(scene.line);
+    const characterLine = character.brollLine
+      ? `${character.brollLine} ${MAGIC_LINE_ENDINGS[nextIndex]}`
+      : scene.line;
+    setSpeechText(characterLine);
     setSfxPrompt(
       `${scene.sound} Preserve ${character.name}'s signature sound: ${character.sfxDesc}. Five seconds, clean foreground mix, no speech.`
     );
@@ -324,7 +329,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       `${identity} Cinematic 16:9 production still: ${scene.still}. Realistic skin and fabric, expressive natural pose, practical lighting, fine film grain, no text, no watermark.`
     );
     setScenePrompt(
-      `${identity} Five-second cinematic shot. ${scene.motion} ${character.name} says: "${scene.line}" Preserve the signature sound ${character.sfxDesc.toLowerCase()} and score language ${character.themeDesc.toLowerCase()}. Synchronized dialogue and environmental audio, no text, no watermark.`
+      `${identity} Five-second cinematic visual performance. ${scene.motion} ${character.name} silently performs a short punchline for later dubbing. Silent performance plate only: no speech, no generated voice, no vocals, no subtitles, no text, no watermark. The final mix will use locked dialogue "${characterLine}", signature sound ${character.sfxDesc.toLowerCase()}, and score language ${character.themeDesc.toLowerCase()}.`
     );
     setMessage(`Magic Scene loaded: ${scene.name}. Review the coordinated prompts, then generate the assets you need.`);
   }
