@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useChaplinStore } from "@/lib/store";
@@ -104,6 +104,24 @@ export default function NewCharacterPage() {
   const [suggestingTarget, setSuggestingTarget] = useState<SuggestionTarget | null>(null);
   const [suggestionMessage, setSuggestionMessage] = useState("");
   const [productionBible, setProductionBible] = useState<CharacterProductionBible | undefined>();
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const suggestStartedAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!suggestingTarget) {
+      suggestStartedAt.current = null;
+      setElapsedSeconds(0);
+      return;
+    }
+    suggestStartedAt.current = Date.now();
+    setElapsedSeconds(0);
+    const interval = setInterval(() => {
+      if (suggestStartedAt.current) {
+        setElapsedSeconds(Math.floor((Date.now() - suggestStartedAt.current) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [suggestingTarget]);
 
   const archetype = archetypes[0] ?? "hero";
 
@@ -344,6 +362,12 @@ export default function NewCharacterPage() {
           <p className="mt-1 text-[11px] text-grey">
             Minimum a line or two. This brief is treated as canon for every generated field.
           </p>
+          {suggestingTarget && (
+            <p className="mt-3 text-[11px] text-accent" data-suggest-progress>
+              Claude is writing{suggestingTarget === "all" ? " the full identity" : ""}… {elapsedSeconds}s
+              {elapsedSeconds > 10 && " — a full identity build usually takes 30–55s, hang tight"}
+            </p>
+          )}
           {suggestionMessage && (
             <p className="mt-3 text-[11px] text-grey" data-suggestion-message>
               {suggestionMessage}

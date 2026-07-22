@@ -2,7 +2,7 @@ import { buildProductionBible } from "@/lib/production-prompting";
 import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120; // json_schema output on a full scene draft can run 35-55s; give real headroom over the wall clock
 
 type WritingFormat = "story" | "ad" | "reel";
 
@@ -243,6 +243,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         max_tokens: 8000,
+        thinking: { type: "disabled" },
         system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible as binding character canon. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. For ads and reels, dramatize one benefit through visible proof and finish with a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
         messages: [{
           role: "user",
