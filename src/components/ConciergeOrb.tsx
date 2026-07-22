@@ -38,7 +38,13 @@ function fallbackSpeak(text: string, onDone?: () => void) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   const voices = window.speechSynthesis.getVoices();
-  const preferred = voices.find((voice) => /en[-_](IN|GB)/i.test(voice.lang)) ?? voices.find((voice) => voice.lang.startsWith("en"));
+  // Match the concierge's real voice (Aaditya — calm Indian male) as closely as
+  // the OS allows: named male Indian voices first, then en-IN, then any English.
+  const preferred =
+    voices.find((voice) => /ravi|rishi|prabhat|madhur/i.test(voice.name)) ??
+    voices.find((voice) => /en[-_]IN/i.test(voice.lang)) ??
+    voices.find((voice) => /daniel|george|ryan/i.test(voice.name) && voice.lang.startsWith("en")) ??
+    voices.find((voice) => voice.lang.startsWith("en"));
   if (preferred) utterance.voice = preferred;
   utterance.rate = 1.03;
   utterance.onend = () => onDone?.();
