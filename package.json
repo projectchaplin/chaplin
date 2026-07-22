@@ -12,6 +12,7 @@
     "verify:mobile": "node scripts/verify-mobile.mjs"
   },
   "dependencies": {
+    "@elevenlabs/client": "^1.15.2",
     "@supabase/supabase-js": "^2.110.7",
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",

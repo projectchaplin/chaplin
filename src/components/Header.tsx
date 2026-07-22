@@ -14,17 +14,17 @@ const ROLE_META: Record<AppRole, { label: string; short: string; description: st
   maker: {
     label: "Creator",
     short: "Creator",
-    description: "Post, collaborate, build identities, and develop series.",
+    description: "Build AI actors, write videos, and develop series.",
   },
   caster: {
     label: "Creator",
     short: "Creator",
-    description: "Post, collaborate, build identities, and develop series.",
+    description: "Build AI actors, write videos, and develop series.",
   },
   brand: {
-    label: "Creator",
-    short: "Creator",
-    description: "Post, collaborate, build identities, and develop series.",
+    label: "Brand",
+    short: "Brand",
+    description: "Pick a face off the shelf and make ads and reels.",
   },
   admin: {
     label: "Super Admin",
@@ -33,13 +33,12 @@ const ROLE_META: Record<AppRole, { label: string; short: string; description: st
   },
 };
 
-const ROLE_ORDER: AppRole[] = ["maker", "admin"];
+const ROLE_ORDER: AppRole[] = ["maker", "brand", "admin"];
 
 export default function Header() {
   const users = useChaplinStore((state) => state.users);
   const currentUserId = useChaplinStore((state) => state.currentUserId);
   const activeRole = useChaplinStore((state) => state.activeRole);
-  const setCurrentUser = useChaplinStore((state) => state.setCurrentUser);
   const switchDemoRole = useChaplinStore((state) => state.switchDemoRole);
   const syncAuthenticatedUser = useChaplinStore((state) => state.syncAuthenticatedUser);
   const [open, setOpen] = useState(false);
@@ -72,9 +71,6 @@ export default function Header() {
   }
 
   const currentUser = users.find((user) => user.id === currentUserId) ?? users[0];
-  const roleUsers = users.filter((user) => activeRole === "admin"
-    ? user.roleBadges.includes("admin")
-    : user.roleBadges.some((role) => role !== "admin"));
   const contextLink = activeRole === "admin"
     ? { href: "/admin", label: "Admin" }
     : { href: "/feed", label: "Creator feed" };
@@ -149,16 +145,17 @@ export default function Header() {
               <div className={`fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[24rem] max-h-[calc(100vh-5rem)] overflow-y-auto rounded-lg border border-line bg-paper-dim shadow-2xl p-3 z-[90] ${compact ? "top-[3.25rem]" : "top-[4.25rem]"}`}>
                 <div className="flex items-start justify-between gap-3 px-1 mb-3">
                   <div>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{authIdentity ? "Signed-in account" : "Quick view switch"}</p>
-                    <p className="text-xs text-grey mt-1">{authIdentity ? `${authIdentity.email} · ${authIdentity.role}` : "Jump between complete role-specific demo sessions."}</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{authIdentity ? "Signed-in account" : "Quick views"}</p>
+                    <p className="text-xs text-grey mt-1">{authIdentity ? `${authIdentity.email} · ${authIdentity.role}` : "Feel the app as a Creator, a Brand, or the Super Admin."}</p>
                   </div>
                   <button onClick={() => setOpen(false)} className="text-grey hover:text-ink text-lg leading-none" aria-label="Close role switcher">×</button>
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-2 mb-4">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   {ROLE_ORDER.map((role) => (
                     <button
                       key={role}
+                      data-quick-view={role}
                       onClick={() => {
                         switchDemoRole(role);
                         setOpen(false);
@@ -167,29 +164,6 @@ export default function Header() {
                     >
                       <span className="block text-xs font-semibold">{ROLE_META[role].label}</span>
                       <span className="block text-[10px] text-grey mt-1 leading-snug">{ROLE_META[role].description}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="border-t border-line pt-3">
-                  <p className="text-[10px] uppercase tracking-wide text-grey px-1 mb-1">
-                    Demo logins for {ROLE_META[activeRole].label}
-                  </p>
-                  {roleUsers.map((user) => (
-                    <button
-                      key={user.id}
-                      onClick={() => {
-                        setCurrentUser(user.id);
-                        setOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-md text-left hover:bg-white/[0.06] ${user.id === currentUserId ? "bg-white/[0.06]" : ""}`}
-                    >
-                      <Avatar hue={user.avatarHue} label={user.avatarInitial} src={user.imageUrl} size={30} />
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-sm font-medium truncate">{user.name}</span>
-                        <span className="block text-[10px] text-grey truncate">{user.handle} · {ROLE_META[activeRole].short}</span>
-                      </span>
-                      {user.id === currentUserId && <span className="text-accent text-xs">●</span>}
                     </button>
                   ))}
                 </div>

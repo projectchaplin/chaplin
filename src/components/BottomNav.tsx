@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useChaplinStore } from "@/lib/store";
+import ConciergeOrb from "@/components/ConciergeOrb";
 import { IconFilm, IconHome, IconMask } from "@/components/Icons";
 
 const TABS = [
@@ -63,39 +64,11 @@ export default function BottomNav() {
       className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] sm:px-5"
     >
       {createOpen && (
-        <button
-          type="button"
-          aria-label="Close create menu"
-          onClick={() => setCreateOpen(false)}
-          className="pointer-events-auto fixed inset-0 z-0 cursor-default bg-black/40 backdrop-blur-[2px]"
-        />
+        <div className="pointer-events-auto">
+          <ConciergeOrb role={activeRole} quickOptions={createOptions} onClose={() => setCreateOpen(false)} />
+        </div>
       )}
       <div className="pointer-events-auto relative mx-auto w-full max-w-[34rem]">
-        {createOpen && (
-          <div
-            role="menu"
-            aria-label="Create"
-            className="absolute bottom-[calc(100%+2.6rem)] left-1/2 z-20 w-[min(92vw,22rem)] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/15 bg-black/85 shadow-[0_24px_70px_rgba(0,0,0,0.7)] backdrop-blur-2xl motion-safe:animate-[chaplin-format-enter_200ms_ease-out]"
-            data-create-menu
-          >
-            <p className="border-b border-white/10 px-4 pb-2.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">
-              {activeRole === "brand" ? "Create for your brand" : "What are you making?"}
-            </p>
-            {createOptions.map((option) => (
-              <Link
-                key={option.href}
-                role="menuitem"
-                href={option.href}
-                onClick={() => setCreateOpen(false)}
-                className="block border-b border-white/5 px-4 py-3 transition-colors last:border-b-0 hover:bg-white/5"
-              >
-                <span className="block text-sm font-semibold text-white">{option.title}</span>
-                <span className="mt-0.5 block text-[11px] leading-4 text-white/55">{option.copy}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-
         {/* Floating create button — sits in the notch the bar masks out below */}
         <button
           type="button"

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useChaplinStore } from "@/lib/store";
 import HeroGridCard, { type HomepageBroll } from "@/components/HeroGridCard";
 
@@ -10,14 +10,6 @@ const CASTING_FORMATS = ["Reels", "Ads", "Micro Drama", "UGC"];
 export default function InfiniteCharacterGallery() {
   const characters = useChaplinStore((state) => state.characters);
   const [castingFormatIndex, setCastingFormatIndex] = useState(0);
-  const wordSizerRef = useRef<HTMLSpanElement>(null);
-  const [wordWidth, setWordWidth] = useState<number | null>(null);
-
-  // The slot animates to each word's real width, so "Reels." hugs the sentence
-  // instead of floating inside a "Micro Drama."-sized gap — and nothing reflows.
-  useEffect(() => {
-    setWordWidth(wordSizerRef.current?.offsetWidth ?? null);
-  }, [castingFormatIndex]);
   const [activeGridId, setActiveGridId] = useState<string | null>(null);
   const [automaticGridId, setAutomaticGridId] = useState<string | null>(null);
   const [brolls, setBrolls] = useState<HomepageBroll[]>([]);
@@ -90,30 +82,19 @@ export default function InfiniteCharacterGallery() {
   );
 
   return (
-    <main className="relative min-h-[calc(100svh-4rem)] overflow-hidden pb-24">
+    <main className="relative flex h-[calc(100dvh-10rem)] flex-col overflow-hidden lg:block lg:h-auto lg:min-h-[calc(100svh-4rem)] lg:pb-24">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_42%,rgba(242,78,112,0.12),transparent_27%),radial-gradient(circle_at_76%_22%,rgba(7,210,190,0.14),transparent_25%)]" />
-      <section className="relative mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8" aria-label="AI actor gallery">
-        {/* Heading: centered; the rotating word sits in a fixed-width slot so nothing ever reflows */}
-        <div className="mx-auto mb-6 max-w-3xl text-center sm:mb-8">
+      <section className="relative mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-4 py-4 lg:block lg:h-auto lg:px-6 lg:py-8" aria-label="AI actor gallery">
+        {/* Heading: centered; the rotating word is plain inline text so it can never wrap alone */}
+        <div className="mx-auto mb-4 max-w-3xl shrink-0 text-center lg:mb-8">
           <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-accent">The Chaplin cast</p>
           <h1 className="marquee-title mt-2 text-4xl uppercase leading-none text-ink sm:text-6xl">
             The World of AI Actors
           </h1>
           <p className="mt-3 whitespace-nowrap text-sm leading-6 text-grey sm:text-2xl sm:leading-9" aria-live="polite">
             Ready to cast AI actors for{" "}
-            <span
-              className="relative inline-block whitespace-nowrap align-baseline font-semibold transition-[width] duration-300 ease-out"
-              style={wordWidth != null ? { width: `${wordWidth}px` } : undefined}
-            >
-              <span ref={wordSizerRef} className="invisible absolute left-0 top-0 whitespace-nowrap" aria-hidden="true">
-                {CASTING_FORMATS[castingFormatIndex]}.
-              </span>
-              <span
-                key={CASTING_FORMATS[castingFormatIndex]}
-                className={`text-accent motion-safe:animate-[chaplin-format-enter_400ms_ease-out] ${wordWidth != null ? "absolute left-0 top-0" : ""}`}
-              >
-                {CASTING_FORMATS[castingFormatIndex]}.
-              </span>
+            <span key={CASTING_FORMATS[castingFormatIndex]} className="font-semibold text-accent motion-safe:animate-[chaplin-format-enter_400ms_ease-out]">
+              {CASTING_FORMATS[castingFormatIndex]}.
             </span>
           </p>
         </div>
@@ -121,7 +102,7 @@ export default function InfiniteCharacterGallery() {
         {/* Grid: fixed 4 cols (mobile) / 8 cols (desktop) so the fill math below is exact.
             Hover (or first tap on touch) expands any tile to 2x2 and plays its b-roll. */}
         <div
-          className="grid grid-flow-dense grid-cols-4 gap-2 auto-rows-[88px] sm:auto-rows-[110px] lg:grid-cols-8 lg:auto-rows-[124px]"
+          className="grid min-h-0 flex-1 grid-flow-dense grid-cols-4 auto-rows-[minmax(0,1fr)] gap-1.5 lg:flex-none lg:grid-cols-8 lg:auto-rows-[124px] lg:gap-2"
           onMouseLeave={() => setActiveGridId(null)}
         >
           {characters.map((character) => (
@@ -152,7 +133,7 @@ export default function InfiniteCharacterGallery() {
           </Link>
         </div>
 
-        <div className="mx-auto mt-8 flex items-center justify-between gap-4 sm:mt-10">
+        <div className="mx-auto mt-3 flex w-full shrink-0 items-center justify-between gap-4 lg:mt-10">
           <p className="text-xs text-grey"><span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-accent-secondary shadow-[0_0_10px_var(--accent-secondary)]" />{characters.length} characters ready to discover</p>
           <Link href="/feed" className="rounded-full border border-line bg-paper/65 px-5 py-2.5 text-xs font-semibold text-ink backdrop-blur-md transition-colors hover:border-accent hover:text-accent">Open Feed →</Link>
         </div>

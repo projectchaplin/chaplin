@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useChaplinStore } from "@/lib/store";
@@ -67,7 +67,7 @@ export default function StoryBuilderForm() {
     return requested === "ad" || requested === "reel" ? requested : "story";
   });
   const [durationSeconds, setDurationSeconds] = useState(() => searchParams.get("format") === "ad" ? 30 : 60);
-  const [brief, setBrief] = useState("");
+  const [brief, setBrief] = useState(() => searchParams.get("brief")?.trim() ?? "");
   const [title, setTitle] = useState("");
   const [logline, setLogline] = useState("");
   const [creativeDirection, setCreativeDirection] = useState("");
@@ -89,6 +89,17 @@ export default function StoryBuilderForm() {
       .then((data: { configured?: boolean }) => setClaudeConfigured(Boolean(data.configured)))
       .catch(() => setClaudeConfigured(false));
   }, []);
+
+  // Concierge hand-off: ?brief=…&auto=1 lands here with the draft already writing.
+  const conciergeRan = useRef(false);
+  useEffect(() => {
+    if (conciergeRan.current) return;
+    if (searchParams.get("auto") !== "1") return;
+    if (brief.trim().length < 5 || world.characters.length === 0) return;
+    conciergeRan.current = true;
+    void createMagicDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot hand-off once characters exist
+  }, [world.characters.length]);
 
   const castCharacters = castIds
     .map((id) => world.characters.find((c) => c.id === id))
@@ -393,6 +404,12 @@ export default function StoryBuilderForm() {
           {magicMessage && <p className="text-xs text-emerald-500">{magicMessage}</p>}
         </div>
       </section>
+
+      <div className="mb-4 flex items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-line" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-grey">or write it manually</span>
+        <span className="h-px flex-1 bg-line" />
+      </div>
 
       <div className="flex gap-2 mb-6 text-xs">
         {(

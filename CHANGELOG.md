@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-23 · Live-voice Concierge (ElevenLabs agent) + three quick views + speed telemetry
+
+- The Concierge is now a real ElevenLabs Conversational AI agent ("Chaplin Concierge", provisioned programmatically by scripts/setup-concierge-agent.mjs with persona, guardrails — no celebrity likeness, brand-safe briefs — and three client tools). You talk to it live; it calls create_character / create_video / open_page in the browser and the builders start generating in front of you.
+- Signed-URL auth via /api/agent/voice-session (key stays server-side). Graceful fallback to the typed intent flow when mic/voice is unavailable.
+- Mission log in the orb: every step timed on screen (signed session, connect, heard user, intent, opening builder). Full timings shipped to /api/agent/telemetry → generation_jobs kind "concierge-telemetry" → /admin/logs, so we can measure and improve speed.
+- Quick create chips now state exactly what will be made (Spark 5s, Punch 15s, Episode 60s, Spot 30–60s) before the AI takes over.
+- Header: exactly three quick views — Creator, Brand, Super Admin. Demo-login user list removed.
+- User-facing: everything above.
+
+## 2026-07-23 · Chaplin Concierge — voice-first Create agent
+
+- The + button now opens the Concierge: an animated orb that greets you out loud ("What are we creating today?"), listens (browser speech-to-text, tap the orb) or takes a typed sentence, and understands what you want via Claude structured intent.
+- One sentence → it extracts the name, picks archetypes, writes a canon brief, speaks a confirmation, and lands you in the right builder with Magic already running: characters → /characters/new prefilled + auto-building; videos/ads/reels → /studio/write with the draft auto-writing; series → pilot builder.
+- The old role-aware create options remain as quick chips inside the Concierge.
+- Every Concierge session is logged to generation_jobs (kind "concierge") and visible in /admin/logs, plus [concierge] server log lines.
+- Also: home gallery locked to 100dvh on mobile (no scroll, no bottom-nav overlap; site footer hidden on home only).
+- User-facing: everything above.
+
 ## 2026-07-23 · Social platform: feed, series, auth + full home/nav/watch redesign
 
 - Codex work: auth (creator/brand/super-admin accounts), creator feed with replies/likes/reposts, series + episode schema and pages, /create paths, profile media selection, brand assets.

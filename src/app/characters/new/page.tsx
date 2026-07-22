@@ -104,6 +104,7 @@ export default function NewCharacterPage() {
   const [suggestionMessage, setSuggestionMessage] = useState("");
   const [productionBible, setProductionBible] = useState<CharacterProductionBible | undefined>();
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [revealingField, setRevealingField] = useState("");
   const suggestStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
@@ -119,6 +120,33 @@ export default function NewCharacterPage() {
     }, 1000);
     return () => clearInterval(interval);
   }, [suggestingTarget]);
+
+  // Concierge hand-off: /characters/new?cname=…&cbrief=…&carchetypes=hero,rebel&auto=1
+  // prefills the builder and, with auto=1, runs Magic Character immediately.
+  const conciergeRan = useRef(false);
+  useEffect(() => {
+    if (conciergeRan.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const cname = params.get("cname")?.trim() ?? "";
+    const cbrief = params.get("cbrief")?.trim() ?? "";
+    const carchetypes = (params.get("carchetypes") ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value): value is Archetype => (ARCHETYPES as readonly string[]).includes(value));
+    if (!cname && !cbrief && carchetypes.length === 0) return;
+    conciergeRan.current = true;
+    if (cname) setName(cname);
+    if (cbrief) setCharacterBrief(cbrief);
+    if (carchetypes.length) setArchetypes(carchetypes);
+    if (params.get("auto") === "1" && cname && cbrief.length >= 20) {
+      void suggestCharacter("all", {
+        name: cname,
+        characterBrief: cbrief,
+        archetypes: carchetypes.length ? carchetypes : ["hero"],
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot hand-off on mount
+  }, []);
 
   const archetype = archetypes[0] ?? "hero";
 
@@ -139,12 +167,18 @@ export default function NewCharacterPage() {
   const isCustomScore = scorePreset === SCORE_PRESETS[SCORE_PRESETS.length - 1];
   const themeDesc = isCustomScore ? customScore : scorePreset;
 
-  async function suggestCharacter(target: SuggestionTarget) {
-    if (!name.trim()) {
+  async function suggestCharacter(
+    target: SuggestionTarget,
+    overrides?: { name?: string; characterBrief?: string; archetypes?: Archetype[] }
+  ) {
+    const effectiveName = overrides?.name ?? name;
+    const effectiveBrief = overrides?.characterBrief ?? characterBrief;
+    const effectiveArchetypes = overrides?.archetypes ?? archetypes;
+    if (!effectiveName.trim()) {
       setError("Name the AI actor first, then Magic Character can build the identity.");
       return;
     }
-    if (target === "all" && characterBrief.trim().length < 20) {
+    if (target === "all" && effectiveBrief.trim().length < 20) {
       setError("Give Magic Character at least a line or two about who this actor is — that brief drives the whole identity.");
       return;
     }
@@ -158,10 +192,10 @@ export default function NewCharacterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           target,
-          name,
-          archetype,
-          archetypes,
-          characterBrief,
+          name: effectiveName,
+          archetype: effectiveArchetypes[0] ?? "hero",
+          archetypes: effectiveArchetypes,
+          characterBrief: effectiveBrief,
           tagline,
           personality,
           appearanceBrief,
@@ -180,27 +214,67 @@ export default function NewCharacterPage() {
       };
       if (!response.ok || !data.suggestion) throw new Error(data.error || "Character suggestions failed.");
       const suggestion = data.suggestion;
-      setProductionBible(suggestion.productionBible);
-      if (target === "all" || target === "tagline") setTagline(suggestion.tagline);
-      if (target === "all" || target === "personality") setPersonality(suggestion.personality);
-      if (target === "all" || target === "voice") {
-        setVoiceGender(suggestion.voiceGender);
-        setVoicePreset(VOICE_PRESETS[VOICE_PRESETS.length - 1]);
-        setCustomVoice(suggestion.voiceDescription);
+      if (target === "all") {
+        // Magic Create fills the form field by field, so you watch the actor
+        // assemble instead of everything appearing in one blink.
+        const reveal: Array<[string, () => void]> = [
+          ["tagline", () => setTagline(suggestion.tagline)],
+          ["personality", () => setPersonality(suggestion.personality)],
+          ["voice", () => {
+            setVoiceGender(suggestion.voiceGender);
+            setVoicePreset(VOICE_PRESETS[VOICE_PRESETS.length - 1]);
+            setCustomVoice(suggestion.voiceDescription);
+          }],
+          ["sfx", () => {
+            setSfxPreset(SFX_PRESETS[SFX_PRESETS.length - 1]);
+            setCustomSfx(suggestion.signatureSfx);
+          }],
+          ["theme", () => {
+            setScorePreset(SCORE_PRESETS[SCORE_PRESETS.length - 1]);
+            setCustomScore(suggestion.themeScore);
+          }],
+          ["bible", () => setProductionBible(suggestion.productionBible)],
+        ];
+        reveal.forEach(([label, apply], index) => {
+          window.setTimeout(() => {
+            apply();
+            setRevealingField(label);
+            setSuggestionMessage(`✦ ${label === "bible" ? "Actor Direction Bible" : label.charAt(0).toUpperCase() + label.slice(1)} written…`);
+            if (index === reveal.length - 1) {
+              window.setTimeout(() => {
+                setRevealingField("");
+                setSuggestionMessage(
+                  data.warning || (data.provider === "anthropic"
+                    ? "Claude expanded the character. Every suggestion is editable."
+                    : "Character suggestions are ready. Every field remains editable.")
+                );
+              }, 700);
+            }
+          }, 450 * index);
+        });
+      } else {
+        setProductionBible(suggestion.productionBible);
+        if (target === "tagline") setTagline(suggestion.tagline);
+        if (target === "personality") setPersonality(suggestion.personality);
+        if (target === "voice") {
+          setVoiceGender(suggestion.voiceGender);
+          setVoicePreset(VOICE_PRESETS[VOICE_PRESETS.length - 1]);
+          setCustomVoice(suggestion.voiceDescription);
+        }
+        if (target === "sfx") {
+          setSfxPreset(SFX_PRESETS[SFX_PRESETS.length - 1]);
+          setCustomSfx(suggestion.signatureSfx);
+        }
+        if (target === "theme") {
+          setScorePreset(SCORE_PRESETS[SCORE_PRESETS.length - 1]);
+          setCustomScore(suggestion.themeScore);
+        }
+        setSuggestionMessage(
+          data.warning || (data.provider === "anthropic"
+            ? "Claude expanded the character. Every suggestion is editable."
+            : "Character suggestions are ready. Every field remains editable.")
+        );
       }
-      if (target === "all" || target === "sfx") {
-        setSfxPreset(SFX_PRESETS[SFX_PRESETS.length - 1]);
-        setCustomSfx(suggestion.signatureSfx);
-      }
-      if (target === "all" || target === "theme") {
-        setScorePreset(SCORE_PRESETS[SCORE_PRESETS.length - 1]);
-        setCustomScore(suggestion.themeScore);
-      }
-      setSuggestionMessage(
-        data.warning || (data.provider === "anthropic"
-          ? "Claude expanded the character. Every suggestion is editable."
-          : "Character suggestions are ready. Every field remains editable.")
-      );
     } catch (suggestionError) {
       setError(suggestionError instanceof Error ? suggestionError.message : "Character suggestions failed.");
     } finally {
@@ -326,9 +400,9 @@ export default function NewCharacterPage() {
         <div className="rounded-md border border-accent/50 bg-accent/5 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
-              <p className="text-sm font-semibold">Magic Character</p>
+              <p className="text-sm font-semibold">✦ Magic Create</p>
               <p className="mt-1 text-xs text-grey">
-                Name the actor, pick the archetype mix, then write a line or two about who they are — Magic Character builds the rest.
+                Pipeline one: name the actor, pick the archetype mix, write a line or two — the AI writes every field below, one by one, in front of you.
               </p>
             </div>
             <div className="shrink-0">
@@ -363,6 +437,12 @@ export default function NewCharacterPage() {
           )}
         </div>
 
+        <div className="flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-grey">or craft it manually</span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Face, age & wardrobe direction</span>
@@ -393,6 +473,7 @@ export default function NewCharacterPage() {
           </div>
           <input
             data-character-field="tagline"
+            data-revealing={revealingField === "tagline" || undefined}
             value={tagline}
             onChange={(e) => setTagline(e.target.value)}
             placeholder="One line that sells the pitch"
@@ -407,6 +488,7 @@ export default function NewCharacterPage() {
           </div>
           <textarea
             data-character-field="personality"
+            data-revealing={revealingField === "personality" || undefined}
             value={personality}
             onChange={(e) => setPersonality(e.target.value)}
             rows={3}
