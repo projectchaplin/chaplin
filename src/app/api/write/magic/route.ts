@@ -1,4 +1,6 @@
 import { buildProductionBible } from "@/lib/production-prompting";
+import { anthropicImageBlock, type AnthropicImageBlock } from "@/lib/server/anthropic-image";
+import { getCharacterProductionState } from "@/lib/server/supabase-admin";
 import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -233,6 +235,45 @@ export async function POST(request: Request) {
       ...character,
       selected: castIds.includes(character.id),
     }));
+    const selectedCharacters = (castIds.length
+      ? castIds.map((id) => characters.find((character) => character.id === id)).filter((character): character is PromptCharacter => Boolean(character))
+      : characters.slice(0, format === "story" ? 2 : 1)
+    ).slice(0, 6);
+    const visualContexts = (await Promise.all(selectedCharacters.map(async (character) => {
+      try {
+        const production = await getCharacterProductionState(character.id);
+        if (!production.visualReference) return null;
+        return {
+          character,
+          reference: production.visualReference,
+          block: await anthropicImageBlock(production.visualReference.url),
+        };
+      } catch {
+        return null;
+      }
+    }))).filter((context): context is {
+      character: PromptCharacter;
+      reference: NonNullable<Awaited<ReturnType<typeof getCharacterProductionState>>["visualReference"]>;
+      block: AnthropicImageBlock;
+    } => Boolean(context));
+    const taskPayload = JSON.stringify({
+      task: "Expand the user's partial input into a complete, editable production draft. Preserve useful supplied title and logline text, but improve weak or incomplete fields.",
+      format,
+      durationSeconds,
+      brief: input.brief || "Invent a strong concept suited to the selected cast.",
+      existingTitle: input.title || null,
+      existingLogline: input.logline || null,
+      characters: characterContext.map((character) => ({
+        ...character,
+        visualReference: visualContexts.find((context) => context.character.id === character.id)?.reference.source ?? null,
+      })),
+    });
+    const messageContent: Array<AnthropicImageBlock | { type: "text"; text: string }> = [];
+    for (const context of visualContexts) {
+      messageContent.push({ type: "text", text: `Canonical visual identity seed for ${context.character.name}:` });
+      messageContent.push(context.block);
+    }
+    messageContent.push({ type: "text", text: taskPayload });
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -244,18 +285,10 @@ export async function POST(request: Request) {
         model,
         max_tokens: 8000,
         thinking: { type: "disabled" },
-        system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible as binding character canon. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. For ads and reels, dramatize one benefit through visible proof and finish with a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
+        system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. For ads and reels, dramatize one benefit through visible proof and finish with a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
         messages: [{
           role: "user",
-          content: JSON.stringify({
-            task: "Expand the user's partial input into a complete, editable production draft. Preserve useful supplied title and logline text, but improve weak or incomplete fields.",
-            format,
-            durationSeconds,
-            brief: input.brief || "Invent a strong concept suited to the selected cast.",
-            existingTitle: input.title || null,
-            existingLogline: input.logline || null,
-            characters: characterContext,
-          }),
+          content: messageContent,
         }],
         output_config: {
           format: {

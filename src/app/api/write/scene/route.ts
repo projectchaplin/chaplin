@@ -14,7 +14,9 @@ import {
   completeGeneration,
   ensureCharacter,
   failGeneration,
+  getCharacterProductionState,
 } from "@/lib/server/supabase-admin";
+import { anthropicImageBlock } from "@/lib/server/anthropic-image";
 import type { Character } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -92,6 +94,27 @@ export async function POST(request: Request) {
     }
 
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    const production = await getCharacterProductionState(character.id);
+    const visualReference = production.visualReference;
+    const promptPayload = JSON.stringify({
+      brief: brief || null,
+      variation,
+      actor: {
+        name: character.name,
+        archetype: character.archetype,
+        tagline: character.tagline,
+        personality: character.personality,
+        productionBible: character.productionBible ?? buildProductionBible(character),
+        visualReference: visualReference ? { source: visualReference.source, assetId: visualReference.assetId } : null,
+      },
+    });
+    const messageContent = visualReference
+      ? [
+          await anthropicImageBlock(visualReference.url),
+          { type: "text" as const, text: `This is ${character.name}'s canonical visual identity seed. Design the shot around the visible face, body, wardrobe, materials, palette, existing camera logic, and plausible light. Do not redescribe or redesign the actor.` },
+          { type: "text" as const, text: promptPayload },
+        ]
+      : promptPayload;
     jobId = await beginGeneration({
       characterId: character.id,
       kind: "prompt-scene-package",
@@ -112,17 +135,7 @@ export async function POST(request: Request) {
         system: "You are a film director creating one production-ready five-second beat for an established fictional actor. Return a shot blueprint, not prose about the character. The hook must be visible in the first frame or first second. The dramatic beat must change the situation. Dialogue uses subtext and never explains identity or visible action. Block one readable body action and one micro-expression across exactly three time ranges. Specify precise framing, camera height/angle, lens, one physically plausible camera path, motivated key-light direction, fill/edge, environmental motion, an acoustic soundTexture made only of recordable physical sources, a musicalArc expressed only as musical/emotional development, and a final frame that creates a genuine cliffhanger by introducing new pressure or reversing power. Respect the actor bible. Avoid generic walking, posing, looking at camera, montage, multiple cuts, excessive motion, unmotivated light, or biography. The still is a designed first frame; the video will animate that exact image, so motion instructions must never redesign the frame.",
         messages: [{
           role: "user",
-          content: JSON.stringify({
-            brief: brief || null,
-            variation,
-            actor: {
-              name: character.name,
-              archetype: character.archetype,
-              tagline: character.tagline,
-              personality: character.personality,
-              productionBible: character.productionBible ?? buildProductionBible(character),
-            },
-          }),
+          content: messageContent,
         }],
         output_config: { format: { type: "json_schema", schema: SHOT_SCHEMA } },
       }),
@@ -149,7 +162,7 @@ export async function POST(request: Request) {
     await completeGeneration(
       jobId,
       undefined,
-      { characterId: character.id, sceneName: shot.sceneName, blueprint: shot },
+      { characterId: character.id, sceneName: shot.sceneName, blueprint: shot, visualReference: visualReference?.url ?? null, visualReferenceSource: visualReference?.source ?? null },
       await calculateGenerationBilling({ kind: "anthropic-prompt", usage })
     );
     return Response.json({ scene: renderPackage(character, shot), provider: "anthropic", model, usage, configured: true });

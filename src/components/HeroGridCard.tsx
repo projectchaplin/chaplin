@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { motion } from "framer-motion";
 import type { Character } from "@/lib/types";
 import { ARCHETYPE_LABEL, ARCHETYPE_HUE, hsl } from "@/lib/format";
 
@@ -33,6 +32,10 @@ export default function HeroGridCard({
   const videoSource = broll?.videoUrl ?? character.videoUrl ?? null;
   const artworkSource = character.imageUrl ?? character.bannerUrl ?? character.galleryUrls?.[0] ?? null;
 
+  function activateInPlace() {
+    onActivate?.();
+  }
+
   function handleClick(e: React.MouseEvent) {
     // Devices with real hover (mouse/trackpad) always navigate on click, since
     // hovering already previewed the tile. Touch-only devices never fire our
@@ -42,27 +45,25 @@ export default function HeroGridCard({
       typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
     if (!canHover && !active) {
       e.preventDefault();
-      onActivate?.();
+      activateInPlace();
     }
   }
 
   return (
-    <motion.div
-      layout
-      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative rounded-lg ${active ? "col-span-2 row-span-2" : ""}`}
+    <div
+      className={`relative rounded-lg transition-shadow duration-300 ${active ? "z-10 col-span-2 row-span-2" : "z-0"}`}
       data-hero-character-id={character.id}
       data-home-video={active && videoSource ? "active" : undefined}
       style={
         active
-          ? { boxShadow: "0 0 0 2px var(--accent-secondary), 0 0 28px var(--accent-secondary-glow)" }
+          ? { boxShadow: "0 0 0 1px var(--accent-secondary), 0 0 12px var(--accent-secondary-glow)" }
           : { boxShadow: "0 0 0 1px var(--line)" }
       }
     >
       <Link
         href={`/characters/${character.id}`}
-        onMouseEnter={onActivate}
-        onFocus={onActivate}
+        onMouseEnter={activateInPlace}
+        onFocus={activateInPlace}
         onClick={handleClick}
         className="group absolute inset-0 block overflow-hidden rounded-lg"
       >
@@ -72,8 +73,9 @@ export default function HeroGridCard({
               src={artworkSource}
               alt={character.name}
               fill
-              sizes="(max-width: 640px) 150px, 260px"
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              quality={90}
+              sizes={active ? "(max-width: 640px) 100vw, 480px" : "(max-width: 640px) 200px, 320px"}
+              className="object-cover"
               data-hero-artwork
             />
           ) : (
@@ -109,19 +111,11 @@ export default function HeroGridCard({
           )}
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 p-1.5 sm:p-2">
-          <p
-            className={`marquee-title uppercase text-ink line-clamp-2 ${
-              active
-                ? "text-lg sm:text-xl leading-tight"
-                : "text-[7.5px] sm:text-[9px] leading-[1.15] tracking-tight"
-            }`}
-          >
+        <div className={`absolute bottom-0 left-0 right-0 ${active ? "p-3" : "p-1.5 sm:p-2"}`}>
+          <p className={`marquee-title line-clamp-2 uppercase leading-[1.15] tracking-tight text-ink ${active ? "text-sm sm:text-base" : "text-[7.5px] sm:text-[9px]"}`}>
             {character.name}
           </p>
-          <p
-            className={`text-ink/60 truncate ${active ? "text-xs mt-0.5" : "text-[7px] sm:text-[8px]"}`}
-          >
+          <p className={`truncate text-ink/60 ${active ? "mt-0.5 text-xs" : "text-[7px] sm:text-[8px]"}`}>
             {ARCHETYPE_LABEL[character.archetype]}
           </p>
         </div>
@@ -131,6 +125,6 @@ export default function HeroGridCard({
           <span className="block h-full rounded-full bg-accent transition-[width] duration-100" style={{ width: `${progress * 100}%` }} />
         </span>
       )}
-    </motion.div>
+    </div>
   );
 }

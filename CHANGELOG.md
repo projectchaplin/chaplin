@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-23 · Social platform: feed, series, auth + full home/nav/watch redesign
+
+- Codex work: auth (creator/brand/super-admin accounts), creator feed with replies/likes/reposts, series + episode schema and pages, /create paths, profile media selection, brand assets.
+- Home: grid gallery with 2×2 expanding hover-video tiles, flush fill with repeated tiles + 1-cell create CTA, Poppins heading "The World of AI Actors", width-animated rotating subtext (single-line at all breakpoints).
+- Bottom nav: iOS-style notch cutout (CSS mask) with floating Create button that opens a role-aware popup (creator: character/video/series · brand: ad/reel · caster: video/series).
+- Watch (/series): Netflix-style browse — autoplay hero, Top Stories, hover-play Top Sparks, Ads & Reels (auto-appears), Series slate.
+- Magic Writer: cast picker strip with actor thumbnails right in the writer, visual "cast, together" board in the Script step.
+- Shelf: compact pill filter bar (single scroll chip row), 2-up mobile grid with clamped taglines and one-line stats.
+- Feed seeded with 47 real generated media posts (scripts/seed-feed-media.mjs, idempotent).
+- Fixes: blurred logo (server-side downscale + q90), image quality config, brief-required gate server-side, thinking disabled on structured-output routes.
+- User-facing: everything above.
+
 ## 2026-07-22 · Diagnose "stuck" Magic Character build, add progress feedback
 
 - Verified directly against Anthropic (bypassing the app) that a full production-bible JSON build genuinely takes 35-55s on Sonnet 5 — constrained decoding on a large nested schema, not a bug. It only looked stuck because there was zero progress feedback and the page had been reloaded mid-request.

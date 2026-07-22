@@ -10,6 +10,7 @@ import {
   saveMediaAsset,
   saveRemoteMediaAsset,
   ensureCharacter,
+  selectCharacterSfxAsset,
 } from "@/lib/server/supabase-admin";
 import { calculateGenerationBilling } from "@/lib/server/billing";
 import type { Character } from "@/lib/types";
@@ -114,15 +115,19 @@ async function eleven(pathname: string, body: object) {
 
 async function imageInput(reference: string) {
   if (/^(https?:|data:)/.test(reference)) return reference;
-  if (!reference.startsWith("/characters/")) {
-    throw new Error("Reference image must be a generated URL or a character asset.");
-  }
+  if (!reference.startsWith("/")) throw new Error("Reference image must be a generated URL or a public character asset.");
   const publicRoot = path.resolve(process.cwd(), "public");
   const filePath = path.resolve(publicRoot, `.${reference}`);
-  if (!filePath.startsWith(publicRoot)) throw new Error("Invalid reference image path.");
+  const relativePath = path.relative(publicRoot, filePath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) throw new Error("Invalid reference image path.");
   const bytes = await readFile(filePath);
   const contentType = reference.endsWith(".png") ? "image/png" : reference.endsWith(".jpg") || reference.endsWith(".jpeg") ? "image/jpeg" : "image/webp";
   return `data:${contentType};base64,${bytes.toString("base64")}`;
+}
+
+function lockVisualIdentity(prompt: string, hasReference: boolean) {
+  if (!hasReference) return prompt;
+  return `${prompt}\n\nVISUAL IDENTITY LOCK: The attached image is the canonical seed for this actor. Preserve the exact same person: facial geometry, eye spacing and shape, nose, mouth, jaw, skin tone and texture, hairline, hair, apparent age, body proportions, and signature wardrobe materials. The requested prompt may change only performance, blocking, camera, lighting, environment, and story action. Do not reinterpret, beautify, average, recast, age-shift, gender-shift, or redesign the actor.`;
 }
 
 export async function GET(request: Request) {
@@ -152,6 +157,11 @@ export async function POST(request: Request) {
       const character = input.character as Character;
       if (character.id !== characterId) throw new Error("AI actor identity does not match this generation request.");
       await ensureCharacter(character);
+    }
+
+    if (action === "sfx-select") {
+      const assetId = text(input, "assetId", 1, 100);
+      return Response.json(await selectCharacterSfxAsset({ characterId, assetId }));
     }
 
     if (action === "voice-design") {
@@ -260,15 +270,19 @@ export async function POST(request: Request) {
 
     if (action === "sfx") {
       const prompt = text(input, "prompt", 1, 1000);
+      const requestedDuration = Number(input.durationSeconds);
+      const durationSeconds = Number.isFinite(requestedDuration)
+        ? Math.min(2, Math.max(0.5, requestedDuration))
+        : 1.5;
       jobId = await beginGeneration({ characterId, kind: "sfx", provider: "elevenlabs", model: "eleven_text_to_sound_v2", prompt });
       const response = await eleven("/sound-generation?output_format=mp3_44100_128", {
         text: prompt,
-        duration_seconds: 5,
-        prompt_influence: 0.45,
+        duration_seconds: durationSeconds,
+        prompt_influence: 0.35,
         model_id: "eleven_text_to_sound_v2",
       });
       const bytes = await response.arrayBuffer();
-      const asset = await saveMediaAsset({ characterId, kind: "sfx", provider: "elevenlabs", bytes, contentType: "audio/mpeg", prompt, durationSeconds: 5 });
+      const asset = await saveMediaAsset({ characterId, kind: "sfx", provider: "elevenlabs", bytes, contentType: "audio/mpeg", prompt, durationSeconds });
       await completeGeneration(
         jobId,
         asset.id,
@@ -277,13 +291,13 @@ export async function POST(request: Request) {
           kind: "sfx",
           usage: {
             inputCharacters: prompt.length,
-            durationSeconds: 5,
+            durationSeconds,
             providerCredits: headerNumber(response, "character-cost"),
           },
         }),
         response.headers.get("request-id")
       );
-      return new Response(bytes, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Asset-Url": asset.url } });
+      return new Response(bytes, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Asset-Url": asset.url, "X-Asset-Id": asset.id, "X-SFX-Duration": String(durationSeconds) } });
     }
 
     if (action === "theme") {
@@ -326,25 +340,50 @@ export async function POST(request: Request) {
     }
 
     if (action === "image") {
-      const prompt = text(input, "prompt", 10, 3000);
+      const requestedPrompt = text(input, "prompt", 10, 6000);
+      const imagePurpose = input.imagePurpose === "scene" ? "scene" : "identity";
+      const requestedReference = typeof input.referenceImage === "string" ? input.referenceImage : "";
+      const production = await getCharacterProductionState(characterId);
+      const canonicalReference = production.visualReference;
+      const reference = canonicalReference?.url ?? requestedReference;
+      const prompt = lockVisualIdentity(requestedPrompt, Boolean(reference));
+      const referenceMetadata = {
+        imagePurpose,
+        referenceImage: reference || null,
+        referenceAssetId: canonicalReference?.assetId ?? null,
+        referenceSource: canonicalReference?.source ?? (requestedReference ? "request-fallback" : null),
+      };
       jobId = await beginGeneration({ characterId, kind: "gallery", provider: "byteplus", model: SEEDREAM_MODEL, prompt });
-      const generated = await modelArk("/images/generations", {
+      const generationRequest: Record<string, unknown> = {
         model: SEEDREAM_MODEL,
         prompt,
+        negative_prompt: "multiple people, duplicate face, celebrity likeness, generic stock-photo pose, generic superhero stance, fashion editorial pose, plastic skin, beauty filter, distorted anatomy, extra fingers, fused hands, floating objects, clutter, excessive visual effects, text, title, caption, logo, interface, border, poster layout, watermark",
         size: "2560x1440",
         response_format: "url",
+        sequential_image_generation: "disabled",
         watermark: false,
-      });
+      };
+      if (reference) {
+        generationRequest.image = await imageInput(reference);
+      }
+      const generated = await modelArk("/images/generations", generationRequest);
       const result = generated.data;
       const images = result.data as Array<{ url?: string }> | undefined;
       const url = images?.[0]?.url;
       if (!url) throw new Error("Seedream completed without returning an image.");
-      const asset = await saveRemoteMediaAsset({ characterId, kind: "gallery", provider: "byteplus", remoteUrl: url, prompt });
+      const asset = await saveRemoteMediaAsset({
+        characterId,
+        kind: "gallery",
+        provider: "byteplus",
+        remoteUrl: url,
+        prompt,
+        metadata: referenceMetadata,
+      });
       const providerUsage = result.usage as Record<string, unknown> | undefined;
       await completeGeneration(
         jobId,
         asset.id,
-        undefined,
+        referenceMetadata,
         await calculateGenerationBilling({
           kind: "gallery",
           usage: { imageCount: images.length, providerUsage },
@@ -357,11 +396,20 @@ export async function POST(request: Request) {
 
     if (action === "video") {
       const requestedPrompt = text(input, "prompt", 10, 3000);
-      const prompt = /silent visual plate|audio is produced separately/i.test(requestedPrompt)
+      const silentPrompt = /silent visual plate|audio is produced separately/i.test(requestedPrompt)
         ? requestedPrompt
         : `${requestedPrompt}\nAUDIO: silent visual plate only; no generated speech, vocals, SFX, or music.`;
+      const requestedReference = typeof input.referenceImage === "string" ? input.referenceImage : "";
+      const production = await getCharacterProductionState(characterId);
+      const canonicalReference = production.visualReference;
+      const reference = canonicalReference?.url ?? requestedReference;
+      const prompt = lockVisualIdentity(silentPrompt, Boolean(reference));
+      const referenceMetadata = {
+        referenceImage: reference || null,
+        referenceAssetId: canonicalReference?.assetId ?? null,
+        referenceSource: canonicalReference?.source ?? (requestedReference ? "request-fallback" : null),
+      };
       jobId = await beginGeneration({ characterId, kind: "video", provider: "byteplus", model: SEEDANCE_MODEL, prompt });
-      const reference = typeof input.referenceImage === "string" ? input.referenceImage : "";
       const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
       if (reference) {
         content.push({ type: "image_url", image_url: { url: await imageInput(reference) } });
@@ -393,12 +441,20 @@ export async function POST(request: Request) {
       const generated = task.content as { video_url?: string } | undefined;
       const videoUrl = generated?.video_url;
       if (!videoUrl) throw new Error("Seedance completed without returning a video.");
-      const asset = await saveRemoteMediaAsset({ characterId, kind: "video", provider: "byteplus", remoteUrl: videoUrl, prompt, durationSeconds: 5, metadata: { taskId } });
+      const asset = await saveRemoteMediaAsset({
+        characterId,
+        kind: "video",
+        provider: "byteplus",
+        remoteUrl: videoUrl,
+        prompt,
+        durationSeconds: 5,
+        metadata: { taskId, ...referenceMetadata },
+      });
       const providerUsage = task.usage as Record<string, unknown> | undefined;
       await completeGeneration(
         jobId,
         asset.id,
-        { taskId },
+        { taskId, ...referenceMetadata },
         await calculateGenerationBilling({
           kind: "video",
           usage: { durationSeconds: 5, providerUsage, providerTokens: recordNumber(providerUsage, "total_tokens", "output_tokens") },

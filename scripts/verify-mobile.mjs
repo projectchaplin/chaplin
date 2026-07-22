@@ -266,6 +266,31 @@ async function main() {
     const maker = await pageState(cdp, ["CREATE AND MONETIZE", "AI ACTORS", "Create an AI Actor", "Open Maker Studio"]);
     checks.push(result("Maker homepage at 390px", makerClicked && maker.required && !maker.overflow, pageDetail(maker)));
 
+    await cdp.send("Storage.clearDataForOrigin", {
+      origin: baseUrl,
+      storageTypes: "local_storage",
+    });
+    await cdp.navigate(`${baseUrl}/characters`);
+    const sharedCatalogue = await pageState(cdp, ["Lightning Raju", "Boxer Benson"]);
+    checks.push(result(
+      "Shared AI actors load without local storage",
+      sharedCatalogue.required && !sharedCatalogue.overflow,
+      pageDetail(sharedCatalogue)
+    ));
+
+    await cdp.navigate(`${baseUrl}/characters/c-f82d3ed6-820b-4adb-b35b-67e916a7d7b1`);
+    const profileMedia = await pageState(cdp, ["Generated Scene Log", "Set as...", "On profile"]);
+    const profileSlots = await cdp.evaluate(`(() => {
+      const slots = [...document.querySelectorAll("[data-select-profile-slot]")].map((item) => item.dataset.selectProfileSlot);
+      const featured = document.querySelectorAll('[data-media-asset][data-featured="true"]').length;
+      return { slots: [...new Set(slots)], featured };
+    })()`);
+    checks.push(result(
+      "Selectable profile media slots",
+      profileMedia.required && !profileMedia.overflow && ["voice", "theme", "video", "cover"].every((slot) => profileSlots.slots.includes(slot)) && profileSlots.featured === 4,
+      `${profileSlots.slots.join(" · ")} · ${profileSlots.featured} featured takes`
+    ));
+
     await cdp.evaluate(`(() => {
       const key = "chaplin:v15";
       const snapshot = JSON.parse(localStorage.getItem(key));
@@ -343,7 +368,9 @@ async function main() {
       "Medium-specific actor production prompts",
       vikrantIdentity.dialogue.includes("Storms do not ask permission") &&
         vikrantIdentity.image.includes("Konkan lighthouse") &&
-        vikrantIdentity.image.includes("CAMERA:") &&
+        vikrantIdentity.image.includes("IDENTITY HERO IMAGE") &&
+        vikrantIdentity.image.includes("VISIBLE PERSONALITY:") &&
+        vikrantIdentity.image.includes("CAMERA AND COMPOSITION:") &&
         vikrantIdentity.image.includes("LIGHTING:") &&
         vikrantIdentity.video.includes("exact first frame") &&
         vikrantIdentity.video.includes("0.0-1.2s") &&
@@ -351,16 +378,16 @@ async function main() {
         vikrantIdentity.reference &&
         !vikrantIdentity.video.includes("Captain Vikrant Suri is") &&
         !vikrantIdentity.video.includes("score language"),
-      vikrantIdentity.video.includes("exact first frame") ? "identity still · directed camera/light · image-to-video motion only" : "production prompts are still generic"
+      vikrantIdentity.video.includes("exact first frame") ? "personality-led identity hero · directed camera/light · image-to-video motion only" : "production prompts are still generic"
     ));
     const quickWriteFields = await cdp.evaluate(`(() =>
       [...document.querySelectorAll("[data-quick-write]")].map((button) => button.dataset.quickWrite)
     )()`);
-    const expectedQuickWriteFields = ["voice-description", "voice-preview", "dialogue", "sfx", "theme", "image", "video"];
+    const expectedQuickWriteFields = ["voice-description", "voice-preview", "dialogue", "sfx", "theme", "identity-image", "video"];
     checks.push(result(
       "Quick Write on every production prompt",
       expectedQuickWriteFields.every((field) => quickWriteFields.includes(field)),
-      `${quickWriteFields.length}/7 character-aware prompt actions`
+      `${quickWriteFields.length}/7 character-aware prompt actions · identity image director`
     ));
     const lockedVoiceControls = await cdp.evaluate(`(() => {
       const voice = document.querySelector('[data-broll-track="voice"]');
@@ -376,6 +403,7 @@ async function main() {
     ));
     await cdp.navigate(`${baseUrl}/characters/c-selene`);
     const production = await pageState(cdp, ["AI ACTOR PRODUCTION PIPELINE", "Magic Scene", "Generate dialogue", "Generate 12-second theme", "Generate 5-second video", "Real generated assets attached"]);
+    await sleep(1000);
     const heroAudio = await cdp.evaluate(`(() => {
       const controls = document.querySelector("[data-broll-audio-controls]");
       const modes = [...(controls?.querySelectorAll("[data-audio-mode]") ?? [])].map((button) => button.dataset.audioMode);

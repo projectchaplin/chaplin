@@ -68,54 +68,43 @@ export default function ShelfPage() {
         title="Every AI actor, ready to be cast"
       />
 
-      <div className="poster-card rounded-md p-4 mb-6 flex flex-col gap-4">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, trait, or vibe: “sarcastic detective”, “warm grandmother”…"
-          className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-accent"
-        />
-
-        <div className="flex flex-wrap gap-2">
-          <span className="text-[11px] uppercase tracking-wide text-grey self-center mr-1">
-            Archetype
-          </span>
-          {ARCHETYPES.map((a) => (
-            <button key={a} onClick={() => toggleArchetype(a)}>
-              <Chip
-                label={ARCHETYPE_LABEL[a]}
-                hue={ARCHETYPE_HUE[a]}
-                filled={archetypes.has(a)}
-              />
-            </button>
-          ))}
+      {/* Compact filter bar: search + sort on one line, filters as single scroll rows */}
+      <div className="mb-6 flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-grey">⌕</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search: “sarcastic detective”, “warm grandmother”…"
+              className="w-full rounded-full border border-line bg-paper/60 py-2.5 pl-9 pr-4 text-sm backdrop-blur-sm transition-colors focus:border-accent focus:outline-none"
+            />
+          </div>
+          <select
+            id="sort"
+            aria-label="Sort"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            className="shrink-0 rounded-full border border-line bg-paper/60 px-3 py-2.5 text-xs backdrop-blur-sm focus:border-accent focus:outline-none"
+          >
+            <option value="castings">Most cast</option>
+            <option value="fans">Most fans</option>
+            <option value="newest">Newest</option>
+          </select>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wide text-grey self-center mr-1">
-            License
-          </span>
+        <div className="no-scrollbar -mx-1 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-1 py-0.5">
+          {ARCHETYPES.map((a) => (
+            <button key={a} onClick={() => toggleArchetype(a)} className="shrink-0">
+              <Chip label={ARCHETYPE_LABEL[a]} hue={ARCHETYPE_HUE[a]} filled={archetypes.has(a)} />
+            </button>
+          ))}
+          <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
           {LICENSE_TYPES.map((l) => (
-            <button key={l} onClick={() => toggleLicense(l)}>
+            <button key={l} onClick={() => toggleLicense(l)} className="shrink-0">
               <Chip label={LICENSE_LABEL[l]} hue={LICENSE_HUE[l]} filled={licenses.has(l)} />
             </button>
           ))}
-
-          <span className="ml-auto flex items-center gap-2 text-xs">
-            <label className="text-grey" htmlFor="sort">
-              Sort
-            </label>
-            <select
-              id="sort"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              className="border border-line rounded-sm px-2 py-1 bg-paper"
-            >
-              <option value="castings">Most cast</option>
-              <option value="fans">Most fans</option>
-              <option value="newest">Newest</option>
-            </select>
-          </span>
         </div>
       </div>
 
@@ -128,7 +117,7 @@ export default function ShelfPage() {
           No one matches that search yet. Maybe it&apos;s time to build them.
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {results.map((character) => {
             const maker = getUser(world, character.makerId);
             return (

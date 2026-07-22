@@ -44,6 +44,13 @@ async function main() {
     ),
     check("Supabase connection", state.database, state.database ? "configured" : "missing"),
     check(
+      "Canonical visual identity seed",
+      state.production?.visualReference?.url && state.production.visualReference.source,
+      state.production?.visualReference
+        ? `${state.production.visualReference.source} Â· ${state.production.visualReference.url}`
+        : "no persisted reference image"
+    ),
+    check(
       "Homepage B-roll playlist",
       brollResponse.ok && brollState.characters?.length >= 2 && brollState.characters.every((item) => item.videoUrl?.startsWith("https://")),
       `${brollState.characters?.length ?? 0} production-ready videos`

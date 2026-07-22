@@ -7,6 +7,7 @@ import MediaPlayer from "@/components/MediaPlayer";
 import {
   buildProductionBible,
   buildScenePackage,
+  composeIdentityImagePrompt,
   composeVoiceDesignPrompt,
   type ScenePackage,
   type ShotBlueprint,
@@ -30,8 +31,21 @@ type ProductionState = {
   latestThemeUrl: string | null;
   latestImageUrl: string | null;
   latestVideoUrl: string | null;
+  visualReference: {
+    url: string;
+    assetId: string | null;
+    source: "selected-cover" | "identity-asset" | "character-image" | "character-media" | "character-banner";
+  } | null;
+  featured: {
+    voiceAssetId: string | null;
+    themeAssetId: string | null;
+    videoAssetId: string | null;
+    coverAssetId: string | null;
+  };
   assets: ProductionAsset[];
 };
+type ProfileSlot = "voice" | "theme" | "video" | "cover";
+type ImagePurpose = "identity" | "scene";
 type ProviderStatus = {
   elevenLabs: boolean;
   seedModels: boolean;
@@ -55,14 +69,37 @@ type VoicePreview = {
   media_type?: string;
   duration_secs?: number;
 };
+type SfxCandidate = {
+  assetId: string;
+  label: string;
+  direction: string;
+  url: string;
+};
 type QuickWriteField =
   | "voice-description"
   | "voice-preview"
   | "dialogue"
   | "sfx"
   | "theme"
+  | "identity-image"
   | "image"
   | "video";
+
+const WORKFLOW_STEPS = [
+  { id: 1, label: "Voice", title: "Define the voice" },
+  { id: 2, label: "Dialogue", title: "Build the dialogue" },
+  { id: 3, label: "SFX", title: "Add signature SFX" },
+  { id: 4, label: "Theme", title: "Create the music score" },
+  { id: 5, label: "Still", title: "Finalize the scene still" },
+  { id: 6, label: "Video", title: "Assemble the scene" },
+] as const;
+
+const SFX_VARIATIONS = [
+  { label: "Dry mark", direction: "Interpret it as an ultra-dry, close-mic tactile mark with almost no tail." },
+  { label: "Material detail", direction: "Focus on one unusual material resonance that makes the actor recognizable." },
+  { label: "Motion accent", direction: "Focus on a compact movement accent with a fast attack and controlled air displacement." },
+  { label: "Dramatic punctuation", direction: "Focus on a restrained dramatic punctuation with a surprising micro-detail before the clean stop." },
+] as const;
 
 const SEEDANCE_ACTIVATION_URL =
   "https://console.byteplus.com/ark/region%3Aark%2Bap-southeast-1/model/detail?Id=seedance-1-5-pro";
@@ -99,6 +136,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   const setCharacterVoice = useChaplinStore((s) => s.setCharacterVoice);
   const addCharacterImage = useChaplinStore((s) => s.addCharacterImage);
   const setCharacterVideo = useChaplinStore((s) => s.setCharacterVideo);
+  const mergePersistedCharacters = useChaplinStore((s) => s.mergePersistedCharacters);
 
   const productionBible = useMemo(() => buildProductionBible(character), [character]);
   const initialScene = useMemo(() => buildScenePackage(character, 0), [character]);
@@ -115,25 +153,28 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     initialScene.sfx
   );
   const [sfxUrl, setSfxUrl] = useState("");
+  const [sfxCandidates, setSfxCandidates] = useState<SfxCandidate[]>([]);
   const [themePrompt, setThemePrompt] = useState(
     initialScene.theme
   );
   const [themeUrl, setThemeUrl] = useState("");
-  const [imagePrompt, setImagePrompt] = useState(
-    initialScene.image
-  );
+  const [imagePurpose, setImagePurpose] = useState<ImagePurpose>("identity");
+  const [imagePrompt, setImagePrompt] = useState(composeIdentityImagePrompt(character));
   const [scenePrompt, setScenePrompt] = useState(
     initialScene.video
   );
   const [generatedImage, setGeneratedImage] = useState("");
+  const [canonicalReferenceImage, setCanonicalReferenceImage] = useState("");
   const [generatedVideo, setGeneratedVideo] = useState("");
   const [assetHistory, setAssetHistory] = useState<ProductionAsset[]>([]);
   const [magicSceneIndex, setMagicSceneIndex] = useState(0);
+  const [activeStep, setActiveStep] = useState<number>(1);
   const [sceneBlueprint, setSceneBlueprint] = useState<ShotBlueprint>(initialScene.blueprint);
   const [busy, setBusy] = useState("");
   const [quickWriting, setQuickWriting] = useState<QuickWriteField | null>(null);
+  const [selectingAsset, setSelectingAsset] = useState("");
   const [message, setMessage] = useState("");
-  const referenceImage = generatedImage || character.galleryUrls?.[0] || character.bannerUrl || character.imageUrl || "";
+  const referenceImage = canonicalReferenceImage || character.imageUrl || character.galleryUrls?.[0] || character.bannerUrl || "";
 
   useEffect(() => {
     fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`)
@@ -143,6 +184,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         const production = data.production;
         if (!production) return;
         setAssetHistory(production.assets ?? []);
+        setCanonicalReferenceImage(production.visualReference?.url ?? "");
         if (production.voiceId && production.voiceId !== character.voiceId) {
           setCharacterVoice(character.id, production.voiceId);
         }
@@ -170,8 +212,45 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     if (!response.ok) return;
     const data = (await response.json()) as ProviderStatus;
     setStatus(data);
-    if (data.production?.assets) setAssetHistory(data.production.assets);
+    if (data.production) {
+      setAssetHistory(data.production.assets ?? []);
+      setCanonicalReferenceImage(data.production.visualReference?.url ?? "");
+      if (data.production.latestDialogueUrl) setSpeechUrl(data.production.latestDialogueUrl);
+      if (data.production.latestThemeUrl) setThemeUrl(data.production.latestThemeUrl);
+      if (data.production.latestImageUrl) setGeneratedImage(data.production.latestImageUrl);
+      if (data.production.latestVideoUrl) setGeneratedVideo(data.production.latestVideoUrl);
+    }
     window.dispatchEvent(new CustomEvent("chaplin:media-updated", { detail: { characterId: character.id } }));
+  }
+
+  async function selectProfileMedia(asset: ProductionAsset, slot: ProfileSlot) {
+    setSelectingAsset(asset.id);
+    setMessage("");
+    try {
+      const response = await fetch("/api/characters/profile-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ characterId: character.id, assetId: asset.id, slot }),
+      });
+      if (!response.ok) throw new Error(await errorFrom(response));
+      await refreshHistory();
+      const catalogueResponse = await fetch("/api/characters", { cache: "no-store" });
+      if (catalogueResponse.ok) {
+        const catalogue = await catalogueResponse.json() as { characters?: Character[] };
+        if (Array.isArray(catalogue.characters)) mergePersistedCharacters(catalogue.characters);
+      }
+      const labels: Record<ProfileSlot, string> = {
+        voice: "main profile voice",
+        theme: "profile theme",
+        video: "hero video",
+        cover: "hero cover",
+      };
+      setMessage(`Selected as ${labels[slot]}. The public profile now uses this take.`);
+    } catch (error) {
+      setMessage(`Selection failed: ${error instanceof Error ? error.message : "Please try again."}`);
+    } finally {
+      setSelectingAsset("");
+    }
   }
 
   async function ensureCharacterIsSaved() {
@@ -248,6 +327,20 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     return persistentUrl ?? URL.createObjectURL(await response.blob());
   }
 
+  async function generateSfxTake(prompt: string) {
+    await ensureCharacterIsSaved();
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sfx", characterId: character.id, character, prompt, durationSeconds: 1.5 }),
+    });
+    if (!response.ok) throw new Error(await errorFrom(response));
+    const url = response.headers.get("X-Asset-Url") ?? URL.createObjectURL(await response.blob());
+    const assetId = response.headers.get("X-Asset-Id");
+    if (!assetId) throw new Error("The generated SFX take was not attached to the actor.");
+    return { assetId, url };
+  }
+
   async function run(label: string, task: () => Promise<void>) {
     setBusy(label);
     setMessage("");
@@ -303,9 +396,30 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
   function generateSfx() {
     void run("sfx", async () => {
-      setSfxUrl(await audioAction("sfx", { prompt: sfxPrompt }));
+      setSfxCandidates([]);
+      const candidates: SfxCandidate[] = [];
+      for (const variation of SFX_VARIATIONS) {
+        const candidatePrompt = `${sfxPrompt} ${variation.direction} Total duration 1.5 seconds.`;
+        const generated = await generateSfxTake(candidatePrompt);
+        candidates.push({ ...variation, ...generated });
+        setSfxCandidates([...candidates]);
+      }
+      if (candidates[0]) {
+        await jsonAction("sfx-select", { assetId: candidates[0].assetId });
+        setSfxUrl(candidates[0].url);
+      }
       await refreshHistory();
-      setMessage("A fresh version of the actor's signature sound is ready.");
+      setMessage("Four short character-specific SFX takes are ready. Preview them and choose the strongest signature.");
+    });
+  }
+
+  function selectSfxCandidate(candidate: SfxCandidate) {
+    void run("sfx-select", async () => {
+      await jsonAction("sfx-select", { assetId: candidate.assetId });
+      setSfxUrl(candidate.url);
+      await refreshHistory();
+      window.dispatchEvent(new CustomEvent("chaplin:media-updated", { detail: { characterId: character.id } }));
+      setMessage(`${candidate.label} is now ${character.name}'s reusable signature SFX.`);
     });
   }
 
@@ -319,11 +433,17 @@ export default function CharacterProductionStudio({ character }: { character: Ch
 
   function generateImage() {
     void run("image", async () => {
-      const data = (await jsonAction("image", { prompt: imagePrompt })) as { url: string };
+      const data = (await jsonAction("image", {
+        prompt: imagePrompt,
+        imagePurpose,
+        referenceImage,
+      })) as { url: string };
       setGeneratedImage(data.url);
       addCharacterImage(character.id, data.url);
       await refreshHistory();
-      setMessage("Still generated and added to the actor gallery. It is now the video reference frame.");
+      setMessage(imagePurpose === "identity"
+        ? "Identity hero generated from the actor's canonical visual seed. Review it, then set it as the hero cover if it should become the new identity reference."
+        : "Scene frame generated from the actor's visual reference and added to the gallery. It is now ready for Seedance.");
     });
   }
 
@@ -337,11 +457,18 @@ export default function CharacterProductionStudio({ character }: { character: Ch
       form.set("file", file);
       const response = await fetch("/api/admin/upload", { method: "POST", body: form });
       if (!response.ok) throw new Error(await errorFrom(response));
-      const data = (await response.json()) as { url: string };
+      const data = (await response.json()) as { id: string; url: string };
+      const selectResponse = await fetch("/api/characters/profile-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ characterId: character.id, assetId: data.id, slot: "cover" }),
+      });
+      if (!selectResponse.ok) throw new Error(await errorFrom(selectResponse));
       setGeneratedImage(data.url);
+      setCanonicalReferenceImage(data.url);
       if (!character.galleryUrls?.includes(data.url)) addCharacterImage(character.id, data.url);
       await refreshHistory();
-      setMessage("Reference image uploaded to the Supabase CDN and selected for Seedance.");
+      setMessage("Reference image uploaded and locked as this actor's canonical visual seed for every future still and video.");
     });
   }
 
@@ -360,8 +487,16 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     setSfxPrompt(scene.sfx);
     setThemePrompt(scene.theme);
     setImagePrompt(scene.image);
+    setImagePurpose("scene");
     setScenePrompt(scene.video);
     setSceneBlueprint(scene.blueprint);
+  }
+
+  function chooseImagePurpose(purpose: ImagePurpose) {
+    setImagePurpose(purpose);
+    setImagePrompt(purpose === "identity"
+      ? composeIdentityImagePrompt(character)
+      : buildScenePackage(character, magicSceneIndex).image);
   }
 
   function applyMagicScene() {
@@ -389,9 +524,18 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   const seedModelsFailed = status?.providers?.seedModels?.status === "failed";
   const seedModelsNeedActivation =
     seedModelsFailed && /not activated|activate the model/i.test(status?.providers?.seedModels?.error ?? "");
+  const activeStepMeta = WORKFLOW_STEPS.find((step) => step.id === activeStep) ?? WORKFLOW_STEPS[0];
+  const completedSteps = new Set<number>([
+    ...(character.voiceId ? [1] : []),
+    ...(speechUrl ? [2] : []),
+    ...(sfxUrl ? [3] : []),
+    ...(themeUrl ? [4] : []),
+    ...(generatedImage || referenceImage ? [5] : []),
+    ...(generatedVideo || character.videoUrl ? [6] : []),
+  ]);
 
   return (
-    <section className="poster-card rounded-md overflow-hidden">
+    <section className="overflow-hidden" data-production-workflow>
       <div className="p-5 sm:p-6 border-b border-line bg-accent/5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -415,9 +559,27 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             </span>
           </div>
         </div>
+        <div className="mt-5 flex gap-1 overflow-x-auto pb-1 no-scrollbar" aria-label="Production workflow steps">
+          {WORKFLOW_STEPS.map((step) => {
+            const isActive = step.id === activeStep;
+            const isComplete = completedSteps.has(step.id);
+            return (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => setActiveStep(step.id)}
+                className={`flex min-w-24 shrink-0 items-center gap-2 border-b-2 px-2.5 py-2 text-left transition-colors sm:min-w-28 ${isActive ? "border-accent text-ink" : "border-transparent text-grey hover:text-ink"}`}
+                aria-current={isActive ? "step" : undefined}
+              >
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${isComplete ? "border-accent-secondary bg-accent-secondary text-paper" : isActive ? "border-accent text-accent" : "border-line"}`}>{isComplete ? "✓" : step.id}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide">{step.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="p-5 sm:p-6 flex flex-col gap-7">
+      <div className="p-5 sm:p-6 flex flex-col gap-6">
         {seedModelsNeedActivation && (
           <div className="rounded-md border border-amber-500/60 bg-amber-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -472,6 +634,13 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             {busy === "magic-scene" ? "Directing scene..." : "✦ Magic Scene"}
           </button>
         </div>
+        <div className="flex items-end justify-between gap-4 border-b border-line pb-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">Step {activeStepMeta.id} of {WORKFLOW_STEPS.length}</p>
+            <h3 className="reel-title mt-1 text-2xl">{activeStepMeta.title}</h3>
+          </div>
+          <span className="hidden text-right text-[11px] text-grey sm:block">Your actor’s identity remains connected through every stage.</span>
+        </div>
         <details className="rounded-md border border-line bg-paper/40 p-4" data-scene-blueprint>
           <summary className="cursor-pointer text-sm font-semibold">Director blueprint · {sceneBlueprint.sceneName}</summary>
           <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
@@ -483,8 +652,8 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <p><span className="text-grey">Final frame:</span> {sceneBlueprint.finalFrame}</p>
           </div>
         </details>
-        <div className="grid md:grid-cols-2 gap-5">
-          <div className="border border-line rounded-md p-4 flex flex-col gap-3">
+        <div className="grid gap-5">
+          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 1 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">1. Unique voice identity</h3>
               {character.voiceId && <span className="text-[10px] text-emerald-600 uppercase">Voice locked</span>}
@@ -533,7 +702,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             ))}
           </div>
 
-          <div className="border border-line rounded-md p-4 flex flex-col gap-3">
+          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 2 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">2. Dialogue in the locked voice</h3>
               <QuickWriteButton
@@ -556,7 +725,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
         </div>
 
-        <div className="border border-line rounded-md p-4 flex flex-col gap-3">
+        <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 3 ? "" : "hidden"}`}>
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold text-sm">3. Signature SFX</h3>
             <QuickWriteButton
@@ -567,15 +736,42 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             />
           </div>
           <input data-scene-field="sfx" value={sfxPrompt} onChange={(event) => setSfxPrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <button onClick={generateSfx} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
-              {busy === "sfx" ? "Building sound..." : "Generate 5-second SFX"}
+              {busy === "sfx" ? `Creating take ${Math.min(sfxCandidates.length + 1, 4)} of 4...` : "Generate 4 short SFX takes"}
             </button>
-            {sfxUrl && <div className="flex-1 min-w-64"><MediaPlayer src={sfxUrl} label={`${character.name} signature SFX`} compact /></div>}
+            <span className="text-[10px] uppercase tracking-[0.14em] text-grey">1.5 seconds each</span>
           </div>
+          {sfxCandidates.length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2" data-sfx-candidates>
+              {sfxCandidates.map((candidate, index) => {
+                const selected = sfxUrl === candidate.url;
+                return (
+                  <div key={candidate.url} className={`rounded-sm border p-3 ${selected ? "border-accent bg-accent/5" : "border-line"}`} data-sfx-candidate={index + 1}>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold">Take {index + 1} · {candidate.label}</span>
+                      <button
+                        type="button"
+                        onClick={() => selectSfxCandidate(candidate)}
+                        disabled={Boolean(busy)}
+                        className={`text-[10px] font-semibold ${selected ? "text-emerald-500" : "text-accent hover:underline"}`}
+                      >
+                        {busy === "sfx-select" && !selected ? "Selecting..." : selected ? "Selected ✓" : "Use this take"}
+                      </button>
+                    </div>
+                    <MediaPlayer src={candidate.url} label={`${character.name} SFX take ${index + 1}`} compact />
+                  </div>
+                );
+              })}
+            </div>
+          ) : sfxUrl ? (
+            <MediaPlayer src={sfxUrl} label={`${character.name} signature SFX`} compact />
+          ) : (
+            <p className="text-xs text-grey">Generate four distinct short reads, then select the one that best identifies the actor.</p>
+          )}
         </div>
 
-        <div className="border border-line rounded-md p-4 flex flex-col gap-3">
+        <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 4 ? "" : "hidden"}`}>
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold text-sm">4. Theme score</h3>
             <QuickWriteButton
@@ -594,20 +790,55 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-5">
-          <div className="border border-line rounded-md p-4 flex flex-col gap-3">
+        <div className="grid gap-5">
+          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 5 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-semibold text-sm">5. Consistent scene still</h3>
+              <h3 className="font-semibold text-sm">5. Define the actor on screen</h3>
               <QuickWriteButton
-                field="image"
+                field={imagePurpose === "identity" ? "identity-image" : "image"}
                 busy={Boolean(busy) || Boolean(quickWriting)}
-                writing={quickWriting === "image"}
-                onClick={() => void quickWrite("image", imagePrompt, setImagePrompt)}
+                writing={quickWriting === (imagePurpose === "identity" ? "identity-image" : "image")}
+                onClick={() => void quickWrite(imagePurpose === "identity" ? "identity-image" : "image", imagePrompt, setImagePrompt)}
               />
             </div>
+            <div className="grid grid-cols-2 rounded-md border border-line p-1" data-image-purpose>
+              <button
+                type="button"
+                onClick={() => chooseImagePurpose("identity")}
+                className={`rounded-sm px-3 py-2 text-left ${imagePurpose === "identity" ? "bg-accent text-paper" : "text-grey hover:text-ink"}`}
+                data-image-purpose-option="identity"
+              >
+                <span className="block text-xs font-semibold">Identity Hero</span>
+                <span className="block text-[10px] opacity-75">Who this actor is</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => chooseImagePurpose("scene")}
+                className={`rounded-sm px-3 py-2 text-left ${imagePurpose === "scene" ? "bg-accent text-paper" : "text-grey hover:text-ink"}`}
+                data-image-purpose-option="scene"
+              >
+                <span className="block text-xs font-semibold">Scene Frame</span>
+                <span className="block text-[10px] opacity-75">What happens next</span>
+              </button>
+            </div>
+            <p className="text-[11px] leading-relaxed text-grey">
+              {imagePurpose === "identity"
+                ? `Create the definitive casting image: a repeatable face, silhouette, wardrobe, expression, world, lens, and motivated light derived from the actor's personality.${referenceImage ? " The locked identity seed below remains the basis for the person." : " This first accepted image will become the actor's visual seed."}`
+                : `Create a story frame from the selected identity reference${referenceImage ? " shown in the video panel" : "—choose or upload an identity image first"}. The face and wardrobe stay locked while only the dramatic moment changes.`}
+            </p>
+            {referenceImage && (
+              <div className="flex items-center gap-3 rounded-sm border border-accent/50 bg-accent/5 p-2" data-identity-reference>
+                {/* eslint-disable-next-line @next/next/no-img-element -- generated and uploaded provider URLs are dynamic */}
+                <img src={referenceImage} alt={`${character.name} canonical identity seed`} className="h-14 w-20 shrink-0 rounded-sm object-cover" />
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Identity seed locked</span>
+                  <span className="mt-1 block text-[10px] leading-snug text-grey">Every Seedream still and Seedance video preserves this face, age, hair, proportions, and signature wardrobe.</span>
+                </span>
+              </div>
+            )}
             <textarea data-scene-field="image" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
             <button onClick={generateImage} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
-              {busy === "image" ? "Seedream is creating..." : "Generate scene image"}
+              {busy === "image" ? "Seedream is creating..." : imagePurpose === "identity" ? "Generate identity hero" : "Generate scene frame"}
             </button>
             <div className="flex items-center gap-2">
               <span className="h-px bg-line flex-1" />
@@ -633,7 +864,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             )}
           </div>
 
-          <div className="border border-line rounded-md p-4 flex flex-col gap-3">
+          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 6 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">6. Animate a five-second scene</h3>
               <QuickWriteButton
@@ -659,7 +890,20 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
         </div>
 
-        <section data-generation-history className="border border-line rounded-md overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
+          <button type="button" onClick={() => setActiveStep((current) => Math.max(1, current - 1))} disabled={activeStep === 1} className="rounded-full border border-line px-4 py-2 text-xs font-semibold text-grey hover:border-accent hover:text-ink disabled:cursor-not-allowed disabled:opacity-30">← Back</button>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-grey">{completedSteps.has(activeStep) ? "Stage complete" : "Keep shaping the take"}</p>
+            {activeStep < WORKFLOW_STEPS.length ? (
+              <button type="button" onClick={() => setActiveStep((current) => Math.min(WORKFLOW_STEPS.length, current + 1))} className="mt-1 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:opacity-90">Continue to {WORKFLOW_STEPS[activeStep].label} →</button>
+            ) : (
+              <a href="#generated-scene-log" className="mt-1 inline-block rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:opacity-90">Review outputs ↓</a>
+            )}
+          </div>
+        </div>
+
+        <details id="generated-scene-log" data-generation-history className="border border-line rounded-md overflow-hidden">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold hover:bg-white/[0.03]">Generated Scene Log · {assetHistory.length} saved assets</summary>
           <div className="px-4 py-3 border-b border-line flex flex-wrap items-center justify-between gap-2 bg-white/[0.02]">
             <div>
               <h3 className="font-semibold text-sm">Generated Scene Log</h3>
@@ -681,8 +925,28 @@ export default function CharacterProductionStudio({ character }: { character: Ch
                       : asset.kind === "video"
                         ? "Generated scene"
                         : "Scene still";
+                const profileOption: { slot: ProfileSlot; label: string } | null = asset.kind === "dialogue"
+                  ? { slot: "voice", label: "Use as main profile voice" }
+                  : asset.kind === "theme"
+                    ? { slot: "theme", label: "Use as profile theme" }
+                    : asset.kind === "video"
+                      ? { slot: "video", label: "Use as hero video" }
+                      : ["gallery", "avatar", "banner"].includes(asset.kind)
+                        ? { slot: "cover", label: "Use as hero cover" }
+                        : null;
+                const featuredIds = status?.production?.featured;
+                const selectedAssetId = profileOption?.slot === "voice"
+                  ? featuredIds?.voiceAssetId
+                  : profileOption?.slot === "theme"
+                    ? featuredIds?.themeAssetId
+                    : profileOption?.slot === "video"
+                      ? featuredIds?.videoAssetId
+                      : profileOption?.slot === "cover"
+                        ? featuredIds?.coverAssetId
+                        : null;
+                const isFeatured = selectedAssetId === asset.id;
                 return (
-                  <article key={asset.id} className="rounded-md border border-line bg-black/10 p-3 min-w-0">
+                  <article key={asset.id} className={`rounded-md border bg-black/10 p-3 min-w-0 ${isFeatured ? "border-accent shadow-[0_0_0_1px_rgba(244,72,112,0.35)]" : "border-line"}`} data-media-asset={asset.kind} data-featured={isFeatured ? "true" : "false"}>
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="min-w-0">
                         <p className="text-xs font-semibold">{label}</p>
@@ -700,6 +964,27 @@ export default function CharacterProductionStudio({ character }: { character: Ch
                       // eslint-disable-next-line @next/next/no-img-element -- generated CDN URLs are dynamic
                       <img src={asset.url} alt={`${character.name} generated still`} loading="lazy" className="w-full aspect-video object-cover rounded-sm border border-line" />
                     )}
+                    {profileOption && (
+                      <details className="relative mt-3" data-profile-media-menu>
+                        <summary className="cursor-pointer list-none rounded-sm border border-accent/60 px-3 py-2 text-center text-[11px] font-semibold text-accent hover:bg-accent/10">
+                          {isFeatured ? "On profile âœ“" : "Set as..."}
+                        </summary>
+                        <div className="mt-2 rounded-sm border border-line bg-paper p-2 shadow-xl">
+                          <button
+                            type="button"
+                            onClick={() => void selectProfileMedia(asset, profileOption.slot)}
+                            disabled={isFeatured || Boolean(selectingAsset)}
+                            className="w-full rounded-sm bg-accent px-3 py-2 text-left text-xs font-semibold text-paper disabled:opacity-50"
+                            data-select-profile-slot={profileOption.slot}
+                          >
+                            {selectingAsset === asset.id ? "Selecting..." : profileOption.label}
+                          </button>
+                          <p className="mt-2 px-1 text-[10px] leading-relaxed text-grey">
+                            This becomes the default {profileOption.slot} shown on the public actor profile and connected hero surfaces.
+                          </p>
+                        </div>
+                      </details>
+                    )}
                     {asset.prompt && (
                       <details className="mt-3 border-t border-line pt-2">
                         <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-grey hover:text-accent">Original prompt</summary>
@@ -711,7 +996,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
               })}
             </div>
           )}
-        </section>
+        </details>
 
         {message && <p className={`text-xs rounded-sm px-3 py-2 ${message.toLowerCase().includes("failed") || message.includes("not configured") ? "bg-red-500/10 text-red-600" : "bg-accent/10 text-ink"}`}>{message}</p>}
       </div>

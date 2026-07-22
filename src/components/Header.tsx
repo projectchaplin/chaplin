@@ -1,27 +1,30 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useChaplinStore } from "@/lib/store";
 import type { AppRole } from "@/lib/types";
 import Avatar from "@/components/Avatar";
 import HydrateStore from "@/components/HydrateStore";
 
+type AuthIdentity = { id: string; email: string; name: string; role: "creator" | "brand" | "admin" };
+
 const ROLE_META: Record<AppRole, { label: string; short: string; description: string }> = {
   maker: {
-    label: "Actor Maker",
-    short: "Maker",
-    description: "Build actors, voices, media, and track earnings.",
+    label: "Creator",
+    short: "Creator",
+    description: "Post, collaborate, build identities, and develop series.",
   },
   caster: {
-    label: "Caster",
-    short: "Caster",
-    description: "Discover actors and cast them into stories.",
+    label: "Creator",
+    short: "Creator",
+    description: "Post, collaborate, build identities, and develop series.",
   },
   brand: {
-    label: "Brand",
-    short: "Brand",
-    description: "Cast AI actors for ads, reels, campaigns, and branded stories.",
+    label: "Creator",
+    short: "Creator",
+    description: "Post, collaborate, build identities, and develop series.",
   },
   admin: {
     label: "Super Admin",
@@ -30,7 +33,7 @@ const ROLE_META: Record<AppRole, { label: string; short: string; description: st
   },
 };
 
-const ROLE_ORDER: AppRole[] = ["caster", "maker", "brand", "admin"];
+const ROLE_ORDER: AppRole[] = ["maker", "admin"];
 
 export default function Header() {
   const users = useChaplinStore((state) => state.users);
@@ -38,44 +41,103 @@ export default function Header() {
   const activeRole = useChaplinStore((state) => state.activeRole);
   const setCurrentUser = useChaplinStore((state) => state.setCurrentUser);
   const switchDemoRole = useChaplinStore((state) => state.switchDemoRole);
+  const syncAuthenticatedUser = useChaplinStore((state) => state.syncAuthenticatedUser);
   const [open, setOpen] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
+
+  useEffect(() => {
+    const updateHeader = () => setCompact(window.scrollY > 48);
+
+    updateHeader();
+    window.addEventListener("scroll", updateHeader, { passive: true });
+    return () => window.removeEventListener("scroll", updateHeader);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/auth", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<{ identity: AuthIdentity | null }> : { identity: null })
+      .then(({ identity }) => {
+        if (cancelled || !identity) return;
+        setAuthIdentity(identity);
+        syncAuthenticatedUser(identity);
+      });
+    return () => { cancelled = true; };
+  }, [syncAuthenticatedUser]);
+
+  async function signOut() {
+    await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
+    window.location.assign("/");
+  }
 
   const currentUser = users.find((user) => user.id === currentUserId) ?? users[0];
-  const roleUsers = users.filter((user) => user.roleBadges.includes(activeRole));
+  const roleUsers = users.filter((user) => activeRole === "admin"
+    ? user.roleBadges.includes("admin")
+    : user.roleBadges.some((role) => role !== "admin"));
   const contextLink = activeRole === "admin"
     ? { href: "/admin", label: "Admin" }
-    : activeRole === "maker"
-      ? { href: "/studio", label: "Maker Studio" }
-      : activeRole === "brand"
-        ? { href: "/characters", label: "Brand casting" }
-      : { href: "/characters", label: "Start casting" };
+    : { href: "/feed", label: "Creator feed" };
 
   return (
-    <header className="sticky top-0 z-[70] bg-paper/90 backdrop-blur-xl border-b border-line">
+    <header
+      data-header-compact={compact ? "true" : "false"}
+      className={`sticky top-0 z-[70] border-b backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-300 ${compact ? "border-line/70 bg-paper/95 shadow-lg shadow-black/10" : "border-line bg-paper/90"}`}
+    >
       <HydrateStore />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="accent-rule w-6 rounded-full" />
-          <span className="marquee-title text-xl sm:text-2xl leading-none tracking-widest">CHAPLIN</span>
+      <div className={`max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3 transition-[height] duration-300 ${compact ? "h-12" : "h-16"}`}>
+        <Link
+          href="/"
+          aria-label="Chaplin home"
+          data-header-logo
+          className={`relative flex items-center shrink-0 transition-[width,height] duration-300 ${compact ? "h-9 w-9" : "h-11 w-[8.75rem]"}`}
+        >
+          <span
+            data-header-wordmark
+            className={`absolute inset-y-0 left-0 flex items-center transition-all duration-300 ${compact ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"}`}
+          >
+            <Image
+              src="/brand/chaplin-logo-transparent.png"
+              alt="Chaplin"
+              data-header-full-logo
+              width={1826}
+              height={585}
+              priority
+              quality={90}
+              sizes="140px"
+              className="h-11 w-auto max-w-[8.75rem] object-contain object-left"
+            />
+          </span>
+          <Image
+            src="/brand/chaplin-mark.png"
+            alt=""
+            aria-hidden="true"
+            data-header-compact-mark
+            width={40}
+            height={40}
+            priority
+            className={`absolute inset-0 h-9 w-9 object-contain transition-all duration-300 ${compact ? "scale-100 rotate-0 opacity-100" : "pointer-events-none scale-75 -rotate-6 opacity-0"}`}
+          />
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <Link href={contextLink.href} className="hidden sm:block text-[10px] uppercase tracking-wider text-grey hover:text-accent">
+          <Link href={contextLink.href} className={`hidden sm:block text-[10px] uppercase tracking-wider text-grey hover:text-accent transition-all duration-200 ${compact ? "pointer-events-none max-w-0 -translate-y-1 overflow-hidden opacity-0" : "max-w-28 translate-y-0 opacity-100"}`}>
             {contextLink.label}
           </Link>
+          {!authIdentity && <Link href="/auth" className={`text-[10px] font-semibold uppercase tracking-wider text-accent transition-all duration-200 ${compact ? "hidden" : ""}`}>Sign in</Link>}
           <div className="relative">
             <button
               onClick={() => setOpen((value) => !value)}
               aria-expanded={open}
               aria-label="Switch demo login and role"
-              className={`flex items-center gap-2 rounded-full border px-1.5 py-1 transition-colors ${open ? "border-accent bg-white/[0.06]" : "border-line hover:border-accent"}`}
+              className={`flex items-center rounded-full border py-1 transition-all duration-300 ${compact ? "gap-0 px-1" : "gap-2 px-1.5"} ${open ? "border-accent bg-white/[0.06]" : "border-line hover:border-accent"}`}
             >
               {currentUser && (
                 <span className="accent-ring">
                   <Avatar hue={currentUser.avatarHue} label={currentUser.avatarInitial} src={currentUser.imageUrl} size={32} />
                 </span>
               )}
-              <span className="text-left pr-2 max-w-32 sm:max-w-44">
+              <span className={`text-left overflow-hidden transition-all duration-300 ${compact ? "max-w-0 pr-0 opacity-0" : "max-w-32 pr-2 opacity-100 sm:max-w-44"}`}>
                 <span className="block text-xs sm:text-sm leading-tight font-medium truncate">{currentUser?.name}</span>
                 <span className="block leading-tight text-[9px] sm:text-[10px] text-accent uppercase tracking-wide truncate">
                   {ROLE_META[activeRole].label}
@@ -84,11 +146,11 @@ export default function Header() {
             </button>
 
             {open && (
-              <div className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-[4.25rem] sm:top-auto sm:mt-2 sm:w-[24rem] max-h-[calc(100vh-5rem)] overflow-y-auto rounded-lg border border-line bg-paper-dim shadow-2xl p-3 z-[90]">
+              <div className={`fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[24rem] max-h-[calc(100vh-5rem)] overflow-y-auto rounded-lg border border-line bg-paper-dim shadow-2xl p-3 z-[90] ${compact ? "top-[3.25rem]" : "top-[4.25rem]"}`}>
                 <div className="flex items-start justify-between gap-3 px-1 mb-3">
                   <div>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">Quick view switch</p>
-                    <p className="text-xs text-grey mt-1">Jump between complete role-specific demo sessions.</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{authIdentity ? "Signed-in account" : "Quick view switch"}</p>
+                    <p className="text-xs text-grey mt-1">{authIdentity ? `${authIdentity.email} · ${authIdentity.role}` : "Jump between complete role-specific demo sessions."}</p>
                   </div>
                   <button onClick={() => setOpen(false)} className="text-grey hover:text-ink text-lg leading-none" aria-label="Close role switcher">×</button>
                 </div>
@@ -133,7 +195,7 @@ export default function Header() {
                 </div>
 
                 <div className="border-t border-line mt-3 pt-3 px-1 flex items-center justify-between gap-3">
-                  <span className="text-[10px] text-grey">Navigation and actions update immediately.</span>
+                  {authIdentity ? <button type="button" onClick={() => void signOut()} className="text-xs font-semibold text-grey hover:text-accent">Sign out</button> : <Link href="/auth" onClick={() => setOpen(false)} className="text-xs font-semibold text-accent">Sign in or create account</Link>}
                   {activeRole === "maker" && (
                     <Link href="/characters/new" onClick={() => setOpen(false)} className="text-xs text-accent hover:underline whitespace-nowrap">
                       + New actor

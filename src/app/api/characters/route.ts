@@ -1,4 +1,4 @@
-import { ensureCharacter, persistCharacter } from "@/lib/server/supabase-admin";
+import { ensureCharacter, listCharacters, persistCharacter } from "@/lib/server/supabase-admin";
 import type { Archetype, Character, CharacterProductionBible, LicenseType, VoiceGender } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -17,6 +17,21 @@ const ARCHETYPES = new Set<Archetype>([
 ]);
 const LICENSES = new Set<LicenseType>(["open", "paid", "approval"]);
 const VOICE_GENDERS = new Set<VoiceGender>(["feminine", "masculine", "androgynous"]);
+
+export async function GET() {
+  try {
+    const characters = await listCharacters();
+    return Response.json(
+      { characters },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Could not load AI actors." },
+      { status: 500 }
+    );
+  }
+}
 
 function requiredString(value: unknown, field: string, max = 2000) {
   if (typeof value !== "string" || !value.trim() || value.length > max) {

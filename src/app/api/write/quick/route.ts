@@ -3,11 +3,14 @@ import {
   completeGeneration,
   ensureCharacter,
   failGeneration,
+  getCharacterProductionState,
 } from "@/lib/server/supabase-admin";
 import { calculateGenerationBilling } from "@/lib/server/billing";
+import { anthropicImageBlock } from "@/lib/server/anthropic-image";
 import {
   buildProductionBible,
   buildScenePackage,
+  composeIdentityImagePrompt,
   composeSfxPrompt,
   composeThemePrompt,
   composeVoiceDesignPrompt,
@@ -23,18 +26,21 @@ const FIELDS = [
   "dialogue",
   "sfx",
   "theme",
+  "identity-image",
   "image",
   "video",
 ] as const;
 type QuickField = typeof FIELDS[number];
+const VISUAL_FIELDS = new Set<QuickField>(["identity-image", "image", "video"]);
 
 const FIELD_RULES: Record<QuickField, string> = {
   "voice-description": "Write only an ElevenLabs Voice Design prompt using this order: native language and dialect; gender presentation and age range; quality; 2-5 word persona; 2-3 emotions; timbre, pitch, resonance, pacing, intonation, and pressure behavior. Do not include biography, camera language, SFX, reverb, echo, phone, tape, or celebrity imitation. 65-105 words.",
   "voice-preview": "Write one or two short spoken lines that reveal the actor's distinctive personality and test pacing, emotion, pronunciation, and vocal range. It must sound natural when performed in 6-12 seconds. Output dialogue only.",
   dialogue: "Write a concise, performable line in this actor's established personality and locked voice. Preserve the user's intent, use subtext rather than exposition, and make it memorable without catchphrase clichés. Output dialogue only.",
-  sfx: "Write only an ElevenLabs five-second non-musical one-shot prompt. Use a 0.0-1.5s / 1.5-3.5s / 3.5-5.0s event timeline, physical sound sources, material texture, acoustic distance, room response, and a clean stop. One coherent effect, not a biography or score. No speech, voice, melody, or trailer braam. 45-85 words.",
+  sfx: "Write only an ElevenLabs 1-2 second non-musical signature-sound prompt. Translate the actor's personality into one physical source, a precise material texture, a close acoustic distance, one unusual identifying detail, and a clean stop. It must work as a short repeatable sonic logo, not a sequence, biography, ambience bed, or score. No speech, voice, melody, riser, or trailer braam. 30-55 words.",
   theme: "Write only an Eleven Music prompt for a 12-second instrumental ident. Include BPM, key, a three-note motif, exact instruments, 0-3s / 3-8s / 8-12s development, mix priority, and final cadence. No biography, sound-effect sequence, vocals, choir, lyrics, or copyrighted imitation. 55-95 words.",
-  image: "Write only a Seedream 16:9 first-frame prompt using labeled blocks: SUBJECT anchors; DRAMATIC MOMENT; SET; CAMERA framing, angle, height, and lens; LIGHTING with motivated key direction, fill, edge, and temperature; CONTINUITY locks; EXCLUSIONS. Show a playable decision through face, hands, weight, and eyeline. No biography, plot summary, camera movement, dialogue, typography, logo, or watermark. 130-230 words.",
+  "identity-image": "Write only a Seedream 16:9 Identity Hero prompt for the actor's definitive casting image. Use coherent natural-language blocks in this order: PURPOSE; ACTOR with specific repeatable face anchors; VISIBLE PERSONALITY translating want, contradiction, vulnerability, and pressure behavior into expression, hands, posture, weight, and eyeline; SIGNATURE LOOK with exact wardrobe materials and silhouette; one restrained WORLD detail; COMPOSITION with framing, camera height, angle, lens and negative space; physically motivated LIGHT with direction and temperature; LOCKS AND EXCLUSIONS. One person. The image must instantly explain why this actor is castable, not summarize biography or depict a generic archetype. No plot montage, fashion pose, generic hero stance, dialogue, text, logo, UI, or watermark. 220-360 words and under 600 words.",
+  image: "Write only a Seedream 16:9 story first-frame prompt using coherent natural-language labeled blocks: SUBJECT identity anchors; PERFORMANCE LOGIC from the actor's personality; DRAMATIC MOMENT; SET; CAMERA framing, angle, height, and lens; LIGHTING with motivated key direction, fill, edge, and temperature; CONTINUITY locks; EXCLUSIONS. Show one playable decision through face, hands, weight, and eyeline. No biography, plot summary, camera movement, dialogue, typography, logo, or watermark. 180-300 words and under 600 words.",
   video: "Write only a Seedance five-second IMAGE-TO-VIDEO motion plan. State that the supplied image is exact first frame/source of truth; do not redescribe the actor, wardrobe, set, palette, or biography. Specify 0.0-1.2s, 1.2-3.5s, and 3.5-5.0s subject action; one facial beat; one camera path; fixed source-image axis/lens/horizon; light continuity; secondary motion; final frame; identity and geometry locks. Silent plate: no lip-sync, speech, subtitles, text, logo, or watermark. 130-220 words.",
 };
 
@@ -50,6 +56,7 @@ function localRewrite(field: QuickField, character: Character, currentText: stri
   if (field === "dialogue") return scene.dialogue;
   if (field === "sfx") return composeSfxPrompt(character);
   if (field === "theme") return composeThemePrompt(character);
+  if (field === "identity-image") return composeIdentityImagePrompt(character);
   return field === "image" ? scene.image : scene.video;
 }
 
@@ -90,6 +97,34 @@ export async function POST(request: Request) {
     }
 
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    const production = VISUAL_FIELDS.has(field) ? await getCharacterProductionState(character.id) : null;
+    const visualReference = production?.visualReference ?? null;
+    const promptPayload = JSON.stringify({
+      field,
+      currentText: currentText || null,
+      actor: {
+        name: character.name,
+        archetype: character.archetype,
+        tagline: character.tagline,
+        personality: character.personality,
+        voiceGender: character.voiceGender,
+        voiceDescription: character.voiceDesc,
+        signatureSfx: character.sfxDesc,
+        theme: character.themeDesc,
+        brollLine: character.brollLine ?? null,
+        brollScene: character.brollScene ?? null,
+        productionBible: character.productionBible ?? buildProductionBible(character),
+        visualReference: visualReference ? { source: visualReference.source, assetId: visualReference.assetId } : null,
+      },
+      relatedCurrentFields: context,
+    });
+    const messageContent = visualReference
+      ? [
+          await anthropicImageBlock(visualReference.url),
+          { type: "text" as const, text: `The image above is ${character.name}'s canonical visual identity seed. Base composition and continuity on what is actually visible. Do not invent a conflicting face, age, hair, body, wardrobe, palette, or material.` },
+          { type: "text" as const, text: promptPayload },
+        ]
+      : promptPayload;
     jobId = await beginGeneration({
       characterId: character.id,
       kind: `prompt-${field}`,
@@ -110,24 +145,7 @@ export async function POST(request: Request) {
         system: `You are Chaplin's production copywriter. Rewrite exactly one field for an original fictional AI actor. Preserve useful user intent, character continuity, and provider constraints. Return only the requested field in structured JSON. ${FIELD_RULES[field]}`,
         messages: [{
           role: "user",
-          content: JSON.stringify({
-            field,
-            currentText: currentText || null,
-            actor: {
-              name: character.name,
-              archetype: character.archetype,
-              tagline: character.tagline,
-              personality: character.personality,
-              voiceGender: character.voiceGender,
-              voiceDescription: character.voiceDesc,
-              signatureSfx: character.sfxDesc,
-              theme: character.themeDesc,
-              brollLine: character.brollLine ?? null,
-              brollScene: character.brollScene ?? null,
-              productionBible: character.productionBible ?? buildProductionBible(character),
-            },
-            relatedCurrentFields: context,
-          }),
+          content: messageContent,
         }],
         output_config: {
           format: {
@@ -162,7 +180,7 @@ export async function POST(request: Request) {
     await completeGeneration(
       jobId,
       undefined,
-      { field, characterId: character.id },
+      { field, characterId: character.id, visualReference: visualReference?.url ?? null, visualReferenceSource: visualReference?.source ?? null },
       await calculateGenerationBilling({ kind: "anthropic-prompt", usage })
     );
     return Response.json({ text, provider: "anthropic", model, usage, configured: true });

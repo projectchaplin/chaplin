@@ -34,20 +34,6 @@ export default function StudioPage() {
   const totalCastings = myCharacters.reduce((n, c) => n + c.stats.castings, 0);
   const totalFans = myCharacters.reduce((n, c) => n + c.stats.fans, 0);
 
-  if (world.activeRole === "caster" || world.activeRole === "brand") {
-    return (
-      <div className="max-w-xl mx-auto px-6 py-16 text-center w-full">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-2">{world.activeRole === "brand" ? "Brand workspace" : "Caster workspace"}</p>
-        <h1 className="reel-title text-3xl">{world.activeRole === "brand" ? "Choose an actor for your next ad or reel" : "Cast actors into your next story"}</h1>
-        <p className="text-sm text-grey mt-3 mb-6">Maker production tools and earnings stay private while you cast.</p>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Link href="/characters" className="border border-line rounded-full px-5 py-2.5 text-sm hover:border-accent">Browse actors</Link>
-          <Link href="/studio/write" className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold">Write a story</Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 w-full">
       <div className="flex items-center gap-4 mb-8">
@@ -86,8 +72,8 @@ export default function StudioPage() {
       <div className="flex gap-2 mb-6 text-sm">
         {(
           [
-            ["characters", `My AI Actors (${myCharacters.length})`],
-            ["stories", `My Stories (${myStories.length})`],
+            ["characters", `My identities (${myCharacters.length})`],
+            ["stories", `My scenes (${myStories.length})`],
             ["earnings", `Earnings (${myLedger.length})`],
           ] as const
         ).map(([key, label]) => (

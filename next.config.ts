@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   images: {
+    qualities: [75, 90],
     remotePatterns: supabaseHostname
       ? [
           {

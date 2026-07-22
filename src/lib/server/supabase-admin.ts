@@ -125,6 +125,106 @@ export async function ensureCharacter(character: Character) {
   assert(error, "Register AI actor for generation");
 }
 
+interface CharacterCatalogRow {
+  id: string;
+  maker_id: string | null;
+  name: string;
+  archetype: Character["archetype"];
+  tagline: string;
+  personality: string;
+  voice_gender: Character["voiceGender"];
+  voice_description: string;
+  sfx_description: string;
+  theme_description: string;
+  production_bible: Character["productionBible"] | null;
+  avatar_hue: number;
+  image_url: string | null;
+  banner_url: string | null;
+  license_type: Character["licenseType"];
+  royalty_rate: number;
+  castings_count: number;
+  fans_count: number;
+  earnings_total: number;
+  created_at: string;
+  featured_voice_asset_id: string | null;
+  featured_theme_asset_id: string | null;
+  featured_video_asset_id: string | null;
+  featured_cover_asset_id: string | null;
+}
+
+/** Returns the shared actor catalogue used by every browser and device. */
+export async function listCharacters(): Promise<Character[]> {
+  const supabase = adminClient();
+  const [characters, voices, assets] = await Promise.all([
+    supabase
+      .from("characters")
+      .select("id,maker_id,name,archetype,tagline,personality,voice_gender,voice_description,sfx_description,theme_description,production_bible,avatar_hue,image_url,banner_url,license_type,royalty_rate,castings_count,fans_count,earnings_total,created_at,featured_voice_asset_id,featured_theme_asset_id,featured_video_asset_id,featured_cover_asset_id")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("character_voices")
+      .select("character_id,provider_voice_id")
+      .eq("status", "active"),
+    supabase
+      .from("media_assets")
+      .select("id,character_id,kind,url,created_at")
+      .in("kind", ["avatar", "banner", "gallery", "video"])
+      .not("character_id", "is", null)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  assert(characters.error, "Load AI actors");
+  assert(voices.error, "Load AI actor voices");
+  assert(assets.error, "Load AI actor media");
+
+  const voiceByCharacter = new Map(
+    (voices.data ?? []).map((voice) => [voice.character_id, voice.provider_voice_id])
+  );
+  const mediaByCharacter = new Map<string, { avatar?: string; banner?: string; video?: string; gallery: string[] }>();
+  for (const asset of assets.data ?? []) {
+    if (!asset.character_id) continue;
+    const media = mediaByCharacter.get(asset.character_id) ?? { gallery: [] };
+    if (asset.kind === "gallery") media.gallery.push(asset.url);
+    if (asset.kind === "avatar" && !media.avatar) media.avatar = asset.url;
+    if (asset.kind === "banner" && !media.banner) media.banner = asset.url;
+    if (asset.kind === "video" && !media.video) media.video = asset.url;
+    mediaByCharacter.set(asset.character_id, media);
+  }
+
+  return ((characters.data ?? []) as CharacterCatalogRow[]).map((row) => {
+    const media = mediaByCharacter.get(row.id);
+    const characterAssets = (assets.data ?? []).filter((asset) => asset.character_id === row.id);
+    const featuredCover = characterAssets.find((asset) => asset.id === row.featured_cover_asset_id)?.url;
+    const featuredVideo = characterAssets.find((asset) => asset.id === row.featured_video_asset_id)?.url;
+    return {
+      id: row.id,
+      makerId: row.maker_id ?? "u-admin",
+      name: row.name,
+      archetype: row.archetype,
+      tagline: row.tagline,
+      personality: row.personality,
+      voiceGender: row.voice_gender,
+      voiceDesc: row.voice_description,
+      voiceId: voiceByCharacter.get(row.id),
+      sfxDesc: row.sfx_description,
+      themeDesc: row.theme_description,
+      productionBible: row.production_bible ?? undefined,
+      avatarHue: row.avatar_hue,
+      imageUrl: featuredCover ?? media?.gallery[0] ?? media?.avatar ?? row.image_url ?? undefined,
+      bannerUrl: featuredCover ?? media?.banner ?? row.banner_url ?? undefined,
+      videoUrl: featuredVideo ?? media?.video,
+      galleryUrls: media?.gallery.length ? media.gallery : undefined,
+      licenseType: row.license_type,
+      royaltyRate: Number(row.royalty_rate),
+      createdAt: row.created_at,
+      stats: {
+        castings: row.castings_count,
+        fans: row.fans_count,
+        earnings: Number(row.earnings_total),
+      },
+    };
+  });
+}
+
 export async function seedAdminCatalog() {
   const supabase = adminClient();
 
@@ -268,7 +368,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
 
 export async function getCharacterProductionState(characterId: string) {
   const supabase = adminClient();
-  const [voice, assets] = await Promise.all([
+  const [voice, assets, character] = await Promise.all([
     supabase
       .from("character_voices")
       .select("provider_voice_id,preview_url")
@@ -280,38 +380,165 @@ export async function getCharacterProductionState(characterId: string) {
       .select("id,kind,url,provider,prompt,duration_seconds,metadata,created_at")
       .eq("character_id", characterId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("characters")
+      .select("image_url,banner_url,featured_voice_asset_id,featured_theme_asset_id,featured_video_asset_id,featured_cover_asset_id")
+      .eq("id", characterId)
+      .single(),
   ]);
   assert(voice.error, "Load character voice");
   assert(assets.error, "Load character media");
+  assert(character.error, "Load featured character media");
+  if (!character.data) throw new Error("Load featured character media: AI actor not found.");
   const rows = assets.data ?? [];
+  const featured = character.data;
   const activeVoiceId = voice.data?.provider_voice_id ?? null;
-  const latestDialogue = rows.find((asset) => {
+  const featuredDialogue = rows.find((asset) => asset.id === featured.featured_voice_asset_id);
+  const latestDialogue = featuredDialogue ?? rows.find((asset) => {
     if (asset.kind !== "dialogue" || !activeVoiceId) return false;
     const metadata = asset.metadata as Record<string, unknown> | null;
     return metadata?.voiceId === activeVoiceId;
   });
-  const latestVideo =
+  const featuredVideo = rows.find((asset) => asset.id === featured.featured_video_asset_id);
+  const latestVideo = featuredVideo ??
     rows.find((asset) => asset.kind === "video" && asset.url.startsWith("https://")) ??
     rows.find((asset) => asset.kind === "video");
+  const featuredTheme = rows.find((asset) => asset.id === featured.featured_theme_asset_id);
+  const featuredSfx = rows.find((asset) => {
+    if (asset.kind !== "sfx") return false;
+    const metadata = asset.metadata as Record<string, unknown> | null;
+    return metadata?.featuredSfx === true;
+  });
+  const featuredCover = rows.find((asset) => asset.id === featured.featured_cover_asset_id);
+  const identityReference = rows.find((asset) => {
+    if (asset.kind !== "gallery") return false;
+    const metadata = asset.metadata as Record<string, unknown> | null;
+    return metadata?.imagePurpose === "identity" || asset.provider === "upload";
+  });
+  const fallbackReference = rows.find((asset) => ["gallery", "avatar", "banner"].includes(asset.kind));
+  const visualReference = featuredCover
+    ? { url: featuredCover.url, assetId: featuredCover.id, source: "selected-cover" as const }
+    : identityReference
+      ? { url: identityReference.url, assetId: identityReference.id, source: "identity-asset" as const }
+      : featured.image_url
+        ? { url: featured.image_url, assetId: null, source: "character-image" as const }
+        : fallbackReference
+          ? { url: fallbackReference.url, assetId: fallbackReference.id, source: "character-media" as const }
+          : featured.banner_url
+            ? { url: featured.banner_url, assetId: null, source: "character-banner" as const }
+            : null;
 
   return {
     voiceId: activeVoiceId,
     voicePreviewUrl: voice.data?.preview_url ?? null,
     latestDialogueUrl: latestDialogue?.url ?? null,
-    latestSfxUrl: rows.find((asset) => asset.kind === "sfx")?.url ?? null,
-    latestThemeUrl: rows.find((asset) => asset.kind === "theme")?.url ?? null,
-    latestImageUrl: rows.find((asset) => asset.kind === "gallery")?.url ?? null,
+    latestSfxUrl: featuredSfx?.url ?? rows.find((asset) => asset.kind === "sfx")?.url ?? null,
+    latestThemeUrl: featuredTheme?.url ?? rows.find((asset) => asset.kind === "theme")?.url ?? null,
+    latestImageUrl: featuredCover?.url ?? rows.find((asset) => asset.kind === "gallery")?.url ?? null,
     latestVideoUrl: latestVideo?.url ?? null,
+    visualReference,
+    featured: {
+      voiceAssetId: featured.featured_voice_asset_id,
+      themeAssetId: featured.featured_theme_asset_id,
+      videoAssetId: featured.featured_video_asset_id,
+      coverAssetId: featured.featured_cover_asset_id,
+    },
     assets: rows,
   };
 }
 
+export async function selectCharacterSfxAsset(input: { characterId: string; assetId: string }) {
+  const supabase = adminClient();
+  const assets = await supabase
+    .from("media_assets")
+    .select("id,url,metadata")
+    .eq("character_id", input.characterId)
+    .eq("kind", "sfx");
+  assert(assets.error, "Load character SFX takes");
+  const selected = (assets.data ?? []).find((asset) => asset.id === input.assetId);
+  if (!selected) throw new Error("Select character SFX: take not found.");
+
+  const updates = await Promise.all((assets.data ?? []).map((asset) => {
+    const metadata = asset.metadata && typeof asset.metadata === "object"
+      ? asset.metadata as Record<string, unknown>
+      : {};
+    return supabase
+      .from("media_assets")
+      .update({ metadata: { ...metadata, featuredSfx: asset.id === input.assetId } })
+      .eq("id", asset.id);
+  }));
+  for (const update of updates) assert(update.error, "Select character SFX");
+  return { assetId: selected.id, url: selected.url };
+}
+
+export type CharacterProfileSlot = "voice" | "theme" | "video" | "cover";
+
+const PROFILE_SLOT_COLUMNS: Record<CharacterProfileSlot, string> = {
+  voice: "featured_voice_asset_id",
+  theme: "featured_theme_asset_id",
+  video: "featured_video_asset_id",
+  cover: "featured_cover_asset_id",
+};
+
+const PROFILE_SLOT_KINDS: Record<CharacterProfileSlot, string[]> = {
+  voice: ["dialogue"],
+  theme: ["theme"],
+  video: ["video"],
+  cover: ["gallery", "avatar", "banner"],
+};
+
+export async function selectCharacterProfileMedia(input: {
+  characterId: string;
+  assetId: string;
+  slot: CharacterProfileSlot;
+}) {
+  const supabase = adminClient();
+  const asset = await supabase
+    .from("media_assets")
+    .select("id,character_id,kind,url,metadata")
+    .eq("id", input.assetId)
+    .eq("character_id", input.characterId)
+    .single();
+  assert(asset.error, "Load selected profile media");
+  if (!asset.data) throw new Error("Load selected profile media: asset not found.");
+  if (!PROFILE_SLOT_KINDS[input.slot].includes(asset.data.kind)) {
+    throw new Error(`This asset cannot be used as the profile ${input.slot}.`);
+  }
+
+  if (input.slot === "voice") {
+    const metadata = asset.data.metadata as Record<string, unknown> | null;
+    const voiceId = typeof metadata?.voiceId === "string" ? metadata.voiceId : null;
+    if (!voiceId) throw new Error("This dialogue take is not linked to a locked voice.");
+    const voiceUpdate = await supabase
+      .from("character_voices")
+      .update({
+        provider_voice_id: voiceId,
+        preview_url: asset.data.url,
+        status: "active",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("character_id", input.characterId)
+      .eq("provider", "elevenlabs");
+    assert(voiceUpdate.error, "Select main character voice");
+  }
+
+  const update = await supabase
+    .from("characters")
+    .update({
+      [PROFILE_SLOT_COLUMNS[input.slot]]: input.assetId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.characterId);
+  assert(update.error, "Select profile media");
+  return { slot: input.slot, assetId: input.assetId, url: asset.data.url };
+}
+
 export async function getHomepageBrollState() {
   const supabase = adminClient();
-  const [assets, voices] = await Promise.all([
+  const [assets, voices, selections] = await Promise.all([
     supabase
       .from("media_assets")
-      .select("character_id,kind,url,metadata,created_at")
+      .select("id,character_id,kind,url,metadata,created_at")
       .in("kind", ["video", "dialogue", "theme"])
       .not("character_id", "is", null)
       .order("created_at", { ascending: false }),
@@ -319,9 +546,13 @@ export async function getHomepageBrollState() {
       .from("character_voices")
       .select("character_id,provider_voice_id")
       .eq("status", "active"),
+    supabase
+      .from("characters")
+      .select("id,featured_voice_asset_id,featured_theme_asset_id,featured_video_asset_id"),
   ]);
   assert(assets.error, "Load homepage B-roll");
   assert(voices.error, "Load homepage B-roll voices");
+  assert(selections.error, "Load homepage profile selections");
   const activeVoices = new Map((voices.data ?? []).map((voice) => [voice.character_id, voice.provider_voice_id]));
 
   const characters = new Map<string, {
@@ -330,6 +561,19 @@ export async function getHomepageBrollState() {
     dialogueUrl: string | null;
     themeUrl: string | null;
   }>();
+  const assetsById = new Map((assets.data ?? []).map((asset) => [asset.id, asset]));
+  for (const selection of selections.data ?? []) {
+    const selectedVideo = assetsById.get(selection.featured_video_asset_id);
+    const selectedVoice = assetsById.get(selection.featured_voice_asset_id);
+    const selectedTheme = assetsById.get(selection.featured_theme_asset_id);
+    if (!selectedVideo && !selectedVoice && !selectedTheme) continue;
+    characters.set(selection.id, {
+      characterId: selection.id,
+      videoUrl: selectedVideo?.url ?? null,
+      dialogueUrl: selectedVoice?.url ?? null,
+      themeUrl: selectedTheme?.url ?? null,
+    });
+  }
   for (const asset of assets.data ?? []) {
     if (!asset.character_id) continue;
     const entry = characters.get(asset.character_id) ?? {
@@ -338,10 +582,7 @@ export async function getHomepageBrollState() {
       dialogueUrl: null,
       themeUrl: null,
     };
-    if (
-      asset.kind === "video" &&
-      (!entry.videoUrl || (!entry.videoUrl.startsWith("https://") && asset.url.startsWith("https://")))
-    ) {
+    if (asset.kind === "video" && !entry.videoUrl) {
       entry.videoUrl = asset.url;
     }
     if (asset.kind === "dialogue" && !entry.dialogueUrl) {
@@ -494,6 +735,11 @@ export async function saveCharacterVoice(input: {
     { onConflict: "character_id,provider" }
   );
   assert(error, "Save character voice");
+  const resetFeaturedVoice = await supabase
+    .from("characters")
+    .update({ featured_voice_asset_id: null, updated_at: new Date().toISOString() })
+    .eq("id", input.characterId);
+  assert(resetFeaturedVoice.error, "Reset featured voice take");
 }
 
 function extensionFor(contentType: string) {

@@ -166,3 +166,31 @@ body {
   animation: waveform-pulse 1s ease-in-out infinite;
   transform-origin: center;
 }
+
+@keyframes chaplin-gallery-scroll {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes chaplin-format-enter {
+  from { opacity: 0; transform: translateY(0.38em); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chaplin-gallery-track {
+  animation-name: chaplin-gallery-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.chaplin-gallery-rail:hover .chaplin-gallery-track,
+.chaplin-gallery-rail:focus-within .chaplin-gallery-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chaplin-gallery-track {
+    animation-play-state: paused;
+  }
+}

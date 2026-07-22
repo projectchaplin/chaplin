@@ -1,9 +1,9 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import AdminGenerationLogList from "@/components/AdminGenerationLogList";
 import AdminRefreshButton from "@/components/AdminRefreshButton";
 import AdminSectionNav from "@/components/AdminSectionNav";
 import { getAdminDashboard } from "@/lib/server/supabase-admin";
+import { getServerAuthIdentity } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +12,8 @@ function number(value: number | string | null | undefined) {
 }
 
 export default async function AdminLogsPage() {
-  const role = (await cookies()).get("chaplin-demo-role")?.value ?? "admin";
-  if (role !== "admin") redirect("/");
+  const identity = await getServerAuthIdentity();
+  if (identity?.role !== "admin") redirect("/auth?next=/admin/logs");
   const data = await getAdminDashboard();
   const succeeded = data.jobs.filter((job) => job.status === "succeeded").length;
   const failed = data.jobs.filter((job) => job.status === "failed").length;

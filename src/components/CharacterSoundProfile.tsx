@@ -18,6 +18,7 @@ function SoundAsset({
   sourceLabel,
   loading,
   canProduce,
+  onOpenProduction,
 }: {
   label: string;
   description: string;
@@ -25,6 +26,7 @@ function SoundAsset({
   sourceLabel: string;
   loading: boolean;
   canProduce: boolean;
+  onOpenProduction?: () => void;
 }) {
   return (
     <div className="border-t border-line first:border-t-0 pt-4 first:pt-0">
@@ -55,9 +57,9 @@ function SoundAsset({
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-grey">Not generated yet.</span>
           {canProduce && (
-            <a href="#production-studio" className="text-xs text-accent hover:underline">
+            <button type="button" onClick={onOpenProduction} className="text-xs text-accent hover:underline">
               Generate in Production Studio →
-            </a>
+            </button>
           )}
         </div>
       )}
@@ -68,9 +70,11 @@ function SoundAsset({
 export default function CharacterSoundProfile({
   character,
   canProduce,
+  onOpenProduction,
 }: {
   character: Character;
   canProduce: boolean;
+  onOpenProduction?: () => void;
 }) {
   const [sounds, setSounds] = useState<SoundState | null>(null);
   const [failed, setFailed] = useState(false);
@@ -126,6 +130,7 @@ export default function CharacterSoundProfile({
         sourceLabel={sounds?.latestDialogueUrl ? "Latest dialogue" : "Locked voice preview"}
         loading={!sounds && !failed}
         canProduce={canProduce}
+        onOpenProduction={onOpenProduction}
       />
       <SoundAsset
         label="Signature SFX"
@@ -134,6 +139,7 @@ export default function CharacterSoundProfile({
         sourceLabel="Latest SFX"
         loading={!sounds && !failed}
         canProduce={canProduce}
+        onOpenProduction={onOpenProduction}
       />
       <SoundAsset
         label="Theme score"
@@ -142,6 +148,7 @@ export default function CharacterSoundProfile({
         sourceLabel="Latest theme"
         loading={!sounds && !failed}
         canProduce={canProduce}
+        onOpenProduction={onOpenProduction}
       />
     </section>
   );

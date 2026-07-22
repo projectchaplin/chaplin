@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useState } from "react";
 import { useChaplinStore } from "@/lib/store";
 import { getCharacter, getUser, resumeForCharacter, ledgerForCharacter } from "@/lib/selectors";
 import Avatar from "@/components/Avatar";
@@ -28,6 +29,7 @@ export default function CharacterProfilePage() {
   const params = useParams<{ id: string }>();
   const world = useChaplinStore((s) => s);
   const character = getCharacter(world, params.id);
+  const [productionOpen, setProductionOpen] = useState(false);
 
   if (!character) {
     return (
@@ -45,6 +47,13 @@ export default function CharacterProfilePage() {
   const ledger = ledgerForCharacter(world, character.id);
   const canProduce = world.activeRole === "admin" || (world.activeRole === "maker" && character.makerId === world.currentUserId);
   const canCast = world.activeRole === "admin" || world.activeRole === "caster" || world.activeRole === "brand";
+
+  function openProductionStudio() {
+    setProductionOpen(true);
+    window.setTimeout(() => {
+      document.getElementById("production-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10 w-full min-w-0 overflow-hidden">
@@ -142,12 +151,6 @@ export default function CharacterProfilePage() {
         </div>
       )}
 
-      {canProduce && (
-        <div id="production-studio" className="mt-6 scroll-mt-24">
-          <CharacterProductionStudio character={character} />
-        </div>
-      )}
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         {/* Left: personality, voice, license terms */}
         <div className="md:col-span-2 flex flex-col gap-6">
@@ -162,7 +165,7 @@ export default function CharacterProfilePage() {
             <CharacterGallery name={character.name} images={character.galleryUrls} />
           )}
 
-          <CharacterSoundProfile character={character} canProduce={canProduce} />
+          <CharacterSoundProfile character={character} canProduce={canProduce} onOpenProduction={openProductionStudio} />
 
           <section className="poster-card rounded-md p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-grey mb-2">
@@ -248,6 +251,30 @@ export default function CharacterProfilePage() {
           )}
         </div>
       </div>
+
+      {canProduce && (
+        <details
+          id="production-studio"
+          open={productionOpen}
+          onToggle={(event) => setProductionOpen(event.currentTarget.open)}
+          className="poster-card mt-6 scroll-mt-24 overflow-hidden rounded-md"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 hover:bg-white/[0.03] sm:px-6">
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">Production Studio</span>
+              <span className="mt-1 block text-[11px] leading-relaxed text-grey">
+                Create or reuse voice, dialogue, sound, images, and video for {character.name}.
+              </span>
+            </span>
+            <span className="shrink-0 rounded-full border border-accent/60 px-3 py-1.5 text-[10px] font-semibold text-accent">
+              {productionOpen ? "Close" : "Open studio"}
+            </span>
+          </summary>
+          <div className="border-t border-line">
+            <CharacterProductionStudio character={character} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }

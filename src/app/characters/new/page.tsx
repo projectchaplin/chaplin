@@ -78,7 +78,6 @@ function SuggestButton({
 export default function NewCharacterPage() {
   const router = useRouter();
   const currentUserId = useChaplinStore((s) => s.currentUserId);
-  const activeRole = useChaplinStore((s) => s.activeRole);
   const addCharacter = useChaplinStore((s) => s.addCharacter);
   const removeCharacter = useChaplinStore((s) => s.removeCharacter);
 
@@ -110,11 +109,9 @@ export default function NewCharacterPage() {
   useEffect(() => {
     if (!suggestingTarget) {
       suggestStartedAt.current = null;
-      setElapsedSeconds(0);
       return;
     }
     suggestStartedAt.current = Date.now();
-    setElapsedSeconds(0);
     const interval = setInterval(() => {
       if (suggestStartedAt.current) {
         setElapsedSeconds(Math.floor((Date.now() - suggestStartedAt.current) / 1000));
@@ -151,6 +148,7 @@ export default function NewCharacterPage() {
       setError("Give Magic Character at least a line or two about who this actor is — that brief drives the whole identity.");
       return;
     }
+    setElapsedSeconds(0);
     setSuggestingTarget(target);
     setError("");
     setSuggestionMessage("");
@@ -210,17 +208,6 @@ export default function NewCharacterPage() {
     }
   }
 
-  if (activeRole === "caster" || activeRole === "brand") {
-    return (
-      <div className="max-w-xl mx-auto px-6 py-16 text-center w-full">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-2">Casting view</p>
-        <h1 className="reel-title text-3xl">Actor creation is reserved for makers</h1>
-        <p className="text-sm text-grey mt-3 mb-6">Switch to Actor Maker from the profile menu to build a new AI actor.</p>
-        <Link href="/characters" className="accent-btn inline-flex rounded-full px-5 py-2.5 text-sm font-semibold">Browse actors</Link>
-      </div>
-    );
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (
@@ -262,6 +249,7 @@ export default function NewCharacterPage() {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(data?.error ?? `Saving the AI actor returned ${response.status}.`);
       }
+      window.dispatchEvent(new CustomEvent("chaplin:catalogue-updated", { detail: { characterId: character.id } }));
       router.push(`/characters/${character.id}`);
     } catch (submitError) {
       removeCharacter(character.id);

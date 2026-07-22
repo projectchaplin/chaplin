@@ -2,6 +2,7 @@ import nextEnv from "@next/env";
 import postgres from "postgres";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readdir } from "node:fs/promises";
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { loadEnvConfig } = nextEnv;
@@ -31,7 +32,13 @@ const sql = postgres({
   ssl: "require",
 });
 try {
-  await sql.file(path.join(projectDir, "supabase", "migrations", "202607210001_admin_catalog.sql"));
+  const migrationsDir = path.join(projectDir, "supabase", "migrations");
+  const migrations = (await readdir(migrationsDir))
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  for (const migration of migrations) {
+    await sql.file(path.join(migrationsDir, migration));
+  }
   console.log("Supabase schema and character-media bucket are ready.");
 } finally {
   await sql.end();

@@ -321,6 +321,52 @@ export default function StoryBuilderForm() {
             ))}
           </div>
 
+          {/* Cast right here — Magic writes FOR the actors you pick. Empty = Magic picks. */}
+          <div data-magic-cast>
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-grey">
+                Cast {castIds.length > 0 ? `(${castIds.length} picked)` : "(optional — Magic picks if you don't)"}
+              </span>
+              <button type="button" onClick={() => setStep(2)} className="text-[10px] text-accent hover:underline">
+                Full cast search →
+              </button>
+            </div>
+            <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              {world.characters.map((character) => {
+                const selected = castIds.includes(character.id);
+                const thumb = character.imageUrl ?? character.bannerUrl ?? character.galleryUrls?.[0];
+                return (
+                  <button
+                    key={character.id}
+                    type="button"
+                    onClick={() => toggleCast(character.id)}
+                    aria-pressed={selected}
+                    className={`relative w-16 shrink-0 overflow-hidden rounded-md border transition-all ${
+                      selected ? "border-accent shadow-[0_0_0_1px_var(--accent),0_0_14px_rgba(244,70,112,0.35)]" : "border-line opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    <span className="block aspect-[3/4] w-full">
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- tiny thumb strip, dynamic CDN URLs
+                        <img src={thumb} alt={character.name} loading="lazy" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center bg-paper text-lg font-semibold text-grey">
+                          {character.name.slice(0, 1)}
+                        </span>
+                      )}
+                    </span>
+                    {selected && (
+                      <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-paper">✓</span>
+                    )}
+                    <span className="block truncate bg-black/60 px-1 py-0.5 text-center text-[8px] font-semibold uppercase text-white">
+                      {character.name.split(" ")[0]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <label className="flex items-center gap-2 text-xs text-grey">
               Runtime
@@ -507,6 +553,51 @@ export default function StoryBuilderForm() {
                 go back and pick your cast
               </button>
               .
+            </div>
+          )}
+
+          {castCharacters.length > 0 && (
+            <div className="poster-card rounded-md p-4" data-cast-board>
+              <div className="mb-3 flex items-baseline justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-grey">
+                  The cast, together ({castCharacters.length})
+                </p>
+                <button onClick={() => setStep(2)} className="text-[11px] text-accent hover:underline">
+                  Change cast
+                </button>
+              </div>
+              <div className="no-scrollbar -mx-1 flex gap-2.5 overflow-x-auto px-1">
+                {castCharacters.map((character) => {
+                  const thumb = character.imageUrl ?? character.bannerUrl ?? character.galleryUrls?.[0];
+                  return (
+                    <Link
+                      key={character.id}
+                      href={`/characters/${character.id}`}
+                      className="group w-24 shrink-0 overflow-hidden rounded-md border border-line transition-colors hover:border-accent sm:w-28"
+                    >
+                      <span className="block aspect-[3/4] w-full overflow-hidden">
+                        {thumb ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- cast board thumbs, dynamic CDN URLs
+                          <img src={thumb} alt={character.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center bg-paper text-2xl font-semibold text-grey">
+                            {character.name.slice(0, 1)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate px-1.5 py-1 text-center text-[9px] font-semibold uppercase">
+                        {character.name}
+                      </span>
+                      <span className="-mt-0.5 block truncate px-1.5 pb-1.5 text-center text-[8px] text-grey">
+                        {ARCHETYPE_LABEL[character.archetype]}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[10px] text-grey">
+                These locked identities feed every image, voice line, and scene render for this {format}.
+              </p>
             </div>
           )}
 

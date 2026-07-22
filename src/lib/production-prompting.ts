@@ -317,9 +317,53 @@ const DIRECTIONS: Record<Archetype, ArchetypeDirection> = {
   },
 };
 
+const LOCAL_FACE_BLUEPRINTS = [
+  {
+    age: "late 30s, with fine forehead lines and lived-in eye texture",
+    anchors: ["broad straight brows with the left sitting slightly higher", "deep-set almond eyes with a faint crease beneath the right eye", "long straight nose, compact mouth, and a squared jaw softened by one cheek dimple"],
+    hair: "dense collar-length wavy dark hair, off-center part, one loose section at the right temple, natural matte finish",
+  },
+  {
+    age: "early 40s, with visible smile lines and an unretouched working face",
+    anchors: ["low arched brows with generous spacing above alert round eyes", "slightly hooked nose with a narrow bridge", "full lower lip, tapered chin, and a small mole high on the left cheek"],
+    hair: "short coarse dark hair, high left part, lightly receded temples, closely controlled sides without a glossy finish",
+  },
+  {
+    age: "early 30s, with clear adult bone structure and natural under-eye detail",
+    anchors: ["strong horizontal brow line broken by a small notch over the right eye", "wide-set hooded eyes with a steady asymmetrical gaze", "rounded nose tip, defined cupid's bow, and a narrow angular jaw"],
+    hair: "thick chin-length textured hair, center-left part, tucked behind one ear, soft flyaways retained",
+  },
+  {
+    age: "late 40s, with sun texture at the temples and no cosmetic smoothing",
+    anchors: ["dense gently curved brows framing close-set observant eyes", "broad nose with a subtle leftward asymmetry", "thin upper lip, pronounced nasolabial lines, and a strong rounded chin"],
+    hair: "short salt-and-pepper waves, natural hairline, brushed back by hand rather than styled into place",
+  },
+  {
+    age: "mid 20s, unmistakably adult, with natural pores and faint expression lines",
+    anchors: ["fine straight brows above large deep-set eyes", "compact nose with a softly squared bridge", "wide expressive mouth with one corner resting higher and a softly pointed chin"],
+    hair: "dense shoulder-length curls, irregular side part, controlled volume with individual strands visible against the light",
+  },
+  {
+    age: "mid 50s, with a weathered forehead, textured cheeks, and calm age-specific eyes",
+    anchors: ["heavy brows with a clean gap over narrow-set eyes", "prominent straight nose with a broad base", "compressed mouth, high cheekbones, and a shallow scar beside the right jaw"],
+    hair: "close-cropped salt-and-pepper hair, receded but precise hairline, natural crown texture",
+  },
+] as const;
+
+function localFaceBlueprint(name: string) {
+  let hash = 0;
+  for (const character of name) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
+  return LOCAL_FACE_BLUEPRINTS[hash % LOCAL_FACE_BLUEPRINTS.length];
+}
+
 function sentence(value: string) {
   const cleaned = value.trim().replace(/\s+/g, " ").replace(/[.!?]+$/, "");
   return cleaned ? `${cleaned}.` : "";
+}
+
+function compact(value: string, max = 420) {
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  return cleaned.length <= max ? cleaned : `${cleaned.slice(0, max).replace(/\s+\S*$/, "")}...`;
 }
 
 export function buildProductionBible(input: CharacterIdentityInput): CharacterProductionBible {
@@ -327,6 +371,7 @@ export function buildProductionBible(input: CharacterIdentityInput): CharacterPr
   const d = DIRECTIONS[input.archetype] ?? DIRECTIONS.hero;
   const appearance = input.appearanceBrief?.trim();
   const world = input.worldBrief?.trim();
+  const localFace = localFaceBlueprint(input.name);
   return {
     version: 1,
     dramatic: {
@@ -346,13 +391,13 @@ export function buildProductionBible(input: CharacterIdentityInput): CharacterPr
       tempo: input.archetype === "comic-relief" ? "quick setup, precise pause, clean landing" : "measured start, compressed decision, decisive finish",
     },
     visual: {
-      perceivedAge: appearance || "adult with an age-specific, lived-in face; avoid ageless beauty retouching",
-      faceAnchors: [
-        "natural facial asymmetry retained in every angle",
-        "distinct brow and eye spacing preserved exactly",
-        "recognizable nose, jaw, skin texture, and any marks remain unchanged",
-      ],
-      hair: "one repeatable cut, hairline, part, texture, and length; no shot-to-shot restyling",
+      perceivedAge: appearance || localFace.age,
+      faceAnchors: appearance
+        ? [`follow this exact visible appearance brief: ${appearance}`, ...localFace.anchors.slice(0, 2)]
+        : [...localFace.anchors],
+      hair: appearance
+        ? `derive one exact cut, hairline, part, texture, length, and finish from this direction and never restyle it: ${appearance}`
+        : localFace.hair,
       wardrobe: appearance
         ? "preserve the wardrobe, materials, accessories, and wear specified in the appearance direction as one repeatable hero look"
         : `functional ${input.archetype.replace("-", " ")} wardrobe with one repeatable hero garment and no logos`,
@@ -402,7 +447,7 @@ export function composeVoiceDesignPrompt(character: CharacterIdentityInput) {
 
 export function composeSfxPrompt(character: CharacterIdentityInput, sceneTexture?: string) {
   const source = character.sfxDesc || "one tactile signature action";
-  return `Five-second non-musical one-shot. 0.0-1.5s: ${source}. 1.5-3.5s: ${sceneTexture || "the physical resonance develops in a restrained room response"}. 3.5-5.0s: one clean identifying detail resolves into silence. Dry foreground foley, realistic material texture, restrained ambience, no speech, no voice, no melody, no trailer braam.`;
+  return `A 1-2 second non-musical signature sound for ${character.name}: ${source}. ${sceneTexture ? `Let the material character subtly reflect ${sceneTexture}.` : "One immediate physical attack, one distinctive material detail, then a clean stop."} Dry close foreground, realistic texture, instantly recognizable at low volume. No sequence, ambience bed, speech, voice, melody, riser, or trailer braam.`;
 }
 
 export function composeThemePrompt(character: CharacterIdentityInput, dramaticBeat?: string) {
@@ -414,12 +459,30 @@ export function composeImagePrompt(character: CharacterIdentityInput, shot: Shot
   const bible = buildProductionBible(character);
   return [
     "CINEMATIC PRODUCTION STILL — 16:9.",
-    `SUBJECT: ${character.name}, an original fictional actor. ${bible.visual.perceivedAge}. ${bible.visual.faceAnchors.join("; ")}. Hair: ${bible.visual.hair}. Wardrobe: ${bible.visual.wardrobe}.`,
-    `DRAMATIC MOMENT: ${shot.dramaticBeat}. Start pose: ${shot.subjectStart}. Facial beat: ${shot.facialBeat}. Do not depict a generic pose; show the decision through hands, weight, and eyeline.`,
+    `SUBJECT AND IDENTITY: ${character.name}, one original fictional actor. ${bible.visual.perceivedAge}. Preserve these recognition anchors exactly: ${bible.visual.faceAnchors.join("; ")}. Hair: ${bible.visual.hair}. Wardrobe: ${bible.visual.wardrobe}. Silhouette: ${bible.visual.silhouette}.`,
+    `PERFORMANCE LOGIC: Their personality is ${compact(character.personality)} The visible contradiction is ${bible.dramatic.contradiction}. At rest: ${bible.performance.restingExpression}. Under pressure: ${bible.performance.underPressure}. Use the signature behavior—${bible.performance.signatureGesture}—instead of a generic pose.`,
+    `DRAMATIC MOMENT: ${shot.dramaticBeat}. Start pose: ${shot.subjectStart}. Facial beat: ${shot.facialBeat}. The decision must be readable through the eyes, mouth tension, hands, weight distribution, and eyeline in this single frozen frame.`,
     `SET: ${shot.setting}. World texture: ${bible.cinematography.worldTexture}. Palette: ${bible.visual.palette.join(", ")}.`,
     `CAMERA: ${shot.framing}; ${shot.cameraAngle}; ${shot.lens}. Composition preserves a clean direction of movement and useful negative space.`,
     `LIGHTING: key ${shot.keyLight}; fill/edge ${shot.fillAndEdge}. Keep light direction physically motivated and readable on the face.`,
     `CONTINUITY: ${bible.visual.continuityRules.join("; ")}. Photoreal skin and fabric, correct hands, grounded feet, restrained film grain. No typography, captions, logo, UI, poster layout, watermark, duplicate person, beauty-filter skin, or costume redesign.`
+  ].join("\n");
+}
+
+/** The definitive casting image: personality first, before any plot-specific scene. */
+export function composeIdentityImagePrompt(character: CharacterIdentityInput) {
+  const bible = buildProductionBible(character);
+  const motif = bible.story.recurringMotifs[0] ?? "one tactile object tied to the actor's world";
+  const identityWorld = character.brollScene?.trim() || bible.cinematography.worldTexture;
+  return [
+    "IDENTITY HERO IMAGE — cinematic live-action casting still, 16:9, one person only. This is the definitive visual identity used to recognize and cast the actor, not a poster and not a plot summary.",
+    `ACTOR: ${character.name}, an original fictional ${character.archetype.replace("-", " ")}. ${bible.visual.perceivedAge}. The face must feel singular, lived-in, and repeatable rather than generically attractive. Lock these recognition anchors: ${bible.visual.faceAnchors.join("; ")}. Hair: ${bible.visual.hair}. Natural skin texture, facial asymmetry, believable hands and body proportions.`,
+    `VISIBLE PERSONALITY: Translate this personality into behavior, not symbols or text: ${compact(character.personality)} The central contradiction is ${bible.dramatic.contradiction}. Show ${bible.performance.restingExpression}; let a trace of ${bible.dramatic.vulnerability} remain visible beneath it. The actor performs ${bible.performance.signatureGesture} with grounded ${bible.performance.movementStyle}. No smile or heroic pose unless those behaviors specifically require it.`,
+    `SIGNATURE LOOK: ${bible.visual.wardrobe}. Build the silhouette around ${bible.visual.silhouette}. Materials must show weight, stitching, wear, and practical function. Palette: ${bible.visual.palette.join(", ")}. Include only one restrained story-world detail—${motif}—as evidence of a life, never as costume decoration.`,
+    `WORLD: Place the actor in ${identityWorld}. Choose one uncluttered, believable area of that world that tells us what pressure they live under while keeping the face dominant. Separate foreground, actor, and background into readable depth; no crowd and no unrelated spectacle.`,
+    `CAMERA AND COMPOSITION: ${bible.cinematography.heroFraming}; ${bible.cinematography.cameraHeight}; ${bible.cinematography.lens}. Eyes remain the visual priority. Keep enough environmental context to cast the actor, with intentional negative space on the side implied by the eyeline. The image should feel like the first frame before a consequential choice, not a fashion shoot.`,
+    `LIGHTING: Motivated key—${bible.cinematography.keyLight}. Fill—${bible.cinematography.fillLight}. Edge—${bible.cinematography.edgeLight}. Preserve readable eye detail and natural skin tone; practical sources in the set must explain every highlight and shadow. Cinematic contrast, restrained grain, no artificial full-body glow.`,
+    `LOCKS AND EXCLUSIONS: ${bible.visual.continuityRules.join("; ")}. No second person, duplicate face, celebrity likeness, generic superhero stance, glamour pose, beauty-filter skin, excessive VFX, floating objects, distorted hands, extra fingers, costume redesign, text, title, caption, logo, UI, border, poster layout, or watermark.`
   ].join("\n");
 }
 
