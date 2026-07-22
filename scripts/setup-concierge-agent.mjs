@@ -88,8 +88,8 @@ const agentBody = {
       },
     },
     tts: {
-      model_id: "eleven_flash_v2",
-      voice_id: "cjVigY5qzO86Huf0OWal",
+      model_id: "eleven_turbo_v2",
+      voice_id: "xMagNCpMgZ83QOEsHNre",
     },
   },
 };
