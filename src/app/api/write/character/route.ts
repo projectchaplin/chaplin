@@ -148,6 +148,12 @@ export async function POST(request: Request) {
     const target = TARGETS.includes(targetValue) ? targetValue : "all";
     const name = clean(body.name, 120);
     if (!name) return Response.json({ error: "Name the AI actor first." }, { status: 400 });
+    if (target === "all" && clean(body.characterBrief, 1500).length < 20) {
+      return Response.json(
+        { error: "Write at least a line or two about who this actor is — the brief drives the whole identity. (If you don't see the brief box, refresh the page.)" },
+        { status: 400 }
+      );
+    }
     const archetypeMix = Array.isArray(body.archetypes)
       ? body.archetypes
           .filter((a): a is string => typeof a === "string")
@@ -204,12 +210,20 @@ export async function POST(request: Request) {
       content?: Array<{ type?: string; text?: string }>;
       error?: { message?: string };
       usage?: { input_tokens?: number; output_tokens?: number };
+      stop_reason?: string;
     };
     if (!response.ok) throw new Error(data.error?.message || `Claude returned ${response.status}.`);
+    if (data.stop_reason === "max_tokens") throw new Error("The character ran longer than the output limit. Try again.");
     const output = data.content?.find((block) => block.type === "text")?.text;
     if (!output) throw new Error("Claude returned no character suggestion.");
+    let parsed: CharacterSuggestion;
+    try {
+      parsed = JSON.parse(output) as CharacterSuggestion;
+    } catch {
+      throw new Error("Claude's output was cut off mid-write. Try again.");
+    }
     return Response.json({
-      suggestion: JSON.parse(output) as CharacterSuggestion,
+      suggestion: parsed,
       provider: "anthropic",
       model,
       usage: data.usage,
