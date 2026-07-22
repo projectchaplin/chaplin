@@ -29,6 +29,8 @@ function clean(value: unknown, max = 2000) {
 function localSuggestion(input: {
   name: string;
   archetype: Archetype;
+  archetypeMix?: Archetype[];
+  characterBrief?: string;
   voiceGender: VoiceGender;
   tagline: string;
   personality: string;
@@ -49,9 +51,17 @@ function localSuggestion(input: {
     outsider: { hook: "notices the rule because nobody explained it to them", want: "belong without becoming harmless", edge: "watchful, self-contained, and startlingly direct", sound: "a distant train brake followed by one approaching footstep", score: "sparse plucked strings over a widening atmospheric bass note" },
   };
   const profile = identity[input.archetype] ?? identity.hero;
+  const secondary = (input.archetypeMix ?? [])
+    .filter((a) => a !== input.archetype)
+    .map((a) => identity[a])
+    .filter(Boolean);
+  const blendEdge = secondary.length
+    ? ` Under the surface, ${name} also ${secondary[0].hook}.`
+    : "";
+  const briefLine = input.characterBrief ? ` ${input.characterBrief.trim().replace(/\.?$/, ".")}` : "";
   const suggestion = {
     tagline: input.tagline || `${name} ${profile.hook}.`,
-    personality: input.personality || `${name} wants to ${profile.want}. ${name} is ${profile.edge}. In conversation, ${name} listens for the detail everyone skips, answers with concise wit, and becomes completely still before making a difficult decision. The contradiction is the engine: confidence in action, vulnerability around the people who matter.`,
+    personality: input.personality || `${briefLine ? briefLine.trim() + " " : ""}${name} wants to ${profile.want}. ${name} is ${profile.edge}.${blendEdge} In conversation, ${name} listens for the detail everyone skips, answers with concise wit, and becomes completely still before making a difficult decision. The contradiction is the engine: confidence in action, vulnerability around the people who matter.`,
     voiceGender: input.voiceGender,
     voiceDescription: `An original adult ${input.voiceGender} voice: grounded Indian English, clear Hindi and Urdu pronunciation, confident mid-register resonance, conversational pacing, dry comic timing, and controlled authority that intensifies without shouting. Distinctive and repeatable; never an imitation of a real person.`,
     signatureSfx: `${profile.sound}; a distinctive five-second identity sting with clean foreground detail, subtle cinematic room tone, and no speech or music.`,
@@ -138,9 +148,17 @@ export async function POST(request: Request) {
     const target = TARGETS.includes(targetValue) ? targetValue : "all";
     const name = clean(body.name, 120);
     if (!name) return Response.json({ error: "Name the AI actor first." }, { status: 400 });
+    const archetypeMix = Array.isArray(body.archetypes)
+      ? body.archetypes
+          .filter((a): a is string => typeof a === "string")
+          .map((a) => clean(a, 40) as Archetype)
+          .slice(0, 5)
+      : [];
     const input = {
       name,
-      archetype: clean(body.archetype, 40) as Archetype,
+      archetype: (clean(body.archetype, 40) as Archetype) || archetypeMix[0],
+      archetypeMix,
+      characterBrief: clean(body.characterBrief, 1500),
       voiceGender: clean(body.voiceGender, 30) as VoiceGender,
       tagline: clean(body.tagline, 500),
       personality: clean(body.personality, 2000),
@@ -163,13 +181,19 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 3000,
-        system: "You are Chaplin's casting director, performance director, cinematographer, and story editor. Build an original production-ready fictional actor, not a biography. Every value must be playable, visible, recordable, or usable as a continuity rule. Create a dramatic want/need contradiction, precise pressure behavior and micro-expression, three stable facial anchors, repeatable hair/wardrobe/silhouette, motivated camera and lighting grammar, and a story engine with a visual hook, escalation, situation-changing cliffhanger, payoff, motifs, and explicit cliches to avoid. Preserve useful user input. Never imitate a celebrity or copyrighted character. The voice prompt must follow ElevenLabs Voice Design order and contain no FX language. SFX must be a concise physical five-second one-shot. Theme must be a 12-second instrumental identity cue. Do not repeat the same biography across fields and do not use generic words without observable detail.",
+        max_tokens: 8000,
+        system: "You are Chaplin's casting director, performance director, cinematographer, and story editor. Build an original production-ready fictional actor, not a biography. Every value must be playable, visible, recordable, or usable as a continuity rule. The visual identity is the highest-priority output: infer a face, hair, body presence, signature wardrobe, material texture, palette, setting, camera, and motivated light that express the personality without reducing the actor to an archetype costume. perceivedAge must be an actual narrow visible age range. Each of the three faceAnchors must name concrete repeatable anatomy or surface detail—brow shape or spacing, eye shape or set, nose structure, mouth, jaw, skin texture, scar, mole, or asymmetry—not generic phrases such as 'distinct face' or 'preserve exactly.' Hair must specify length, texture, part or hairline, finish, and grooming. Wardrobe must specify exact garments, cut, materials, colors, wear, and no logos. Silhouette must describe visible proportions, stance, and one recognizable shape. Camera and lighting must be chosen to reveal those anchors and the central personality contradiction. If appearance or world direction is supplied, preserve it exactly; otherwise invent one coherent, culturally grounded, non-celebrity identity. Also create a dramatic want/need contradiction, precise pressure behavior and micro-expression, motivated story engine, visual hook, situation-changing cliffhanger, payoff, motifs, and explicit cliches to avoid. Never imitate a celebrity or copyrighted character. The voice prompt must follow ElevenLabs Voice Design order and contain no FX language. SFX must be a concise physical five-second one-shot. Theme must be a 12-second instrumental identity cue. Do not repeat biography across fields and do not use generic adjectives without observable evidence.",
         messages: [{
           role: "user",
           content: JSON.stringify({
             target,
             instruction: target === "all" ? "Complete every character identity field." : `Refresh the ${target} while keeping the full identity coherent. Return every field, preserving the others where useful.`,
+            archetypeGuidance: input.archetypeMix.length > 1
+              ? `This actor blends multiple archetypes: ${input.archetypeMix.join(", ")}. The first is dominant; weave the others in as genuine contradictions, not costume changes.`
+              : undefined,
+            briefGuidance: input.characterBrief
+              ? "characterBrief is the maker's creative direction. Treat it as binding canon: every field must be consistent with it."
+              : undefined,
             currentCharacter: input,
           }),
         }],

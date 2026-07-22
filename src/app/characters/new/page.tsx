@@ -83,7 +83,8 @@ export default function NewCharacterPage() {
   const removeCharacter = useChaplinStore((s) => s.removeCharacter);
 
   const [name, setName] = useState("");
-  const [archetype, setArchetype] = useState<Archetype>("hero");
+  const [archetypes, setArchetypes] = useState<Archetype[]>(["hero"]);
+  const [characterBrief, setCharacterBrief] = useState("");
   const [tagline, setTagline] = useState("");
   const [personality, setPersonality] = useState("");
   const [appearanceBrief, setAppearanceBrief] = useState("");
@@ -104,6 +105,18 @@ export default function NewCharacterPage() {
   const [suggestionMessage, setSuggestionMessage] = useState("");
   const [productionBible, setProductionBible] = useState<CharacterProductionBible | undefined>();
 
+  const archetype = archetypes[0] ?? "hero";
+
+  function toggleArchetype(a: Archetype) {
+    setArchetypes((current) => {
+      if (current.includes(a)) {
+        // keep at least one selected
+        return current.length > 1 ? current.filter((item) => item !== a) : current;
+      }
+      return [...current, a];
+    });
+  }
+
   const isCustomVoice = voicePreset === VOICE_PRESETS[VOICE_PRESETS.length - 1];
   const voiceDesc = isCustomVoice ? customVoice : voicePreset;
   const isCustomSfx = sfxPreset === SFX_PRESETS[SFX_PRESETS.length - 1];
@@ -114,6 +127,10 @@ export default function NewCharacterPage() {
   async function suggestCharacter(target: SuggestionTarget) {
     if (!name.trim()) {
       setError("Name the AI actor first, then Magic Character can build the identity.");
+      return;
+    }
+    if (target === "all" && characterBrief.trim().length < 20) {
+      setError("Give Magic Character at least a line or two about who this actor is — that brief drives the whole identity.");
       return;
     }
     setSuggestingTarget(target);
@@ -127,6 +144,8 @@ export default function NewCharacterPage() {
           target,
           name,
           archetype,
+          archetypes,
+          characterBrief,
           tagline,
           personality,
           appearanceBrief,
@@ -203,6 +222,7 @@ export default function NewCharacterPage() {
       makerId: currentUserId,
       name: name.trim(),
       archetype,
+      archetypeMix: archetypes,
       tagline: tagline.trim(),
       personality: personality.trim(),
       voiceGender,
@@ -280,14 +300,17 @@ export default function NewCharacterPage() {
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Archetype</span>
+          <span className="font-medium">Archetype mix</span>
+          <span className="text-[11px] text-grey">
+            Pick as many as fit. The first one you pick leads; the rest add contradiction.
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {ARCHETYPES.map((a) => (
-              <button type="button" key={a} onClick={() => setArchetype(a)}>
+              <button type="button" key={a} onClick={() => toggleArchetype(a)}>
                 <Chip
-                  label={ARCHETYPE_LABEL[a]}
+                  label={a === archetype ? `★ ${ARCHETYPE_LABEL[a]}` : ARCHETYPE_LABEL[a]}
                   hue={ARCHETYPE_HUE[a]}
-                  filled={archetype === a}
+                  filled={archetypes.includes(a)}
                 />
               </button>
             ))}
@@ -299,7 +322,7 @@ export default function NewCharacterPage() {
             <div>
               <p className="text-sm font-semibold">Magic Character</p>
               <p className="mt-1 text-xs text-grey">
-                Type a name, choose an archetype, then build a coherent identity in one click.
+                Name the actor, pick the archetype mix, then write a line or two about who they are — Magic Character builds the rest.
               </p>
             </div>
             <div className="shrink-0">
@@ -310,6 +333,17 @@ export default function NewCharacterPage() {
               />
             </div>
           </div>
+          <textarea
+            data-character-field="brief"
+            value={characterBrief}
+            onChange={(event) => setCharacterBrief(event.target.value)}
+            rows={2}
+            placeholder="Required: e.g. A retired railway detective who solves crimes she caused in a past life. Kind in public, ruthless at chess."
+            className="mt-3 w-full border border-line rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none bg-paper"
+          />
+          <p className="mt-1 text-[11px] text-grey">
+            Minimum a line or two. This brief is treated as canon for every generated field.
+          </p>
           {suggestionMessage && (
             <p className="mt-3 text-[11px] text-grey" data-suggestion-message>
               {suggestionMessage}
@@ -519,9 +553,12 @@ export default function NewCharacterPage() {
                 <p className="mt-1"><span className="text-grey">Movement:</span> {productionBible.performance.movementStyle}</p>
               </div>
               <div>
-                <p className="font-semibold text-accent">Visual continuity</p>
+                <p className="font-semibold text-accent">Identity hero image</p>
                 <p className="mt-1"><span className="text-grey">Face anchors:</span> {productionBible.visual.faceAnchors.join("; ")}</p>
                 <p className="mt-1"><span className="text-grey">Wardrobe:</span> {productionBible.visual.wardrobe}</p>
+                <p className="mt-1"><span className="text-grey">Frame:</span> {productionBible.cinematography.heroFraming}; {productionBible.cinematography.cameraHeight}; {productionBible.cinematography.lens}</p>
+                <p className="mt-1"><span className="text-grey">Light:</span> {productionBible.cinematography.keyLight}</p>
+                <p className="mt-1"><span className="text-grey">World:</span> {productionBible.cinematography.worldTexture}</p>
               </div>
               <div>
                 <p className="font-semibold text-accent">Story engine</p>

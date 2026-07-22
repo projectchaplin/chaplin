@@ -86,6 +86,7 @@ export interface Character {
   makerId: string;
   name: string;
   archetype: Archetype;
+  archetypeMix?: Archetype[]; // full multi-select (primary first); archetype stays the primary for filters/hues
   tagline: string;
   personality: string;
   voiceGender: VoiceGender;

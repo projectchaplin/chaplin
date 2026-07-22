@@ -19,6 +19,7 @@ export type NewCharacterInput = Pick<
   Character,
   | "name"
   | "archetype"
+  | "archetypeMix"
   | "tagline"
   | "personality"
   | "voiceGender"
@@ -62,6 +63,7 @@ interface ChaplinState extends ChaplinWorld {
   setCharacterVoice: (characterId: string, voiceId: string) => void;
   addCharacterImage: (characterId: string, imageUrl: string) => void;
   setCharacterVideo: (characterId: string, videoUrl: string) => void;
+  mergePersistedCharacters: (characters: Character[]) => void;
   hydrateFromStorage: () => void;
 }
 
@@ -128,6 +130,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       makerId: input.makerId,
       name: input.name,
       archetype: input.archetype,
+      archetypeMix: input.archetypeMix,
       tagline: input.tagline,
       personality: input.personality,
       voiceGender: input.voiceGender,
@@ -278,6 +281,30 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
         character.id === characterId ? { ...character, videoUrl } : character
       ),
     }));
+    persist(get());
+  },
+  mergePersistedCharacters: (persistedCharacters) => {
+    set((state) => {
+      const localById = new Map(state.characters.map((character) => [character.id, character]));
+      const remoteIds = new Set(persistedCharacters.map((character) => character.id));
+      const mergedRemote = persistedCharacters.map((remote) => {
+        const local = localById.get(remote.id);
+        return {
+          ...local,
+          ...remote,
+          galleryUrls: [...new Set([
+            ...(remote.galleryUrls ?? []),
+            ...(local?.galleryUrls ?? []),
+          ])],
+        };
+      });
+      return {
+        characters: [
+          ...mergedRemote,
+          ...state.characters.filter((character) => !remoteIds.has(character.id)),
+        ],
+      };
+    });
     persist(get());
   },
   hydrateFromStorage: () => {
