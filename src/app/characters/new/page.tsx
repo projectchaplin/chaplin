@@ -529,13 +529,13 @@ export default function NewCharacterPage() {
       <form onSubmit={handleSubmit} className="poster-card flex flex-col gap-5 rounded-2xl p-4 sm:rounded-md sm:p-6">
         <div className="flex items-center gap-4">
           <Avatar hue={hue} label={name || "?"} size={56} />
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
             {HUE_SWATCHES.map((h) => (
               <button
                 type="button"
                 key={h}
                 onClick={() => setHue(h)}
-                className="w-6 h-6 rounded-full border-2"
+                className="h-5 w-5 rounded-full border-2 sm:h-6 sm:w-6"
                 style={{
                   background: `hsl(${h} 55% 55%)`,
                   borderColor: h === hue ? "var(--ink)" : "transparent",
@@ -576,7 +576,7 @@ export default function NewCharacterPage() {
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-accent/[0.05]">
             <span>
               <span className="block text-sm font-semibold">✦ Magic character assist</span>
-              <span className="mt-0.5 block text-[11px] text-grey">Optional: use one brief to prefill the identity boxes below.</span>
+              <span className="mt-0.5 block text-[11px] text-grey">Describe them once. Chaplin fills the identity.</span>
             </span>
             <span className="shrink-0 rounded-full border border-accent/50 px-3 py-1 text-[10px] font-semibold text-accent">Open</span>
           </summary>

@@ -164,6 +164,48 @@ function QuickOptionVisual({ kind }: Pick<ConciergeQuickOption, "kind">) {
   );
 }
 
+function VoiceStatus({ state }: { state: ConciergeOrbState }) {
+  return (
+    <div
+      className={`mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
+        state === "listening"
+          ? "border-emerald-400/45 bg-emerald-400/10 text-emerald-400"
+          : state === "thinking"
+            ? "border-accent/45 bg-accent/10 text-accent"
+            : state === "speaking"
+              ? "border-accent-secondary/45 bg-accent-secondary/10 text-accent-secondary"
+              : "border-white/10 text-white/40"
+      }`}
+      data-voice-status={state}
+      aria-live="polite"
+    >
+      <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+        {state === "listening" && <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/70" />}
+        <span
+          className={`relative h-2 w-2 rounded-full ${
+            state === "listening"
+              ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]"
+              : state === "thinking"
+                ? "animate-pulse bg-accent"
+                : state === "speaking"
+                  ? "animate-pulse bg-accent-secondary"
+                  : "bg-white/25"
+          }`}
+        />
+      </span>
+      <span>
+        {state === "listening"
+          ? "Live · Listening"
+          : state === "thinking"
+            ? "Working"
+            : state === "speaking"
+              ? "Chaplin speaking"
+              : "Voice off · Hold orb"}
+      </span>
+    </div>
+  );
+}
+
 const ALLOWED_ARCHETYPES = [
   "villain",
   "mentor",
@@ -469,6 +511,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent">Create with Chaplin</p>
             <h2 className="mt-1 text-xl font-semibold">What do you want to make?</h2>
+            <VoiceStatus state={orbState} />
           </div>
           <button
             type="button"
@@ -580,43 +623,6 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
         )}
 
         <div>
-          <div
-            className={`mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] ${
-              orbState === "listening"
-                ? "text-emerald-400"
-                : orbState === "thinking"
-                  ? "text-accent"
-                  : orbState === "speaking"
-                    ? "text-accent-secondary"
-                    : "text-white/35"
-            }`}
-            data-voice-status={orbState}
-            aria-live="polite"
-          >
-            <span className="relative flex h-2.5 w-2.5 items-center justify-center">
-              {orbState === "listening" && <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/70" />}
-              <span
-                className={`relative h-2 w-2 rounded-full ${
-                  orbState === "listening"
-                    ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]"
-                    : orbState === "thinking"
-                      ? "animate-pulse bg-accent"
-                      : orbState === "speaking"
-                        ? "animate-pulse bg-accent-secondary"
-                        : "bg-white/25"
-                }`}
-              />
-            </span>
-            <span>
-              {orbState === "listening"
-                ? "Live · Listening"
-                : orbState === "thinking"
-                  ? "Working on it"
-                  : orbState === "speaking"
-                    ? "Chaplin is speaking"
-                    : "Voice off · Hold the orb to talk"}
-            </span>
-          </div>
           <form
             className="flex min-w-0 items-center gap-2"
             onSubmit={(event) => {
