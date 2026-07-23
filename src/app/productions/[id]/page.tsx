@@ -169,6 +169,8 @@ export default function ProductionDetailPage() {
             shotCount: contract.shotCount,
             castCharacterIds: cast.map((character) => character.id),
             creativeDirection: story.creativeDirection ?? null,
+            productImageUrl: story.productImageUrl ?? null,
+            productImageName: story.productImageName ?? null,
             script: story.scenes.map((scene, index) => ({
               beat: index + 1,
               setting: scene.setting,
@@ -255,6 +257,9 @@ export default function ProductionDetailPage() {
         `ACTOR: ${cast[0].name}. ${cast[0].personality}`,
         `DRAMATIC MOMENT: ${firstScene?.action ?? firstScene?.objective ?? story.logline}`,
         `SET: ${firstScene?.setting ?? "A location grounded in the locked script."}`,
+        ...(story.productImageUrl
+          ? [`PRODUCT: The second supplied reference is ${story.productImageName || "the advertised product"}. Preserve its exact shape, packaging, colors, proportions, label placement, materials, and recognizable details.`]
+          : []),
         "CAMERA: cinematic 16:9 medium-wide frame, eye-level camera, 40mm lens, clear face and hands, intentional negative space for movement.",
         "LIGHTING: motivated directional key from the practical source in the scene, restrained fill, subtle edge separation, realistic contrast.",
         "CONTINUITY: preserve the actor's canonical face, age, hair, proportions, wardrobe materials, and palette exactly.",
@@ -269,7 +274,10 @@ export default function ProductionDetailPage() {
           character: cast[0],
           prompt,
           imagePurpose: "scene",
-          referenceImage: cast[0].imageUrl ?? cast[0].galleryUrls?.[0] ?? cast[0].bannerUrl ?? "",
+          referenceImages: [
+            cast[0].imageUrl ?? cast[0].galleryUrls?.[0] ?? cast[0].bannerUrl ?? "",
+            story.productImageUrl ?? "",
+          ].filter(Boolean),
         }),
       });
       const data = await response.json() as { url?: string; assetId?: string; error?: string };

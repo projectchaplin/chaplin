@@ -46,6 +46,8 @@ export interface NewStoryInput {
   durationSeconds?: number;
   status?: "production" | "published";
   creativeDirection?: string;
+  productImageUrl?: string;
+  productImageName?: string;
   authorId: string;
   coverHue: number;
   castCharacterIds: string[];
@@ -209,6 +211,8 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       durationSeconds: input.durationSeconds,
       status: input.status ?? "published",
       creativeDirection: input.creativeDirection,
+      productImageUrl: input.productImageUrl,
+      productImageName: input.productImageName,
       coverHue: input.coverHue,
       createdAt: timestamp,
       scenes,

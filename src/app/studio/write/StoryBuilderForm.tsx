@@ -55,6 +55,8 @@ type StoredDraft = {
     castIds?: string[];
     scenes?: DraftScene[];
     step?: 1 | 2 | 3;
+    productImageUrl?: string;
+    productImageName?: string;
   };
 };
 
@@ -106,6 +108,9 @@ export default function StoryBuilderForm() {
   const [title, setTitle] = useState("");
   const [logline, setLogline] = useState("");
   const [creativeDirection, setCreativeDirection] = useState("");
+  const [productImageUrl, setProductImageUrl] = useState("");
+  const [productImageName, setProductImageName] = useState("");
+  const [productUploadBusy, setProductUploadBusy] = useState(false);
   const [castQuery, setCastQuery] = useState("");
   const [castIds, setCastIds] = useState<string[]>(() => {
     const preset = searchParams.getAll("cast");
@@ -188,6 +193,8 @@ export default function StoryBuilderForm() {
         setBrief(body.brief ?? "");
         setDurationSeconds(body.durationSeconds ?? productionDuration(stored.format));
         setCreativeDirection(body.creativeDirection ?? "");
+        setProductImageUrl(body.productImageUrl ?? "");
+        setProductImageName(body.productImageName ?? "");
         setCastIds(Array.isArray(body.castIds) ? body.castIds : []);
         setScenes(Array.isArray(body.scenes) && body.scenes.length ? body.scenes : [{ ...EMPTY_SCENE }]);
         setStep(body.step === 2 || body.step === 3 ? body.step : 1);
@@ -211,6 +218,7 @@ export default function StoryBuilderForm() {
       title.trim() ||
       logline.trim() ||
       creativeDirection.trim() ||
+      productImageUrl ||
       castIds.length ||
       scenes.some((scene) => scene.setting.trim() || scene.objective?.trim() || scene.action?.trim() || scene.lines.some((line) => line.text.trim())),
     );
@@ -226,7 +234,16 @@ export default function StoryBuilderForm() {
           format,
           title,
           logline,
-          body: { brief, durationSeconds, creativeDirection, castIds, scenes, step },
+          body: {
+            brief,
+            durationSeconds,
+            creativeDirection,
+            castIds,
+            scenes,
+            step,
+            productImageUrl,
+            productImageName,
+          },
         }),
       })
         .then(async (response) => {
@@ -252,7 +269,7 @@ export default function StoryBuilderForm() {
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [brief, castIds, creativeDirection, draftId, draftReady, durationSeconds, format, logline, scenes, step, title]);
+  }, [brief, castIds, creativeDirection, draftId, draftReady, durationSeconds, format, logline, productImageName, productImageUrl, scenes, step, title]);
 
   useEffect(() => {
     fetch("/api/write/magic", { cache: "no-store" })
@@ -308,6 +325,25 @@ export default function StoryBuilderForm() {
     setCastIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
+  async function uploadProductImage(file: File) {
+    setProductUploadBusy(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/products/reference", { method: "POST", body: form });
+      const data = await response.json() as { url?: string; name?: string; error?: string };
+      if (!response.ok || !data.url) throw new Error(data.error || "Product image could not be uploaded.");
+      setProductImageUrl(data.url);
+      setProductImageName(data.name || file.name);
+      setMagicMessage("Product reference locked. Chaplin will preserve this exact product in the ad.");
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Product image could not be uploaded.");
+    } finally {
+      setProductUploadBusy(false);
+    }
+  }
+
   function addScene() {
     setScenes((prev) => [...prev, { ...EMPTY_SCENE }]);
   }
@@ -350,6 +386,11 @@ export default function StoryBuilderForm() {
   }
 
   async function createMagicDraft({ conceptOnly = false }: { conceptOnly?: boolean } = {}) {
+    if (format === "spot" && !productImageUrl) {
+      setError("Upload the product image first. It is the visual source of truth for this ad.");
+      document.querySelector("[data-product-reference]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     setMagicBusy(true);
     setError("");
     setMagicMessage("");
@@ -363,6 +404,8 @@ export default function StoryBuilderForm() {
           brief,
           title,
           logline,
+          productImageUrl,
+          productImageName,
           castIds,
           characters: world.characters.map((character) => ({
             id: character.id,
@@ -485,6 +528,12 @@ export default function StoryBuilderForm() {
   }
 
   async function handleStartProduction() {
+    if (format === "spot" && !productImageUrl) {
+      setError("Upload the product image before starting an ad production.");
+      setStep(1);
+      document.querySelector("[data-product-reference]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (!title.trim() || !logline.trim()) {
       setError(`Give the ${formatDefinition.label} a title and a logline first.`);
       setStep(1);
@@ -517,6 +566,8 @@ export default function StoryBuilderForm() {
       durationSeconds,
       status: "production",
       creativeDirection: creativeDirection.trim() || undefined,
+      productImageUrl: productImageUrl || undefined,
+      productImageName: productImageName || undefined,
       authorId: currentUserId,
       coverHue: castCharacters[0]?.avatarHue ?? 205,
       castCharacterIds: castIds,
@@ -636,6 +687,68 @@ export default function StoryBuilderForm() {
       </div>
 
       <h1 className="reel-title mb-5 text-2xl sm:text-3xl">Create a shootable story</h1>
+
+      {format === "spot" && (
+        <section
+          className="mb-6 overflow-hidden rounded-2xl border border-accent/55 bg-[linear-gradient(135deg,rgba(244,63,105,0.12),rgba(255,255,255,0.025))]"
+          data-product-reference
+          aria-labelledby="product-reference-heading"
+        >
+          <div className="border-b border-white/10 p-4 sm:p-5">
+            <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-accent">First question</p>
+            <h2 id="product-reference-heading" className="reel-title mt-1 text-2xl">Show us the product</h2>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-grey">
+              Upload the exact product image first. It becomes the product identity reference for the concept, frames, and final ad.
+            </p>
+          </div>
+          <div className="p-4 sm:p-5">
+            {productImageUrl ? (
+              <div className="grid gap-4 sm:grid-cols-[150px_1fr] sm:items-center">
+                {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded Supabase URL */}
+                <img
+                  src={productImageUrl}
+                  alt={productImageName || "Product reference"}
+                  className="aspect-square w-full rounded-xl border border-white/10 bg-white object-contain"
+                />
+                <div>
+                  <p className="text-sm font-semibold">Product reference locked</p>
+                  <p className="mt-1 truncate text-[10px] text-grey">{productImageName || "Uploaded product image"}</p>
+                  <label className="mt-3 inline-flex cursor-pointer rounded-full border border-accent/60 px-4 py-2 text-[10px] font-semibold text-accent hover:bg-accent/10">
+                    Replace image
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadProductImage(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-accent/55 bg-black/15 px-5 py-8 text-center hover:bg-accent/[0.05]">
+                <span className="text-3xl text-accent">+</span>
+                <span className="mt-2 text-sm font-semibold">{productUploadBusy ? "Uploading product…" : "Upload product image"}</span>
+                <span className="mt-1 text-[10px] text-grey">PNG, JPEG, or WebP · up to 12 MB</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  disabled={productUploadBusy}
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadProductImage(file);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="mb-6" aria-labelledby="output-contract-heading">
         <div className="mb-2.5 flex items-center justify-between gap-4">

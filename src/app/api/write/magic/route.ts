@@ -76,6 +76,8 @@ function fallbackDraft(input: {
   logline: string;
   characters: PromptCharacter[];
   castIds: string[];
+  productImageUrl?: string;
+  productImageName?: string;
 }): MagicDraft {
   const selected = input.castIds
     .map((id) => input.characters.find((character) => character.id === id))
@@ -100,7 +102,7 @@ function fallbackDraft(input: {
       logline: input.logline || (creatorShort
         ? `${leadName} turns ${subject.toLowerCase()} into one unmistakable performance choice.`
         : `${leadName} turns ${subject.toLowerCase()} into one sharp, visual promise and a direct invitation to act.`),
-      creativeDirection: `${input.durationSeconds}-second ${spark ? "private Spark audition" : input.format === "punch" ? "public Punch performance" : "managed brand Spot"}. Hook grammar: ${storyEngine?.hookPattern ?? "open on a visible interruption"}. ${creatorShort ? "Prove the actor's personality through visible pressure and choice." : "Communicate one benefit through proof on screen, then finish on a specific call to action."}`,
+      creativeDirection: `${input.durationSeconds}-second ${spark ? "private Spark audition" : input.format === "punch" ? "public Punch performance" : "managed brand Spot"}. ${input.productImageUrl ? `The uploaded ${input.productImageName || "product"} image is binding product canon and must remain visually exact.` : ""} Hook grammar: ${storyEngine?.hookPattern ?? "open on a visible interruption"}. ${creatorShort ? "Prove the actor's personality through visible pressure and choice." : "Communicate one benefit through proof on screen, then finish on a specific call to action."}`,
       castIds: cast.map((character) => character.id),
       scenes: [
         {
@@ -229,7 +231,12 @@ export async function POST(request: Request) {
       logline: clean(body.logline, 700),
       characters,
       castIds,
+      productImageUrl: clean(body.productImageUrl, 2000),
+      productImageName: clean(body.productImageName, 180),
     };
+    if (format === "spot" && !input.productImageUrl) {
+      return Response.json({ error: "A product image is required before writing a brand Spot." }, { status: 400 });
+    }
     fallbackInput = input;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -272,12 +279,25 @@ export async function POST(request: Request) {
       brief: input.brief || "Invent a strong concept suited to the selected cast.",
       existingTitle: input.title || null,
       existingLogline: input.logline || null,
+      productReference: input.productImageUrl
+        ? {
+            name: input.productImageName || "Uploaded product",
+            rule: "Preserve exact shape, packaging, colors, proportions, label placement, and materials.",
+          }
+        : null,
       characters: characterContext.map((character) => ({
         ...character,
         visualReference: visualContexts.find((context) => context.character.id === character.id)?.reference.source ?? null,
       })),
     });
     const messageContent: Array<AnthropicImageBlock | { type: "text"; text: string }> = [];
+    if (input.productImageUrl) {
+      messageContent.push({
+        type: "text",
+        text: `Binding product reference for this brand Spot (${input.productImageName || "uploaded product"}):`,
+      });
+      messageContent.push(await anthropicImageBlock(input.productImageUrl));
+    }
     for (const context of visualContexts) {
       messageContent.push({ type: "text", text: `Canonical visual identity seed for ${context.character.name}:` });
       messageContent.push(context.block);
@@ -294,7 +314,7 @@ export async function POST(request: Request) {
         model,
         max_tokens: Math.max(4000, writingConfig.maxTokens ?? 8000),
         thinking: { type: "disabled" },
-        system: `${writingConfig.promptPrelude} You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. Spark is a private five-second audition with one performance choice. Punch is a public fifteen-second personality proof with hook, pressure, and choice. Episode is a sixty-second microdrama ending on a situation-changing cliffhanger. Spot is a managed thirty- or sixty-second brand output that dramatizes one benefit through visible proof and a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
+        system: `${writingConfig.promptPrelude} You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. For a Spot, the supplied product image is equally binding canon: preserve its exact shape, packaging, proportions, colors, materials, label placement, and recognizable details; build the idea around what is actually visible instead of inventing or redesigning the product. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. Spark is a private five-second audition with one performance choice. Punch is a public fifteen-second personality proof with hook, pressure, and choice. Episode is a sixty-second microdrama ending on a situation-changing cliffhanger. Spot is a managed thirty- or sixty-second brand output that dramatizes one benefit through visible proof and a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
         messages: [{
           role: "user",
           content: messageContent,

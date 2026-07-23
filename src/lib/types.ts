@@ -137,6 +137,8 @@ export interface Story {
   durationSeconds?: number;
   status?: "production" | "published";
   creativeDirection?: string;
+  productImageUrl?: string;
+  productImageName?: string;
   coverHue: number; // fallback gradient when backdropUrl is unset
   backdropUrl?: string;
   posterUrl?: string; // finished portrait poster art (title baked in) shown on the story page

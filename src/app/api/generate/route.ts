@@ -521,9 +521,18 @@ export async function POST(request: Request) {
       const requestedPrompt = text(input, "prompt", 10, 6000);
       const imagePurpose = input.imagePurpose === "scene" ? "scene" : "identity";
       const requestedReference = typeof input.referenceImage === "string" ? input.referenceImage : "";
+      const requestedReferences = Array.isArray(input.referenceImages)
+        ? input.referenceImages
+          .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+          .slice(0, 10)
+        : [];
       const production = await getCharacterProductionState(characterId);
       const canonicalReference = production.visualReference;
-      const reference = canonicalReference?.url ?? requestedReference;
+      const references = [
+        canonicalReference?.url ?? requestedReference,
+        ...requestedReferences,
+      ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+      const reference = references[0] ?? "";
       const stylizedOutput = requestsStylizedImage(requestedPrompt);
       const prompt = lockVisualIdentity(imageGenerationPrompt(imageConfig, requestedPrompt), Boolean(reference));
       const configuredNegativePrompt = settingString(
@@ -536,6 +545,7 @@ export async function POST(request: Request) {
         referenceImage: reference || null,
         referenceAssetId: canonicalReference?.assetId ?? null,
         referenceSource: canonicalReference?.source ?? (requestedReference ? "request-fallback" : null),
+        referenceImages: references,
       };
       jobId = await beginGeneration({ characterId, kind: "gallery", provider: imageConfig.provider, model: imageConfig.model, prompt });
       const generationRequest: Record<string, unknown> = {
@@ -549,8 +559,9 @@ export async function POST(request: Request) {
         sequential_image_generation: settingString(imageConfig, "sequentialImageGeneration", "disabled"),
         watermark: settingBoolean(imageConfig, "watermark", false),
       };
-      if (reference) {
-        generationRequest.image = await imageInput(reference);
+      if (references.length) {
+        const imageReferences = await Promise.all(references.map((value) => imageInput(value)));
+        generationRequest.image = imageReferences.length === 1 ? imageReferences[0] : imageReferences;
       }
       const generated = await modelArk("/images/generations", generationRequest);
       const result = generated.data;
