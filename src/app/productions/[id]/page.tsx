@@ -72,6 +72,25 @@ export default function ProductionDetailPage() {
   const finalVideoUrl = typeof finalVideoStep?.output.url === "string"
     ? finalVideoStep.output.url
     : null;
+  const motionPreviewStep = run
+    ? [...run.steps].reverse().find((step) => (
+      ["motion-plate", "shot-mix", "assembly", "mastering"].includes(step.key)
+      && typeof step.output.url === "string"
+    ))
+    : undefined;
+  const previewVideoUrl = finalVideoUrl
+    ?? (typeof motionPreviewStep?.output.url === "string" ? motionPreviewStep.output.url : null);
+  const castPreviewImageUrl = cast[0]?.imageUrl
+    ?? cast[0]?.galleryUrls?.[0]
+    ?? cast[0]?.bannerUrl
+    ?? null;
+  const previewImageUrl = referenceImageUrl ?? castPreviewImageUrl;
+  const completedStepCount = run?.steps.filter((step) =>
+    ["succeeded", "approved", "needs_review"].includes(step.status)
+  ).length ?? 0;
+  const pipelineProgress = run?.steps.length
+    ? Math.round((completedStepCount / run.steps.length) * 100)
+    : 0;
   const autoStepRef = useRef("");
   const liveStep = run?.steps.find((step) => step.status === "running")
     ?? run?.steps.find((step) => step.status === "queued")
@@ -627,6 +646,105 @@ export default function ProductionDetailPage() {
             <p className="text-[10px] uppercase tracking-[0.18em] text-accent">Output promise</p>
             <p className="mt-2 text-sm leading-6">{contract.definition.promise}</p>
             <p className="mt-2 text-xs text-grey">{contract.definition.structure}</p>
+          </div>
+
+          <div
+            className="sticky top-24 mt-8 overflow-hidden rounded-2xl border border-white/12 bg-black/35 shadow-[0_22px_70px_rgba(0,0,0,0.28)]"
+            data-production-preview
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3.5 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  {(liveStep || busy) && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-70" />}
+                  <span className={`relative inline-flex h-2 w-2 rounded-full ${
+                    finalVideoUrl ? "bg-emerald-400" : liveStep || busy ? "bg-accent" : "bg-amber-300"
+                  }`} />
+                </span>
+                <p className="truncate text-[9px] font-bold uppercase tracking-[0.18em] text-white/75">
+                  {finalVideoUrl ? "Master preview" : previewVideoUrl ? "Motion preview" : referenceImageUrl ? "Frame preview" : "Production canvas"}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-[9px] text-grey">{pipelineProgress}%</span>
+            </div>
+
+            <div className="relative aspect-video overflow-hidden bg-[radial-gradient(circle_at_50%_35%,rgba(244,63,105,0.13),transparent_45%),#050805]">
+              {previewVideoUrl ? (
+                <video
+                  key={previewVideoUrl}
+                  src={previewVideoUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  controls
+                  className="h-full w-full object-cover"
+                  aria-label={`Live production preview for ${story.title}`}
+                />
+              ) : previewImageUrl ? (
+                <div
+                  className={`h-full w-full bg-cover bg-center transition-all duration-700 ${
+                    busy || liveStep ? "scale-[1.03] opacity-80" : ""
+                  }`}
+                  style={{ backgroundImage: `url("${previewImageUrl.replaceAll('"', "%22")}")` }}
+                  role="img"
+                  aria-label={referenceImageUrl
+                    ? `Generated frame preview for ${story.title}`
+                    : `Locked actor preview for ${story.title}`}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <span className="reel-title text-6xl text-white/15">{cast[0]?.name.slice(0, 1) ?? "C"}</span>
+                </div>
+              )}
+
+              {!previewVideoUrl && <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/25" />}
+              {(busy || liveStep) && !previewVideoUrl && (
+                <div className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 animate-[pipeline-live-sweep_2.2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/12 to-transparent blur-xl" />
+              )}
+
+              {!previewVideoUrl && (
+                <div className="absolute inset-x-0 bottom-0 p-3">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-accent-secondary">
+                    {referenceImageUrl ? "Generated frame locked" : "Using actor identity seed"}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/75">
+                    {liveStep
+                      ? liveStepCopy(liveStep)
+                      : referenceImageUrl
+                        ? "This frame becomes the visual source for motion and continuity."
+                        : "The canvas will update here as soon as the first production frame is generated."}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-3.5 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate text-[10px] font-semibold">
+                  {liveStep?.label ?? (finalVideoUrl ? "Final output ready" : referenceImageUrl ? "Reference frame ready" : "Waiting for first frame")}
+                </p>
+                <span className="shrink-0 text-[8px] uppercase tracking-[0.12em] text-grey">
+                  {liveStep ? `${elapsedLabel(liveElapsedSeconds)} live` : `${completedStepCount}/${run?.steps.length ?? 0} stages`}
+                </span>
+              </div>
+              <div className="mt-2 flex gap-1">
+                {(run?.steps ?? []).map((step) => (
+                  <span
+                    key={step.id}
+                    className={`h-1 min-w-0 flex-1 rounded-full ${
+                      step.status === "succeeded" || step.status === "approved"
+                        ? "bg-emerald-400"
+                        : step.status === "needs_review"
+                          ? "bg-amber-300"
+                          : step.status === "running" || step.status === "queued"
+                            ? "animate-pulse bg-accent"
+                            : "bg-white/10"
+                    }`}
+                    title={`${step.label}: ${step.status.replaceAll("_", " ")}`}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </aside>
 
