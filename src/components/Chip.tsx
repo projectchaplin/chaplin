@@ -6,11 +6,13 @@ export default function Chip({
   hue,
   filled = false,
   glass = false,
+  compact = false,
 }: {
   label: string;
   hue: number;
   filled?: boolean;
   glass?: boolean;
+  compact?: boolean;
 }) {
   if (glass) {
     return (
@@ -26,7 +28,9 @@ export default function Chip({
 
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border whitespace-nowrap"
+      className={`inline-flex items-center rounded-full font-medium border whitespace-nowrap ${
+        compact ? "px-1.5 py-0.5 text-[9px] sm:px-2 sm:text-[11px]" : "px-2 py-0.5 text-[11px]"
+      }`}
       style={
         filled
           ? { background: hsl(hue, 55, 42), borderColor: hsl(hue, 55, 42), color: "#fff" }

@@ -40,10 +40,7 @@ export default function CharacterCard({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-transparent" />
         <div aria-hidden="true" className="shelf-card-lens absolute inset-0" />
-        <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5 rounded-full border border-white/20 bg-black/20 px-2 py-1 text-[8px] font-semibold uppercase tracking-[0.16em] text-white/75 backdrop-blur-md sm:left-3 sm:top-3">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent-secondary shadow-[0_0_7px_rgba(7,210,190,0.9)]" />
-          Castable
-        </div>
+
         <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3">
           <h3 className="reel-title truncate text-base leading-tight text-ink sm:text-xl">{character.name}</h3>
           {makerName && <p className="truncate text-[10px] text-ink/70 sm:text-[11px]">by {makerName}</p>}
@@ -61,9 +58,9 @@ export default function CharacterCard({
         <p className="line-clamp-2 flex-1 text-[11px] italic leading-snug text-white/58 sm:text-sm">&ldquo;{character.tagline}&rdquo;</p>
 
         <p className="truncate whitespace-nowrap border-t border-white/10 pt-1.5 text-[10px] text-white/48 sm:pt-2 sm:text-xs">
-          <b className="text-white/90">{character.stats.castings}</b> cast · <b className="text-white/90">{compactNumber(character.stats.fans)}</b> fans
+          <b className="text-white/90">{character.stats.castings}</b> cast Â· <b className="text-white/90">{compactNumber(character.stats.fans)}</b> fans
           {character.stats.earnings > 0 && (
-            <span className="text-accent font-semibold"> · {money(character.stats.earnings)}</span>
+            <span className="text-accent font-semibold"> Â· {money(character.stats.earnings)}</span>
           )}
         </p>
       </div>

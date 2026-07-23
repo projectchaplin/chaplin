@@ -71,39 +71,41 @@ export default function CharacterProfilePage() {
         <div className="poster-card rounded-md overflow-hidden">
           <div className="relative w-full aspect-[4/3] sm:aspect-[16/7] lg:aspect-[2/1]">
             <CharacterBroll character={character} />
-            <div className="absolute inset-0 flex flex-col justify-end gap-2 p-5 sm:p-8 max-w-[75%] sm:max-w-[52%]">
-              <h1 className="reel-title text-2xl sm:text-4xl leading-tight text-ink">
-                {character.name}
-              </h1>
-              {maker && (
-                <span className="text-xs text-ink/70">
-                  made by{" "}
-                  <Link href="/studio" className="text-accent hover:underline">
-                    {maker.name}
-                  </Link>
-                </span>
-              )}
-              <p data-broll-punchline className="italic text-ink/80 text-sm sm:text-base leading-snug">
+            <div className="absolute inset-0 flex max-w-[78%] flex-col justify-end gap-1 p-4 pb-3 sm:max-w-[52%] sm:gap-2 sm:p-8">
+              <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                <h1 className="reel-title text-xl leading-none text-ink sm:text-4xl sm:leading-tight">
+                  {character.name}
+                </h1>
+                {maker && (
+                  <span className="text-[9px] text-ink/65 sm:text-xs">
+                    made by{" "}
+                    <Link href="/studio" className="text-accent hover:underline">
+                      {maker.name}
+                    </Link>
+                  </span>
+                )}
+              </div>
+              <p data-broll-punchline className="line-clamp-2 text-xs italic leading-snug text-ink/75 sm:line-clamp-none sm:text-base sm:text-ink/80">
                 &ldquo;{character.tagline}&rdquo;
               </p>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                <Chip label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
-                <Chip label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
+              <div className="mt-0.5 flex flex-wrap gap-1 sm:mt-1 sm:gap-1.5">
+                <Chip compact label={ARCHETYPE_LABEL[character.archetype]} hue={ARCHETYPE_HUE[character.archetype]} />
+                <Chip compact label={LICENSE_LABEL[character.licenseType]} hue={LICENSE_HUE[character.licenseType]} />
               </div>
             </div>
           </div>
           <div className="grid grid-cols-3 divide-x divide-line border-t border-line">
-            <div className="p-3 sm:p-4 text-center">
-              <p className="text-lg sm:text-xl font-semibold">{character.stats.castings}</p>
-              <p className="text-[10px] sm:text-[11px] text-grey uppercase tracking-wide">Castings</p>
+            <div className="p-2.5 text-center sm:p-4">
+              <p className="text-base font-semibold sm:text-xl">{character.stats.castings}</p>
+              <p className="text-[8px] uppercase tracking-wide text-grey sm:text-[11px]">Castings</p>
             </div>
-            <div className="p-3 sm:p-4 text-center">
-              <p className="text-lg sm:text-xl font-semibold">{compactNumber(character.stats.fans)}</p>
-              <p className="text-[10px] sm:text-[11px] text-grey uppercase tracking-wide">Fans</p>
+            <div className="p-2.5 text-center sm:p-4">
+              <p className="text-base font-semibold sm:text-xl">{compactNumber(character.stats.fans)}</p>
+              <p className="text-[8px] uppercase tracking-wide text-grey sm:text-[11px]">Fans</p>
             </div>
-            <div className="p-3 sm:p-4 text-center">
-              <p className="text-lg sm:text-xl font-semibold text-accent">{money(character.stats.earnings)}</p>
-              <p className="text-[10px] sm:text-[11px] text-grey uppercase tracking-wide">Lifetime earnings</p>
+            <div className="p-2.5 text-center sm:p-4">
+              <p className="text-base font-semibold text-accent sm:text-xl">{money(character.stats.earnings)}</p>
+              <p className="text-[8px] uppercase tracking-wide text-grey sm:text-[11px]">Lifetime earnings</p>
             </div>
           </div>
         </div>

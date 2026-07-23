@@ -91,7 +91,7 @@ export default function ShelfPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search actors, voices, worlds…"
+              placeholder="Search actors, voices, worldsâ€¦"
               className="shelf-search w-full rounded-full py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:outline-none"
             />
           </div>
@@ -145,10 +145,6 @@ export default function ShelfPage() {
         </div>
       </div>
 
-      <p className="relative z-10 mb-3 text-xs font-medium tracking-wide text-white/55">
-        <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-accent-secondary shadow-[0_0_10px_rgba(7,210,190,0.85)]" />
-        {results.length} AI actor{results.length === 1 ? "" : "s"} ready to cast
-      </p>
 
       {results.length === 0 ? (
         <div className="shelf-filter-glass relative z-10 rounded-[24px] p-10 text-center text-grey">

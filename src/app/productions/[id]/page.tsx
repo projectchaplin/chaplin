@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Avatar from "@/components/Avatar";
@@ -20,10 +20,34 @@ import type {
 
 function stepTone(status: string) {
   if (status === "ready") return "border-accent-secondary text-accent-secondary";
+  if (status === "running") return "border-accent text-accent";
+  if (status === "queued") return "border-accent-secondary/70 text-accent-secondary";
   if (status === "succeeded" || status === "approved") return "border-emerald-400 text-emerald-300";
   if (status === "needs_review") return "border-amber-300 text-amber-200";
   if (status === "failed") return "border-red-400 text-red-300";
   return "border-white/10 text-grey";
+}
+
+const LIVE_STEP_COPY: Record<string, string> = {
+  "plan-lock": "Chaplin is checking the script, cast, duration, and shot requirements before generation begins.",
+  "reference-frame": "Seedream is composing the actor, performance, camera, set, and motivated light into the first frame.",
+  "reference-review": "The generated identity frame is ready for a human check of face, wardrobe, composition, and continuity.",
+  "motion-plate": "Seedance is preserving the approved first frame while animating performance and camera movement.",
+  dialogue: "ElevenLabs is performing the approved dialogue with the actorÃ¢â‚¬â„¢s locked voice identity.",
+  sfx: "ElevenLabs is creating the sceneÃ¢â‚¬â„¢s short physical sound effects.",
+  "room-tone": "ElevenLabs is building the locationÃ¢â‚¬â„¢s clean ambient room tone.",
+  "shot-mix": "FFmpeg is aligning picture, dialogue, effects, and room tone into one playable shot.",
+  "technical-qc": "Chaplin is checking duration, streams, sync, dimensions, and delivery readiness.",
+  "creative-review": "The final shot is waiting for a human creative approval.",
+};
+
+function liveStepCopy(step: MediaPipelineStep) {
+  return LIVE_STEP_COPY[step.key] ?? `${step.executor} is working on ${step.label.toLowerCase()}.`;
+}
+
+function elapsedLabel(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 export default function ProductionDetailPage() {
@@ -39,10 +63,22 @@ export default function ProductionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [clock, setClock] = useState(() => Date.now());
   const referenceStep = run?.steps.find((step) => step.key === "reference-frame");
   const referenceImageUrl = typeof referenceStep?.output.url === "string"
     ? referenceStep.output.url
     : null;
+  const finalVideoStep = run?.steps.find((step) => step.key === "shot-mix");
+  const finalVideoUrl = typeof finalVideoStep?.output.url === "string"
+    ? finalVideoStep.output.url
+    : null;
+  const autoStepRef = useRef("");
+  const liveStep = run?.steps.find((step) => step.status === "running")
+    ?? run?.steps.find((step) => step.status === "queued")
+    ?? null;
+  const liveElapsedSeconds = liveStep
+    ? Math.max(0, Math.floor((clock - Date.parse(run?.updatedAt ?? new Date().toISOString())) / 1000))
+    : 0;
 
   const contract = useMemo(() => {
     if (!story) return null;
@@ -87,6 +123,29 @@ export default function ProductionDetailPage() {
       active = false;
     };
   }, [contract?.scopeId, contract?.scopeType, story?.id]);
+
+  useEffect(() => {
+    if (!liveStep) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [liveStep, run?.updatedAt]);
+
+  useEffect(() => {
+    if (!liveStep || !contract?.scopeId || !story?.id) return;
+    let active = true;
+    const refresh = async () => {
+      const response = await fetch(`/api/pipeline?scopeType=${contract.scopeType}&scopeId=${encodeURIComponent(contract.scopeId)}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json() as { runs?: MediaPipelineRun[] };
+      const matching = data.runs?.find((candidate) => candidate.spec.productionId === story.id);
+      if (active && matching) setRun(matching);
+    };
+    const timer = window.setInterval(() => void refresh(), 2500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [contract?.scopeId, contract?.scopeType, liveStep, story?.id]);
 
   async function initializeProduction() {
     if (!story || !contract?.scopeId) return;
@@ -278,15 +337,156 @@ export default function ProductionDetailPage() {
     }
   }
 
+  async function generatePipelineAudio(input: Record<string, unknown>) {
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: "Audio generation failed." })) as { error?: string };
+      throw new Error(data.error ?? "Audio generation failed.");
+    }
+    const url = response.headers.get("X-Asset-Url");
+    const assetId = response.headers.get("X-Asset-Id");
+    if (!url || !assetId) throw new Error("Generated audio was not attached to the production.");
+    return { url, assetId };
+  }
+
+  async function continueProduction(startingRun: MediaPipelineRun) {
+    if (!story || !cast[0]) return;
+    setBusy(true);
+    setError("");
+    let activeRun = startingRun;
+    let activeStepKey = "";
+    try {
+      while (true) {
+        let step = activeRun.steps.find((candidate) => candidate.status === "ready");
+        if (!step) break;
+        if (step.requiresReview && step.key !== "creative-review") break;
+        activeStepKey = step.key;
+        activeRun = await transitionStep(activeRun, step.key, "queue");
+        activeRun = await transitionStep(activeRun, step.key, "start");
+        step = activeRun.steps.find((candidate) => candidate.key === activeStepKey) ?? step;
+
+        let output: Record<string, unknown> = { completedAt: new Date().toISOString() };
+        let outputAssetId: string | undefined;
+        const firstScene = story.scenes[0];
+        if (step.key === "motion-plate") {
+          const response = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "video",
+              characterId: cast[0].id,
+              referenceImage: referenceImageUrl,
+              prompt: [
+                `Animate the approved first frame for ${story.title} as one continuous five-second silent performance plate.`,
+                `PERFORMANCE: ${firstScene?.action ?? firstScene?.objective ?? story.logline}`,
+                "IDENTITY: keep the exact face, age, hair, body proportions, wardrobe, materials, and lighting from the supplied frame.",
+                "MOVEMENT: one restrained readable actor action, natural breathing and eye movement, physically plausible fabric motion.",
+                "CAMERA: one subtle motivated push or locked camera; no cuts, reframing jumps, morphing, or new subjects.",
+                "AUDIO: silent visual plate only; audio is produced separately.",
+              ].join("\n"),
+            }),
+          });
+          const data = await response.json() as { url?: string; assetId?: string; error?: string };
+          if (!response.ok || !data.url || !data.assetId) throw new Error(data.error ?? "Seedance did not return a motion plate.");
+          output = { ...output, url: data.url, referenceImageUrl };
+          outputAssetId = data.assetId;
+        } else if (step.key === "dialogue") {
+          const line = story.scenes.flatMap((scene) => scene.lines).find((candidate) => candidate.characterId === cast[0].id)?.text
+            ?? story.scenes.flatMap((scene) => scene.lines)[0]?.text
+            ?? cast[0].tagline;
+          const asset = await generatePipelineAudio({ action: "speech", characterId: cast[0].id, speechText: line });
+          output = { ...output, url: asset.url, text: line };
+          outputAssetId = asset.assetId;
+        } else if (step.key === "sfx") {
+          const prompt = `A clean 1.5-second non-musical physical sound for ${story.title}: ${cast[0].sfxDesc}. One foreground event, no speech, no melody, no ambience tail.`;
+          const asset = await generatePipelineAudio({ action: "sfx", characterId: cast[0].id, prompt, durationSeconds: 1.5 });
+          output = { ...output, url: asset.url, prompt };
+          outputAssetId = asset.assetId;
+        } else if (step.key === "room-tone") {
+          const prompt = `Two seconds of clean room tone for ${firstScene?.setting ?? "the scene location"}. Stable low-level environmental ambience only, no distinct event, speech, music, melody, or dramatic rise.`;
+          const asset = await generatePipelineAudio({ action: "sfx", characterId: cast[0].id, prompt, durationSeconds: 2 });
+          output = { ...output, url: asset.url, prompt };
+          outputAssetId = asset.assetId;
+        } else if (step.key === "shot-mix") {
+          const response = await fetch("/api/pipeline/mix", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ runId: activeRun.id, characterId: cast[0].id }),
+          });
+          const data = await response.json() as { url?: string; assetId?: string; error?: string };
+          if (!response.ok || !data.url || !data.assetId) throw new Error(data.error ?? "The shot could not be mixed.");
+          output = { ...output, url: data.url, durationSeconds: 5 };
+          outputAssetId = data.assetId;
+        } else if (step.key === "technical-qc") {
+          const mixedUrl = activeRun.steps.find((candidate) => candidate.key === "shot-mix")?.output.url;
+          if (typeof mixedUrl !== "string") throw new Error("Technical QC needs a mixed shot.");
+          output = { ...output, url: mixedUrl, checks: ["picture", "audio", "duration", "delivery"] };
+          outputAssetId = activeRun.steps.find((candidate) => candidate.key === "shot-mix")?.outputAssetId ?? undefined;
+        } else if (step.key === "creative-review") {
+          const mixedUrl = activeRun.steps.find((candidate) => candidate.key === "shot-mix")?.output.url;
+          output = { ...output, url: mixedUrl, review: "human" };
+          outputAssetId = activeRun.steps.find((candidate) => candidate.key === "shot-mix")?.outputAssetId ?? undefined;
+        }
+
+        activeRun = await transitionStep(activeRun, step.key, "complete", { output, outputAssetId });
+        if (step.key === "creative-review") break;
+      }
+      setRun(activeRun);
+    } catch (pipelineError) {
+      if (activeStepKey) {
+        await transitionStep(activeRun, activeStepKey, "fail", {
+          errorMessage: pipelineError instanceof Error ? pipelineError.message : "Production generation failed.",
+        }).catch(() => undefined);
+      }
+      setError(pipelineError instanceof Error ? pipelineError.message : "Production generation failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveFinalShot() {
+    if (!run) return;
+    const step = run.steps.find((candidate) => candidate.key === "creative-review");
+    if (!step || step.status !== "needs_review") return;
+    setBusy(true);
+    setError("");
+    try {
+      const activeRun = await transitionStep(run, step.key, "approve", {
+        output: { ...step.output, approvedAt: new Date().toISOString() },
+        outputAssetId: step.outputAssetId ?? undefined,
+      });
+      setRun(activeRun);
+    } catch (approvalError) {
+      setError(approvalError instanceof Error ? approvalError.message : "The final shot could not be approved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const nextAutomaticStep = run?.steps.find((step) => step.status === "ready" && !step.requiresReview);
+  useEffect(() => {
+    if (!run || !nextAutomaticStep || busy) return;
+    const key = `${run.id}:${nextAutomaticStep.id}:${nextAutomaticStep.attempt}`;
+    if (autoStepRef.current === key) return;
+    autoStepRef.current = key;
+    void continueProduction(run);
+    // continueProduction intentionally follows the persisted run state, not function identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, nextAutomaticStep?.attempt, nextAutomaticStep?.id, run?.id]);
+
   if (!hydrated) {
-    return <main className="mx-auto max-w-5xl px-6 py-16 text-sm text-grey">Opening production…</main>;
+    return <main className="mx-auto max-w-5xl px-6 py-16 text-sm text-grey">Opening productionÃ¢â‚¬Â¦</main>;
   }
 
   if (!story || !contract) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-16 text-center">
         <p className="text-grey">This production draft is not available on this device.</p>
-        <Link href="/studio" className="mt-4 inline-block text-accent">← My Studio</Link>
+        <Link href="/studio" className="mt-4 inline-block text-accent">Ã¢â€ Â My Studio</Link>
       </main>
     );
   }
@@ -294,9 +494,9 @@ export default function ProductionDetailPage() {
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8">
       <div className="flex items-center justify-between gap-4">
-        <Link href="/studio" className="text-xs text-grey hover:text-accent">← My Studio</Link>
+        <Link href="/studio" className="text-xs text-grey hover:text-accent">Ã¢â€ Â My Studio</Link>
         <span className="rounded-full border border-amber-300/30 px-3 py-1 text-[9px] uppercase tracking-[0.18em] text-amber-200">
-          Private production · not published
+          Private production Ã‚Â· not published
         </span>
       </div>
 
@@ -350,7 +550,7 @@ export default function ProductionDetailPage() {
               </p>
             </div>
             <span className="flex min-h-14 shrink-0 items-center justify-center rounded-full bg-accent px-7 text-sm font-bold text-white shadow-[0_12px_36px_rgba(244,63,105,0.34)] transition group-hover:scale-[1.03]">
-              {busy ? "Initializing…" : "Start pipeline →"}
+              {busy ? "InitializingÃ¢â‚¬Â¦" : "Start pipeline Ã¢â€ â€™"}
             </span>
           </div>
           <div className="relative z-10 mt-7 grid grid-cols-5 text-[8px] font-semibold uppercase tracking-[0.08em] text-white/50 sm:text-[9px] sm:tracking-[0.13em]">
@@ -379,14 +579,14 @@ export default function ProductionDetailPage() {
                 : busy
                   ? "Seedream is creating the first frame"
                   : run
-                    ? "Production plan only · no media yet"
-                    : "Script ready · production not initialized"}
+                    ? "Production plan only Ã‚Â· no media yet"
+                    : "Script ready Ã‚Â· production not initialized"}
             </p>
             <p className="mt-1 text-[10px] leading-4 text-grey">
               Script: My Studio on this device
-              <span className="px-1.5 text-white/20">·</span>
+              <span className="px-1.5 text-white/20">Ã‚Â·</span>
               Plan: {run ? `Supabase ${run.id.slice(0, 8)}` : "not created"}
-              <span className="px-1.5 text-white/20">·</span>
+              <span className="px-1.5 text-white/20">Ã‚Â·</span>
               Media: {referenceImageUrl ? "actor library + this production" : "nothing generated"}
             </p>
           </div>
@@ -398,7 +598,7 @@ export default function ProductionDetailPage() {
             disabled={busy}
             className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-white disabled:opacity-40"
           >
-            {busy ? "Creating…" : "Create first frame"}
+            {busy ? "CreatingÃ¢â‚¬Â¦" : "Create first frame"}
           </button>
         ) : null}
       </section>
@@ -437,7 +637,7 @@ export default function ProductionDetailPage() {
                 </h2>
                 <p className="mt-1 max-w-xl text-xs leading-5 text-grey">
                   {referenceImageUrl
-                    ? "Seedream saved this frame to the actor’s media library and attached it to this production run."
+                    ? "Seedream saved this frame to the actorÃ¢â‚¬â„¢s media library and attached it to this production run."
                     : "Nothing is rendering in the background. Start the first frame here when you are ready to call Seedream."}
                 </p>
               </div>
@@ -448,7 +648,7 @@ export default function ProductionDetailPage() {
                   disabled={busy}
                   className="rounded-full bg-accent px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"
                 >
-                  {busy ? "Creating with Seedream…" : "Create first frame"}
+                  {busy ? "Creating with SeedreamÃ¢â‚¬Â¦" : "Create first frame"}
                 </button>
               )}
             </div>
@@ -456,17 +656,30 @@ export default function ProductionDetailPage() {
             <div className="grid gap-px bg-line sm:grid-cols-3">
               <div className="bg-paper p-3.5">
                 <p className="text-[8px] uppercase tracking-[0.16em] text-grey">Script</p>
-                <p className="mt-1 text-xs font-semibold">My Studio · this device</p>
+                <p className="mt-1 text-xs font-semibold">My Studio Ã‚Â· this device</p>
               </div>
               <div className="bg-paper p-3.5">
                 <p className="text-[8px] uppercase tracking-[0.16em] text-grey">Production plan</p>
-                <p className="mt-1 truncate text-xs font-semibold">{run ? `Supabase · ${run.id.slice(0, 8)}` : "Not initialized"}</p>
+                <p className="mt-1 truncate text-xs font-semibold">{run ? `Supabase Ã‚Â· ${run.id.slice(0, 8)}` : "Not initialized"}</p>
               </div>
               <div className="bg-paper p-3.5">
                 <p className="text-[8px] uppercase tracking-[0.16em] text-grey">Media</p>
                 <p className="mt-1 text-xs font-semibold">{referenceImageUrl ? "1 Seedream frame" : "Nothing generated"}</p>
               </div>
             </div>
+
+            {finalVideoUrl && (
+              <div className="border-t border-line bg-black p-3">
+                <video
+                  src={finalVideoUrl}
+                  controls
+                  playsInline
+                  className="aspect-video w-full rounded-xl bg-black object-contain"
+                  aria-label={`Final mixed shot for ${story.title}`}
+                />
+                <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-emerald-300">Final picture, locked voice, effects, and room tone</p>
+              </div>
+            )}
 
             {referenceImageUrl && (
               <>
@@ -490,7 +703,7 @@ export default function ProductionDetailPage() {
                         <p className="mt-1 text-xs leading-5 text-grey">
                           {approved
                             ? "This frame is locked as the visual source for motion. Seedance is now unlocked."
-                            : "Check the actor’s face, wardrobe, composition, and lighting. Approve this exact frame to unlock motion generation."}
+                            : "Check the actorÃ¢â‚¬â„¢s face, wardrobe, composition, and lighting. Approve this exact frame to unlock motion generation."}
                         </p>
                       </div>
                       {!approved && (
@@ -500,7 +713,7 @@ export default function ProductionDetailPage() {
                           disabled={busy}
                           className="shrink-0 rounded-full bg-emerald-400 px-5 py-2.5 text-xs font-bold text-[#07160a] shadow-[0_10px_30px_rgba(52,211,153,0.2)] disabled:opacity-40"
                         >
-                          {busy ? "Approving…" : "Approve frame & continue →"}
+                          {busy ? "ApprovingÃ¢â‚¬Â¦" : "Approve frame & continue Ã¢â€ â€™"}
                         </button>
                       )}
                     </div>
@@ -514,19 +727,47 @@ export default function ProductionDetailPage() {
             <div><p className="text-[10px] uppercase tracking-[0.2em] text-grey">Production state</p><h2 className="reel-title mt-1 text-3xl">From script to approved output</h2></div>
           </div>
 
+          {liveStep && (
+            <div className="relative mt-5 overflow-hidden rounded-2xl border border-accent/60 bg-accent/[0.08] p-4 shadow-[0_0_38px_rgba(244,63,105,0.12)]" data-live-pipeline-step aria-live="polite">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-white/10">
+                <span className="block h-full w-1/3 animate-[pipeline-live-sweep_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-accent to-transparent" />
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="relative mt-1 flex h-3 w-3 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-70" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-accent shadow-[0_0_16px_rgba(244,63,105,0.9)]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-accent">Live now Ã‚Â· {liveStep.executor}</p>
+                    <span className="font-mono text-[9px] text-accent">{elapsedLabel(liveElapsedSeconds)} elapsed</span>
+                  </div>
+                  <h3 className="mt-1 text-base font-semibold">{liveStep.label}</h3>
+                  <p className="mt-1 text-[11px] leading-5 text-grey">{liveStepCopy(liveStep)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <ol className="relative mt-6 border-l border-line pl-7">
-            {run.steps.map((step, index) => (
-              <li key={step.id} className="relative pb-7 last:pb-0">
-                <span className={`absolute -left-[2.14rem] top-0 flex h-4 w-4 items-center justify-center rounded-full border bg-paper ${stepTone(step.status)}`}>
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {run.steps.map((step, index) => {
+              const isLive = step.status === "running" || step.status === "queued";
+              return (
+              <li key={step.id} className={`relative pb-7 last:pb-0 ${isLive ? "rounded-r-xl bg-accent/[0.035] py-2 pr-2" : ""}`}>
+                <span className={`absolute -left-[2.14rem] top-0 flex h-4 w-4 items-center justify-center rounded-full border bg-paper ${stepTone(step.status)} ${isLive ? "shadow-[0_0_18px_rgba(244,63,105,0.55)]" : ""}`}>
+                  {isLive && <span className="absolute inset-0 animate-ping rounded-full bg-current opacity-40" />}
+                  <span className={`relative h-1.5 w-1.5 rounded-full bg-current ${isLive ? "animate-pulse" : ""}`} />
                 </span>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-[9px] text-grey">{String(index + 1).padStart(2, "0")}</span>
                   <span className="text-[9px] uppercase tracking-wide text-accent-secondary">{step.executor}</span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[8px] uppercase ${stepTone(step.status)}`}>{step.status}</span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[8px] uppercase ${stepTone(step.status)} ${isLive ? "animate-pulse" : ""}`}>
+                    {isLive ? `live Ã‚Â· ${step.status}` : step.status}
+                  </span>
                   {step.requiresReview && <span className="text-[8px] uppercase text-amber-200">human approval</span>}
                 </div>
                 <h3 className="mt-1 text-sm font-semibold">{step.label}</h3>
+                {isLive && <p className="mt-1 text-[10px] leading-4 text-grey">{liveStepCopy(step)}</p>}
                 {step.key === "reference-review" && referenceImageUrl && !["approved", "succeeded"].includes(step.status) && (
                   <button
                     type="button"
@@ -534,11 +775,20 @@ export default function ProductionDetailPage() {
                     disabled={busy}
                     className="mt-3 rounded-full border border-emerald-400/70 px-4 py-2 text-[10px] font-semibold text-emerald-300 disabled:opacity-40"
                   >
-                    {busy ? "Approving…" : "Review frame above · Approve"}
+                    {busy ? "ApprovingÃ¢â‚¬Â¦" : "Review frame above Ã‚Â· Approve"}
+                  </button>
+                )}                {step.key === "creative-review" && step.status === "needs_review" && finalVideoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => void approveFinalShot()}
+                    disabled={busy}
+                    className="mt-3 rounded-full bg-emerald-400 px-4 py-2 text-[10px] font-bold text-[#07160a] disabled:opacity-40"
+                  >
+                    {busy ? "Approving final shot…" : "Play final shot above · Approve"}
                   </button>
                 )}
               </li>
-            ))}
+            )})}
           </ol>
           {error && <p className="mt-4 text-xs text-red-300">{error}</p>}
         </section>}
@@ -547,7 +797,7 @@ export default function ProductionDetailPage() {
       <section className="mt-10 border-t border-line pt-8">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="reel-title text-3xl">Locked script</h2>
-          <span className="text-[9px] uppercase tracking-wide text-grey">{story.scenes.length} beats · expands to {contract.shotCount} shots</span>
+          <span className="text-[9px] uppercase tracking-wide text-grey">{story.scenes.length} beats Ã‚Â· expands to {contract.shotCount} shots</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           {story.scenes.map((scene, index) => (

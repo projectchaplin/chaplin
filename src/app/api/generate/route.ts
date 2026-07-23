@@ -359,6 +359,7 @@ export async function POST(request: Request) {
           "Content-Type": "audio/mpeg",
           "Cache-Control": "no-store",
           "X-Asset-Url": asset.url,
+          "X-Asset-Id": asset.id,
           "X-Voice-Id": voiceId,
           "X-Voice-Model": dialogueModel,
         },

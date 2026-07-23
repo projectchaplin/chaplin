@@ -624,3 +624,16 @@ button:hover .frost-chip,
     animation: none;
   }
 }
+@keyframes pipeline-live-sweep {
+  0% {
+    transform: translateX(-110%);
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(310%);
+    opacity: 0.25;
+  }
+}
