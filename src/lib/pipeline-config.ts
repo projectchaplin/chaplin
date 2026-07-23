@@ -29,7 +29,7 @@ export const PIPELINE_STAGE_META: Record<PipelineStageId, {
     label: "Writing & direction",
     owner: "Story editor",
     purpose: "Character expansion, Quick Write, scene hooks, shot blueprints, and production prompts.",
-    temperatureSupported: true,
+    temperatureSupported: false,
   },
   voice: {
     label: "Voice",
@@ -73,7 +73,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       provider: "anthropic",
       model: "claude-sonnet-5",
       promptPrelude: "Preserve character canon, visible causality, production constraints, and useful user intent. Return only the requested production artifact.",
-      temperature: 0.65,
+      temperature: null,
       maxTokens: 8000,
       settings: {
         sceneVariations: 3,
@@ -129,14 +129,14 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       enabled: true,
       provider: "byteplus",
       model: "seedream-4-5-251128",
-      promptPrelude: "Use the canonical reference as identity truth. Prioritize face, performance, motivated camera, and physically plausible light.",
+      promptPrelude: "Use the canonical reference as identity truth. Default to a visually striking live-action cinematic photograph of a real human with natural skin, tactile fabric, optical depth, physically plausible light, and restrained film grain. Change medium only when the user explicitly requests cartoon, anime, illustration, painting, CGI, or another stylized form.",
       temperature: null,
       maxTokens: null,
       settings: {
         size: "2560x1440",
         watermark: false,
         sequentialImageGeneration: "disabled",
-        negativePrompt: "multiple people, duplicate face, celebrity likeness, generic pose, plastic skin, distorted anatomy, extra fingers, text, logo, UI, border, watermark",
+        negativePrompt: "multiple people, duplicate face, celebrity likeness, generic pose, plastic skin, distorted anatomy, extra fingers, text, logo, UI, border, watermark, cartoon, anime, illustration, digital painting, concept art, 3D render, CGI character, game art, doll-like face, wax figure, airbrushed skin, synthetic skin",
       },
     },
     video: {

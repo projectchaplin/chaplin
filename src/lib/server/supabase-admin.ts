@@ -672,14 +672,20 @@ export async function beginGeneration(input: {
 
 function generationFeedCopy(kind: string, characterName: string, prompt: string | null) {
   const cleanPrompt = prompt?.replace(/\s+/g, " ").trim().slice(0, 320);
-  if (kind === "dialogue") return `New dialogue take for ${characterName}.${cleanPrompt ? `\n“${cleanPrompt}”` : ""}`;
-  if (kind === "sfx") return `New sound effect for ${characterName}.${cleanPrompt ? ` ${cleanPrompt}` : ""}`;
-  if (kind === "theme") return `New theme for ${characterName}.${cleanPrompt ? ` ${cleanPrompt}` : ""}`;
-  if (kind === "video") return `${characterName} has a new scene in motion.`;
-  if (kind === "gallery") return `New scene frame for ${characterName}.`;
-  if (kind === "avatar") return `${characterName} has a new identity portrait.`;
-  if (kind === "banner") return `${characterName} has a new hero cover.`;
-  return `New production output for ${characterName}.`;
+  const productionTitle = prompt?.match(/(?:first production frame|scene|production)\s+for\s+["“]([^"”]+)["”]/i)?.[1]?.trim();
+  const production = productionTitle ? `“${productionTitle}”` : null;
+  if (kind === "dialogue") return `${characterName} is finding the voice of a new scene.${cleanPrompt ? `\n“${cleanPrompt}”` : ""}`;
+  if (kind === "sfx") return `Sound building for ${characterName}.${cleanPrompt ? ` ${cleanPrompt}` : ""}`;
+  if (kind === "theme") return `${characterName}’s world has a new theme.${cleanPrompt ? ` ${cleanPrompt}` : ""}`;
+  if (kind === "video") return production
+    ? `A new scene from ${production} is coming alive with ${characterName}.`
+    : `A new scene with ${characterName} is coming alive.`;
+  if (kind === "gallery") return production
+    ? `Building a new scene for ${production} with ${characterName}. First look.`
+    : `A new scene with ${characterName} is taking shape. First look.`;
+  if (kind === "avatar") return `Meet ${characterName}. A new actor is taking shape.`;
+  if (kind === "banner") return `${characterName}’s world is taking shape.`;
+  return `Something new is taking shape with ${characterName}.`;
 }
 
 async function publishGenerationToFeed(jobId: string, assetId: string) {

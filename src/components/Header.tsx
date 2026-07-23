@@ -89,7 +89,7 @@ export default function Header() {
       ? "Not signed in"
       : "Checking account";
   const contextLink = activeRole === "admin"
-    ? { href: "/admin", label: "Admin" }
+    ? { href: authIdentity?.role === "admin" ? "/admin" : "/admin/login", label: "Admin" }
     : activeRole === "brand"
       ? { href: "/brand", label: "Brand desk" }
     : { href: "/feed", label: "Creator feed" };
@@ -194,6 +194,11 @@ export default function Header() {
                         key={role}
                         data-quick-view={role}
                         onClick={() => {
+                          if (role === "admin" && authIdentity?.role !== "admin") {
+                            setOpen(false);
+                            window.location.assign("/admin/login");
+                            return;
+                          }
                           switchDemoRole(role);
                           setOpen(false);
                         }}
@@ -214,8 +219,13 @@ export default function Header() {
                     </Link>
                   )}
                   {activeRole === "admin" && (
-                    <Link href="/admin" onClick={() => setOpen(false)} className="text-xs text-accent hover:underline whitespace-nowrap">
+                    <Link href={authIdentity?.role === "admin" ? "/admin" : "/admin/login"} onClick={() => setOpen(false)} className="text-xs text-accent hover:underline whitespace-nowrap">
                       Open admin →
+                    </Link>
+                  )}
+                  {activeRole !== "admin" && authIdentity?.role !== "admin" && (
+                    <Link href="/admin/login" onClick={() => setOpen(false)} className="text-xs text-accent hover:underline whitespace-nowrap">
+                      Super Admin login →
                     </Link>
                   )}
                 </div>

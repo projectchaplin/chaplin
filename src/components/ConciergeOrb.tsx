@@ -749,7 +749,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent">
-              {assistantOnly ? "Chaplin assistant" : "Create with Chaplin"}
+              {assistantOnly ? "Push to talk to Chaplin" : "Create with Chaplin"}
             </p>
             <h2 className="mt-1 text-xl font-semibold">
               {assistantOnly ? "What should we shape?" : "What do you want to make?"}

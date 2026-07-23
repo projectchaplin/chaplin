@@ -234,6 +234,50 @@ export default function ProductionDetailPage() {
     }
   }
 
+  async function approveReferenceFrame() {
+    if (!run || !referenceImageUrl) return;
+    setBusy(true);
+    setError("");
+    try {
+      let activeRun = run;
+      let reviewStep = activeRun.steps.find((step) => step.key === "reference-review");
+      if (!reviewStep) throw new Error("This production does not have an identity review gate.");
+      if (reviewStep.status === "approved" || reviewStep.status === "succeeded") return;
+      if (reviewStep.status === "ready") {
+        activeRun = await transitionStep(activeRun, reviewStep.key, "queue");
+        reviewStep = activeRun.steps.find((step) => step.key === "reference-review") ?? reviewStep;
+      }
+      if (reviewStep.status === "queued") {
+        activeRun = await transitionStep(activeRun, reviewStep.key, "start");
+        reviewStep = activeRun.steps.find((step) => step.key === "reference-review") ?? reviewStep;
+      }
+      if (reviewStep.status === "running") {
+        activeRun = await transitionStep(activeRun, reviewStep.key, "complete", {
+          output: {
+            approvedReferenceUrl: referenceImageUrl,
+            approvedAt: new Date().toISOString(),
+            productionId: story?.id,
+          },
+        });
+        reviewStep = activeRun.steps.find((step) => step.key === "reference-review") ?? reviewStep;
+      }
+      if (reviewStep.status === "needs_review") {
+        activeRun = await transitionStep(activeRun, reviewStep.key, "approve", {
+          output: {
+            approvedReferenceUrl: referenceImageUrl,
+            approvedAt: new Date().toISOString(),
+            productionId: story?.id,
+          },
+        });
+      }
+      setRun(activeRun);
+    } catch (approvalError) {
+      setError(approvalError instanceof Error ? approvalError.message : "The reference frame could not be approved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!hydrated) {
     return <main className="mx-auto max-w-5xl px-6 py-16 text-sm text-grey">Opening production…</main>;
   }
@@ -425,12 +469,44 @@ export default function ProductionDetailPage() {
             </div>
 
             {referenceImageUrl && (
-              <div
-                className="aspect-video w-full bg-black bg-cover bg-center"
-                style={{ backgroundImage: `url("${referenceImageUrl.replaceAll('"', "%22")}")` }}
-                role="img"
-                aria-label={`Generated reference frame for ${story.title}`}
-              />
+              <>
+                <div
+                  className="aspect-video w-full bg-black bg-cover bg-center"
+                  style={{ backgroundImage: `url("${referenceImageUrl.replaceAll('"', "%22")}")` }}
+                  role="img"
+                  aria-label={`Generated reference frame for ${story.title}`}
+                />
+                {(() => {
+                  const reviewStep = run.steps.find((step) => step.key === "reference-review");
+                  const approved = reviewStep?.status === "approved" || reviewStep?.status === "succeeded";
+                  return (
+                    <div className={`flex flex-col gap-4 border-t p-4 sm:flex-row sm:items-center sm:justify-between ${
+                      approved ? "border-emerald-400/30 bg-emerald-400/[0.07]" : "border-amber-300/30 bg-amber-300/[0.07]"
+                    }`}>
+                      <div>
+                        <p className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${approved ? "text-emerald-300" : "text-amber-200"}`}>
+                          {approved ? "Identity and composition approved" : "Human approval required"}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-grey">
+                          {approved
+                            ? "This frame is locked as the visual source for motion. Seedance is now unlocked."
+                            : "Check the actor’s face, wardrobe, composition, and lighting. Approve this exact frame to unlock motion generation."}
+                        </p>
+                      </div>
+                      {!approved && (
+                        <button
+                          type="button"
+                          onClick={() => void approveReferenceFrame()}
+                          disabled={busy}
+                          className="shrink-0 rounded-full bg-emerald-400 px-5 py-2.5 text-xs font-bold text-[#07160a] shadow-[0_10px_30px_rgba(52,211,153,0.2)] disabled:opacity-40"
+                        >
+                          {busy ? "Approving…" : "Approve frame & continue →"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+              </>
             )}
           </div>
 
@@ -451,6 +527,16 @@ export default function ProductionDetailPage() {
                   {step.requiresReview && <span className="text-[8px] uppercase text-amber-200">human approval</span>}
                 </div>
                 <h3 className="mt-1 text-sm font-semibold">{step.label}</h3>
+                {step.key === "reference-review" && referenceImageUrl && !["approved", "succeeded"].includes(step.status) && (
+                  <button
+                    type="button"
+                    onClick={() => void approveReferenceFrame()}
+                    disabled={busy}
+                    className="mt-3 rounded-full border border-emerald-400/70 px-4 py-2 text-[10px] font-semibold text-emerald-300 disabled:opacity-40"
+                  >
+                    {busy ? "Approving…" : "Review frame above · Approve"}
+                  </button>
+                )}
               </li>
             ))}
           </ol>

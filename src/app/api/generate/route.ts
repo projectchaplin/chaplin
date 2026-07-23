@@ -67,6 +67,41 @@ function directedPrompt(stage: PipelineStageConfig, prompt: string) {
   return [stage.promptPrelude.trim(), prompt.trim()].filter(Boolean).join("\n\n");
 }
 
+const REALISM_DIRECTION = "OUTPUT MEDIUM: A visually striking live-action cinematic photograph of a real human being, captured through a physical camera and lens. Preserve natural facial asymmetry, pores, fine hair, believable hands, tactile fabric, grounded body weight, physically plausible light, optical depth, and restrained film grain. Do not render an illustration, cartoon, anime frame, digital painting, 3D render, CGI character, doll, or wax figure.";
+const REALISM_NEGATIVE = "cartoon, anime, illustration, digital painting, concept art, 3D render, CGI character, game art, doll-like face, wax figure, airbrushed skin, synthetic skin, over-smoothed face";
+
+function requestsStylizedImage(prompt: string) {
+  const style = /\b(?:cartoon|anime|illustration|illustrated|digital painting|3d render|cgi|game art|comic(?:-book)?|claymation)\b/i;
+  return prompt.split(/[\n.!?;]/).some((clause) => {
+    const match = style.exec(clause);
+    if (!match) return false;
+    if (/\b(?:locks?|exclusions?|negative prompt)\b/i.test(clause)) return false;
+    const beforeStyle = clause.slice(0, match.index);
+    return !/\b(?:no|not|never|avoid|without|exclude|excluding)\b(?:\W+\w+){0,3}\W*$/i.test(beforeStyle);
+  });
+}
+
+function imageGenerationPrompt(stage: PipelineStageConfig, prompt: string) {
+  const directed = directedPrompt(stage, prompt);
+  return requestsStylizedImage(prompt) ? directed : [REALISM_DIRECTION, directed].join("\n\n");
+}
+
+function providerPrompt(stage: PipelineStageConfig, prompt: string, maximumCharacters: number) {
+  const direction = prompt.replace(/\s+/g, " ").trim();
+  const adminDirection = stage.promptPrelude.replace(/\s+/g, " ").trim();
+  return [direction, adminDirection]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, maximumCharacters)
+    .trim();
+}
+
+function voiceDesignDescription(stage: PipelineStageConfig, description: string) {
+  const direction = description.replace(/\s+/g, " ").trim();
+  const adminDirection = stage.promptPrelude.replace(/\s+/g, " ").trim();
+  return [direction, adminDirection].filter(Boolean).join(" ").slice(0, 1000).trim();
+}
+
 function voiceDesignAuditionText(previewText: string) {
   const clean = compactVoicePreview(previewText);
   if (clean.length >= 100) return clean;
@@ -132,6 +167,15 @@ async function eleven(pathname: string, body: Record<string, unknown>) {
     effectiveBody.text = voiceDesignAuditionText(auditionText);
     if (String(effectiveBody.text).length < 100) {
       throw new Error("Voice audition preparation failed to meet ElevenLabs' 100-character minimum.");
+    }
+  }
+  if (pathname.startsWith("/sound-generation")) {
+    const soundDescription = typeof effectiveBody.text === "string"
+      ? effectiveBody.text.replace(/\s+/g, " ").trim()
+      : "";
+    effectiveBody.text = soundDescription.slice(0, 450).trim();
+    if (!effectiveBody.text) {
+      throw new Error("SFX generation needs a sound description.");
     }
   }
   const response = await fetch(`${ELEVEN_API}${pathname}`, {
@@ -204,7 +248,7 @@ export async function POST(request: Request) {
     if (action === "voice-design") {
       const voiceConfig = pipeline.stages.voice;
       requireStage(voiceConfig, "Voice");
-      const description = directedPrompt(voiceConfig, text(input, "description", 20, 1000));
+      const description = voiceDesignDescription(voiceConfig, text(input, "description", 20, 4000));
       const previewText = voiceDesignAuditionText(text(input, "previewText", 12, 1000));
       jobId = await beginGeneration({ characterId, kind: "voice-design", provider: voiceConfig.provider, model: voiceConfig.model, prompt: description });
       const response = await eleven("/text-to-voice/design?output_format=mp3_44100_128", {
@@ -231,7 +275,7 @@ export async function POST(request: Request) {
     if (action === "voice-save") {
       const voiceConfig = pipeline.stages.voice;
       requireStage(voiceConfig, "Voice");
-      const description = directedPrompt(voiceConfig, text(input, "description", 20, 1000));
+      const description = voiceDesignDescription(voiceConfig, text(input, "description", 20, 4000));
       const generatedVoiceId = text(input, "generatedVoiceId", 1, 200);
       const currentProduction = await getCharacterProductionState(characterId);
       if (currentProduction.voiceId === generatedVoiceId) {
@@ -324,7 +368,7 @@ export async function POST(request: Request) {
     if (action === "sfx") {
       const sfxConfig = pipeline.stages.sfx;
       requireStage(sfxConfig, "SFX");
-      const prompt = directedPrompt(sfxConfig, text(input, "prompt", 1, 1000));
+      const prompt = providerPrompt(sfxConfig, text(input, "prompt", 1, 1000), 450);
       const requestedDuration = Number(input.durationSeconds);
       const minimumDuration = settingNumber(sfxConfig, "minimumDurationSeconds", 0.5);
       const maximumDuration = Math.max(minimumDuration, settingNumber(sfxConfig, "maximumDurationSeconds", 2));
@@ -407,7 +451,13 @@ export async function POST(request: Request) {
       const production = await getCharacterProductionState(characterId);
       const canonicalReference = production.visualReference;
       const reference = canonicalReference?.url ?? requestedReference;
-      const prompt = lockVisualIdentity(directedPrompt(imageConfig, requestedPrompt), Boolean(reference));
+      const stylizedOutput = requestsStylizedImage(requestedPrompt);
+      const prompt = lockVisualIdentity(imageGenerationPrompt(imageConfig, requestedPrompt), Boolean(reference));
+      const configuredNegativePrompt = settingString(
+        imageConfig,
+        "negativePrompt",
+        "multiple people, duplicate face, celebrity likeness, generic pose, plastic skin, distorted anatomy, extra fingers, text, logo, UI, border, watermark"
+      );
       const referenceMetadata = {
         imagePurpose,
         referenceImage: reference || null,
@@ -418,7 +468,9 @@ export async function POST(request: Request) {
       const generationRequest: Record<string, unknown> = {
         model: imageConfig.model,
         prompt,
-        negative_prompt: settingString(imageConfig, "negativePrompt", "multiple people, duplicate face, celebrity likeness, generic pose, plastic skin, distorted anatomy, extra fingers, text, logo, UI, border, watermark"),
+        negative_prompt: stylizedOutput
+          ? configuredNegativePrompt
+          : `${configuredNegativePrompt}, ${REALISM_NEGATIVE}`,
         size: settingString(imageConfig, "size", "2560x1440"),
         response_format: "url",
         sequential_image_generation: settingString(imageConfig, "sequentialImageGeneration", "disabled"),

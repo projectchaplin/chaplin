@@ -90,7 +90,6 @@ export default function BottomNav() {
   const suppressClickRef = useRef(false);
   const createOpen = createOpenAt === pathname;
   const assistantMode = isCreationWorkspace(pathname);
-  const centerLabel = assistantMode ? "Assist" : "Create";
   const createOptions = activeRole === "brand"
     ? CREATE_OPTIONS.brand
     : activeRole === "admin"
@@ -182,9 +181,7 @@ export default function BottomNav() {
               ? orbState === "listening"
                 ? "Release to send your idea"
                 : "Hold to speak to Chaplin"
-              : assistantMode
-                ? "Open Chaplin assistant"
-                : "Open Create"
+              : "Open Create"
           }
           aria-expanded={createOpen}
           onClick={handleOrbClick}
@@ -210,7 +207,7 @@ export default function BottomNav() {
           onContextMenu={(event) => event.preventDefault()}
           className="absolute left-1/2 top-0 z-10 flex h-[4.25rem] w-[4.25rem] touch-none select-none -translate-x-1/2 -translate-y-[52%] items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff2f6d_8%,#d57eaf_48%,#20d9d2_88%)] p-[2px] shadow-[0_0_12px_rgba(32,217,210,0.14),0_0_10px_rgba(255,47,109,0.12)] transition-transform duration-200 hover:-translate-y-[58%] sm:h-[4.75rem] sm:w-[4.75rem]"
           data-create-toggle
-          data-create-orb={assistantMode ? "assistant" : createOpen ? "active" : "idle"}
+          data-create-orb={createOpen ? "active" : "idle"}
           data-push-to-talk={createOpen ? "true" : undefined}
           data-orb-state={createOpen ? orbState : "closed"}
         >
@@ -267,7 +264,7 @@ export default function BottomNav() {
             onClick={toggleCreate}
             className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1.5 pb-2 pt-3 text-[10px] font-semibold tracking-[0.04em] text-white sm:text-[11px]"
           >
-            <span>{centerLabel}</span>
+            <span>Create</span>
           </button>
 
           <Link

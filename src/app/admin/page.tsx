@@ -33,7 +33,7 @@ function StatusDot({ ready, label }: { ready: boolean; label: string }) {
 
 export default async function AdminPage() {
   const identity = await getServerAuthIdentity();
-  if (identity?.role !== "admin") redirect("/auth?next=/admin");
+  if (identity?.role !== "admin") redirect("/admin/login?next=/admin");
   const data = await getAdminDashboard();
   const voices = new Set(data.voices.filter((voice) => voice.status === "active").map((voice) => voice.character_id));
   const assetsByCharacter = new Map<string, string[]>();

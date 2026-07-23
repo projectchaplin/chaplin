@@ -13,7 +13,7 @@ function number(value: number | string | null | undefined) {
 
 export default async function AdminLogsPage() {
   const identity = await getServerAuthIdentity();
-  if (identity?.role !== "admin") redirect("/auth?next=/admin/logs");
+  if (identity?.role !== "admin") redirect("/admin/login?next=/admin/logs");
   const data = await getAdminDashboard();
   const succeeded = data.jobs.filter((job) => job.status === "succeeded").length;
   const failed = data.jobs.filter((job) => job.status === "failed").length;

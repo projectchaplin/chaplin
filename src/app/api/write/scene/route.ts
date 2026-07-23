@@ -136,7 +136,6 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         max_tokens: writingConfig.maxTokens ?? 4000,
-        temperature: writingConfig.temperature ?? 0.65,
         system: `${writingConfig.promptPrelude} You are a film director creating one production-ready five-second beat for an established fictional actor. Return a shot blueprint, not prose about the character. The hook must be visible in the first frame or first second. The dramatic beat must change the situation. Dialogue uses subtext and never explains identity or visible action. Dialogue must contain spoken words only: no speaker labels, parentheses, brackets, stage directions, or written pause cues; use punctuation for cadence. Block one readable body action and one micro-expression across exactly three time ranges. Specify precise framing, camera height/angle, lens, one physically plausible camera path, motivated key-light direction, fill/edge, environmental motion, an acoustic soundTexture made only of recordable physical sources, a musicalArc expressed only as musical/emotional development, and a final frame that creates a genuine cliffhanger by introducing new pressure or reversing power. Respect the actor bible. Avoid generic walking, posing, looking at camera, montage, multiple cuts, excessive motion, unmotivated light, or biography. The still is a designed first frame; the video will animate that exact image, so motion instructions must never redesign the frame.`,
         messages: [{
           role: "user",

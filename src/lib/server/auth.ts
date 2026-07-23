@@ -34,7 +34,7 @@ function roleBadges(role: AccountRole) {
 
 function requestedRole(user: User): AccountRole {
   const metadataRole = user.user_metadata?.account_role;
-  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL ?? "chaplin@chaplin.in").trim().toLowerCase();
   if (superAdminEmail && user.email?.toLowerCase() === superAdminEmail) return "admin";
   return metadataRole === "brand" ? "brand" : "creator";
 }

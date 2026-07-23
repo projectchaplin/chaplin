@@ -195,11 +195,13 @@ function QuickWriteButton({
   busy,
   writing,
   onClick,
+  label = "Quick Write",
 }: {
   field: QuickWriteField;
   busy: boolean;
   writing: boolean;
   onClick: () => void;
+  label?: string;
 }) {
   return (
     <button
@@ -209,7 +211,7 @@ function QuickWriteButton({
       data-quick-write={field}
       className="shrink-0 rounded-full border border-accent/50 px-2.5 py-1 text-[10px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40"
     >
-      {writing ? "Writing..." : "✦ Quick Write"}
+      {writing ? "Writing..." : `✦ ${label}`}
     </button>
   );
 }
@@ -366,6 +368,7 @@ export default function CharacterProductionStudio({
   const [message, setMessage] = useState("");
   const workflowContentRef = useRef<HTMLDivElement | null>(null);
   const referenceImage = canonicalReferenceImage || character.imageUrl || character.galleryUrls?.[0] || character.bannerUrl || "";
+  const lockedVoiceId = character.voiceId || status?.production?.voiceId || "";
 
   function jumpToStep(stepId: number) {
     setActiveStep(stepId);
@@ -414,6 +417,18 @@ export default function CharacterProductionStudio({
             setCharacterVideo(character.id, production.latestVideoUrl);
           }
         }
+        const resumeAt = production.latestImageUrl
+          ? 6
+          : production.latestThemeUrl
+            ? 5
+            : production.latestSfxUrl
+              ? 4
+              : production.latestDialogueUrl
+                ? 3
+                : production.voiceId
+                  ? 2
+                  : 1;
+        setActiveStep((current) => current === 1 ? Math.max(current, resumeAt) : current);
       })
       .catch(() => setStatus({ elevenLabs: false, seedModels: false, database: false, production: null, providers: null }));
   }, [addCharacterImage, character.galleryUrls, character.id, character.videoUrl, character.voiceId, setCharacterVideo, setCharacterVoice]);
@@ -426,7 +441,11 @@ export default function CharacterProductionStudio({
     if (data.production) {
       setAssetHistory(data.production.assets ?? []);
       setCanonicalReferenceImage(data.production.visualReference?.url ?? "");
+      if (data.production.voiceId && data.production.voiceId !== character.voiceId) {
+        setCharacterVoice(character.id, data.production.voiceId);
+      }
       if (data.production.latestDialogueUrl) setSpeechUrl(data.production.latestDialogueUrl);
+      if (data.production.latestSfxUrl) setSfxUrl(data.production.latestSfxUrl);
       if (data.production.latestThemeUrl) setThemeUrl(data.production.latestThemeUrl);
       if (data.production.latestImageUrl) setGeneratedImage(data.production.latestImageUrl);
       if (data.production.latestVideoUrl) setGeneratedVideo(data.production.latestVideoUrl);
@@ -599,7 +618,9 @@ export default function CharacterProductionStudio({
       const rawError = error instanceof Error ? error.message : "Generation failed.";
       const errorMessage = /string_too_short[\s\S]*100 characters/i.test(rawError)
         ? "The voice audition was shorter than ElevenLabs allows. Chaplin has expanded it safely; tap Build the complete voice to retry."
-        : rawError;
+        : /text_too_long|maximum number of 450 characters|invalid_text_length/i.test(rawError)
+          ? "The SFX direction exceeded ElevenLabs’ limit. Chaplin has shortened it safely; tap Generate short SFX takes to retry."
+          : rawError;
       if (label === "voice-build") setVoiceBuildStage(null);
       setMessage(errorMessage);
       if (hasTimeline) {
@@ -625,7 +646,7 @@ export default function CharacterProductionStudio({
         writeField("voice-description", voiceDescription),
         writeField("voice-preview", previewText),
       ]);
-      const directedVoice = descriptionResult.text ?? voiceDescription;
+      const directedVoice = (descriptionResult.text ?? voiceDescription).trim().slice(0, 1000);
       const auditionLine = auditionResult.text ?? previewText;
       setVoiceDescription(directedVoice);
       setVoiceBuildStage(2);
@@ -662,7 +683,7 @@ export default function CharacterProductionStudio({
   }
 
   function generateSpeech() {
-    if (!character.voiceId) {
+    if (!lockedVoiceId) {
       setMessage("Design and lock a voice before generating dialogue.");
       return;
     }
@@ -813,7 +834,7 @@ export default function CharacterProductionStudio({
   const configuredSfxDuration = Number(status?.pipeline?.stages?.sfx?.settings?.durationSeconds ?? 1.5);
   const activeStepMeta = WORKFLOW_STEPS.find((step) => step.id === activeStep) ?? WORKFLOW_STEPS[0];
   const completedSteps = new Set<number>([
-    ...(character.voiceId ? [1] : []),
+    ...(lockedVoiceId ? [1] : []),
     ...(speechUrl ? [2] : []),
     ...(sfxUrl ? [3] : []),
     ...(themeUrl ? [4] : []),
@@ -922,16 +943,55 @@ export default function CharacterProductionStudio({
             </a>
           </div>
         )}
-        <details className="rounded-md border border-line bg-paper/30 p-4" data-production-bible>
-          <summary className="cursor-pointer text-sm font-semibold">Actor Direction Bible</summary>
-          <p className="mt-1 text-[11px] text-grey">Persistent canon used by every scene and story—not copied into every provider prompt.</p>
-          <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-            <p><span className="text-grey">Want:</span> {productionBible.dramatic.externalWant}</p>
-            <p><span className="text-grey">Contradiction:</span> {productionBible.dramatic.contradiction}</p>
-            <p><span className="text-grey">Under pressure:</span> {productionBible.performance.underPressure}</p>
-            <p><span className="text-grey">Movement:</span> {productionBible.performance.movementStyle}</p>
-            <p><span className="text-grey">Face locks:</span> {productionBible.visual.faceAnchors.join("; ")}</p>
-            <p><span className="text-grey">Story hook:</span> {productionBible.story.hookPattern}</p>
+        <details className="rounded-md border border-line bg-paper/30" data-production-blueprint>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5">
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">Production blueprint</span>
+              <span className="mt-0.5 block truncate text-[11px] text-grey">Actor locks + {sceneBlueprint.sceneName}</span>
+            </span>
+            <span className="shrink-0 rounded-full border border-line px-3 py-1 text-[9px] font-semibold uppercase tracking-wide text-grey">Check blueprint</span>
+          </summary>
+          <div className="border-t border-line px-4 py-4">
+            <section data-production-bible>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Actor locks</p>
+              <dl className="mt-2 divide-y divide-line text-xs">
+                {[
+                  ["Want", productionBible.dramatic.externalWant],
+                  ["Contradiction", productionBible.dramatic.contradiction],
+                  ["Under pressure", productionBible.performance.underPressure],
+                  ["Movement", productionBible.performance.movementStyle],
+                  ["Face locks", productionBible.visual.faceAnchors.join("; ")],
+                  ["Story hook", productionBible.story.hookPattern],
+                ].map(([label, value]) => (
+                  <div key={label} className="py-2.5 first:pt-0 last:pb-0">
+                    <dt className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-grey">{label}</dt>
+                    <dd className="leading-relaxed text-ink">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+
+            <section className="mt-5 border-t border-line pt-4" data-scene-blueprint>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Current scene</p>
+                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[9px] uppercase tracking-wide text-accent">{sceneBlueprint.sceneName}</span>
+              </div>
+              <dl className="mt-2 divide-y divide-line text-xs">
+                {[
+                  ["Hook", sceneBlueprint.hook],
+                  ["Dramatic beat", sceneBlueprint.dramaticBeat],
+                  ["Angle / lens", `${sceneBlueprint.cameraAngle}; ${sceneBlueprint.lens}`],
+                  ["Camera path", sceneBlueprint.cameraMovement],
+                  ["Key light", sceneBlueprint.keyLight],
+                  ["Final frame", sceneBlueprint.finalFrame],
+                ].map(([label, value]) => (
+                  <div key={label} className="py-2.5 first:pt-0 last:pb-0">
+                    <dt className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-grey">{label}</dt>
+                    <dd className="leading-relaxed text-ink">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
           </div>
         </details>
         <details className="rounded-md border border-accent/40 bg-accent/5 px-4 py-3" data-magic-scene-assist>
@@ -977,17 +1037,6 @@ export default function CharacterProductionStudio({
           </div>
           <span className="hidden text-right text-[11px] text-grey sm:block">Your actor’s identity remains connected through every stage.</span>
         </div>
-        <details className="rounded-md border border-line bg-paper/40 p-4" data-scene-blueprint>
-          <summary className="cursor-pointer text-sm font-semibold">Director blueprint · {sceneBlueprint.sceneName}</summary>
-          <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-            <p><span className="text-grey">Hook:</span> {sceneBlueprint.hook}</p>
-            <p><span className="text-grey">Dramatic beat:</span> {sceneBlueprint.dramaticBeat}</p>
-            <p><span className="text-grey">Angle / lens:</span> {sceneBlueprint.cameraAngle}; {sceneBlueprint.lens}</p>
-            <p><span className="text-grey">Camera path:</span> {sceneBlueprint.cameraMovement}</p>
-            <p><span className="text-grey">Key light:</span> {sceneBlueprint.keyLight}</p>
-            <p><span className="text-grey">Final frame:</span> {sceneBlueprint.finalFrame}</p>
-          </div>
-        </details>
         <div className="grid gap-5">
           <div data-production-stage="voice" className={`overflow-hidden rounded-md border border-line ${activeStep === 1 ? "" : "hidden"}`}>
             <div className="relative border-b border-line bg-[radial-gradient(circle_at_top_right,rgba(53,210,190,0.12),transparent_42%),linear-gradient(145deg,rgba(244,72,112,0.08),transparent_55%)] p-4 sm:p-5">
@@ -999,7 +1048,7 @@ export default function CharacterProductionStudio({
                     Chaplin reads the complete actor, writes the direction and audition, then creates three voices in one go.
                   </p>
                 </div>
-                {character.voiceId && (
+                {lockedVoiceId && (
                   <span className="shrink-0 rounded-full border border-emerald-600/50 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
                     Voice locked
                   </span>
@@ -1058,11 +1107,29 @@ export default function CharacterProductionStudio({
                 </summary>
                 <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase tracking-wide text-grey">Performance direction</span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase tracking-wide text-grey">Performance direction</span>
+                      <QuickWriteButton
+                        field="voice-description"
+                        busy={Boolean(busy) || Boolean(quickWriting)}
+                        writing={quickWriting === "voice-description"}
+                        label="Suggest"
+                        onClick={() => void quickWrite("voice-description", voiceDescription, (value) => setVoiceDescription(value.slice(0, 1000)))}
+                      />
+                    </span>
                     <textarea value={voiceDescription} onChange={(event) => setVoiceDescription(event.target.value)} rows={4} className="resize-none rounded-sm border border-line bg-paper p-3 text-xs focus:border-accent focus:outline-none" />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase tracking-wide text-grey">Audition line</span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase tracking-wide text-grey">Audition line</span>
+                      <QuickWriteButton
+                        field="voice-preview"
+                        busy={Boolean(busy) || Boolean(quickWriting)}
+                        writing={quickWriting === "voice-preview"}
+                        label="Suggest"
+                        onClick={() => void quickWrite("voice-preview", previewText, setPreviewText)}
+                      />
+                    </span>
                     <textarea value={previewText} onChange={(event) => setPreviewText(event.target.value)} rows={3} className="resize-none rounded-sm border border-line bg-paper p-3 text-xs focus:border-accent focus:outline-none" />
                   </label>
                   <button
@@ -1115,7 +1182,7 @@ export default function CharacterProductionStudio({
                 </button>
               </div>
             ))}
-              {character.voiceId && (
+              {lockedVoiceId && (
                 <div className="mt-1 rounded-md border border-accent/50 bg-accent/10 p-4" data-voice-ready>
                   <div className="flex items-start gap-3">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-secondary text-sm font-bold text-paper" aria-hidden="true">✓</span>
@@ -1150,13 +1217,13 @@ export default function CharacterProductionStudio({
               />
             </div>
             <textarea data-scene-field="dialogue" value={speechText} onChange={(event) => setSpeechText(event.target.value)} rows={5} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
-            <button onClick={generateSpeech} disabled={!elevenReady || Boolean(busy) || !character.voiceId} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+            <button onClick={generateSpeech} disabled={!elevenReady || Boolean(busy) || !lockedVoiceId} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "speech" ? "Performing line..." : "Generate dialogue"}
             </button>
             <GenerationTimeline generationKey="speech" run={generationRun} />
-            {character.voiceId && (
+            {lockedVoiceId && (
               <p className="text-[10px] uppercase tracking-[0.12em] text-emerald-600">
-                Locked voice · {character.voiceId.slice(-6)} · continuity mode
+                Locked voice · {lockedVoiceId.slice(-6)} · continuity mode
               </p>
             )}
             {speechUrl ? <MediaPlayer src={speechUrl} label={`${character.name} dialogue`} compact /> : <p className="text-xs text-grey">Lock one voice once; reuse it across every story and language.</p>}

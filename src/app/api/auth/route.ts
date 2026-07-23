@@ -53,6 +53,27 @@ async function findAuthUserIdByEmail(email: string) {
   return null;
 }
 
+async function ensureSuperAdminUser(email: string, password: string) {
+  const admin = getSupabaseAdminClient();
+  const userId = await findAuthUserIdByEmail(email);
+  const attributes = {
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      display_name: "Chaplin Super Admin",
+      account_role: "admin",
+    },
+  };
+  if (userId) {
+    const result = await admin.auth.admin.updateUserById(userId, attributes);
+    if (result.error) throw new Error(`Prepare Super Admin: ${result.error.message}`);
+    return;
+  }
+  const result = await admin.auth.admin.createUser(attributes);
+  if (result.error) throw new Error(`Create Super Admin: ${result.error.message}`);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const accessToken = request.cookies.get(ACCESS_COOKIE)?.value;
@@ -93,8 +114,27 @@ export async function POST(request: NextRequest) {
     const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
     const password = typeof input.password === "string" ? input.password : "";
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email address.");
-    if (password.length < 8) throw new Error("Password must be at least 8 characters.");
     const supabase = getSupabaseAuthClient();
+
+    if (action === "admin-login") {
+      const expectedEmail = (process.env.SUPER_ADMIN_EMAIL ?? "chaplin@chaplin.in").trim().toLowerCase();
+      const expectedPassword = process.env.SUPER_ADMIN_PASSWORD ?? "chaplin";
+      if (email !== expectedEmail || password !== expectedPassword) {
+        throw new Error("Incorrect Super Admin email or password.");
+      }
+      await ensureSuperAdminUser(expectedEmail, expectedPassword);
+      const result = await supabase.auth.signInWithPassword({ email: expectedEmail, password: expectedPassword });
+      if (result.error) throw new Error(result.error.message);
+      if (!result.data.session || !result.data.user) throw new Error("Supabase did not return an admin session.");
+      const identity = await ensureAuthProfile(result.data.user);
+      if (identity.role !== "admin") throw new Error("This account is not authorized as Super Admin.");
+      const response = NextResponse.json({ identity });
+      setSessionCookies(response, result.data.session);
+      setRoleCookie(response, identity.role);
+      return response;
+    }
+
+    if (password.length < 8) throw new Error("Password must be at least 8 characters.");
 
     if (action === "signup") {
       const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
