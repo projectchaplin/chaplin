@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import EpisodePipelineBoard from "@/components/EpisodePipelineBoard";
 import { getSeriesDetail } from "@/lib/server/series";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +37,8 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ i
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] uppercase tracking-[0.18em] text-accent">Episode {pilot.episodeNumber}</p><h2 className="reel-title text-3xl">{pilot.title}</h2><p className="mt-1 text-sm text-grey">{pilot.logline}</p></div><div className="text-right"><p className="text-xl font-semibold">{readyShots}/12</p><p className="text-[10px] uppercase text-grey">shots ready</p></div></div>
         <div className="mb-4 grid gap-3 sm:grid-cols-3"><div className="rounded-md border border-line p-3"><p className="text-[9px] uppercase text-grey">Opening hook</p><p className="mt-1 text-xs">{pilot.openingHook}</p></div><div className="rounded-md border border-line p-3"><p className="text-[9px] uppercase text-grey">Objective</p><p className="mt-1 text-xs">{pilot.episodeObjective}</p></div><div className="rounded-md border border-accent/50 bg-accent/5 p-3"><p className="text-[9px] uppercase text-accent">Cliffhanger</p><p className="mt-1 text-xs">{pilot.cliffhanger}</p></div></div>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{pilot.shots.map((shot) => <article key={shot.id} className="poster-card rounded-md p-4"><div className="flex justify-between text-[10px] uppercase"><span className="text-accent">Shot {String(shot.shotNumber).padStart(2, "0")} · {(shot.shotNumber - 1) * 5}–{shot.shotNumber * 5}s</span><span className="text-grey">{shot.status}</span></div><h3 className="mt-2 font-semibold">{shot.beat}</h3><p className="mt-2 text-xs leading-5 text-grey">{shot.visualAction}</p><div className="mt-3 border-t border-line pt-3 text-[10px] text-grey"><p><span className="text-ink">Camera:</span> {shot.cameraDirection}</p><p className="mt-1"><span className="text-ink">Light:</span> {shot.lightingDirection}</p>{shot.dialogue && <p className="mt-1 text-accent-light">{shot.dialogue}</p>}</div></article>)}</div>
-        <div className="mt-5 rounded-md border border-line p-4 text-sm text-grey">Final assembly unlocks when all 12 shot videos are ready. The local workstation already has FFmpeg for ordered concatenation and audio mixing.</div>
+        <EpisodePipelineBoard episodeId={pilot.id} shots={pilot.shots.map((shot) => ({ id: shot.id, shotNumber: shot.shotNumber }))} />
       </section>}
     </main>
   );
 }
-

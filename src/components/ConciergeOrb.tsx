@@ -1,34 +1,181 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Conversation } from "@elevenlabs/client";
+import { IconBriefcase, IconFilm, IconLock, IconMask, IconReceipt } from "@/components/Icons";
 
-export type ConciergeQuickOption = { href: string; title: string; copy: string };
+export type ConciergeQuickOption = {
+  kind: "actor" | "video" | "ad" | "reel" | "micro-drama" | "pipeline" | "operations";
+  href: string;
+  title: string;
+  copy: string;
+};
 
-type OrbState = "idle" | "listening" | "thinking" | "speaking" | "connecting";
+export type ConciergeOrbState = "idle" | "listening" | "thinking" | "speaking";
+export type ConciergeOrbHandle = {
+  startPushToTalk(): void;
+  stopPushToTalk(): void;
+};
+
 type MissionStep = { label: string; ms: number };
+type DraftSummary = {
+  id: string;
+  format: "spark" | "punch" | "episode" | "spot";
+  title: string;
+  logline: string;
+  updated_at: string;
+};
 
 type ConciergeIntentResponse = {
-  intent: "create_character" | "create_video" | "create_ad" | "create_reel" | "create_series" | "browse" | "unclear";
+  intent: "create_character" | "create_spark" | "create_punch" | "create_episode" | "create_spot" | "create_series" | "browse" | "unclear";
   name: string | null;
   archetypes: string[];
   characterBrief: string | null;
   storyBrief: string | null;
   reply: string;
-  provider?: string;
   error?: string;
 };
 
-const ALLOWED_ARCHETYPES = ["villain", "mentor", "love-interest", "comic-relief", "hero", "superhero", "horror", "rebel", "sidekick", "outsider"];
+async function readIntentResponse(response: Response): Promise<ConciergeIntentResponse> {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
 
-const TIER_PREVIEWS: Record<string, string> = {
-  "/characters/new": "New actor → auto 5s Spark audition, then a 15s Punch reel to earn fans.",
-  "/studio/write": "A 60s Episode with a cliffhanger — written, cast, and produced.",
-  "/studio/write?format=ad": "A 30–60s brand Spot, fronted by an actor your audience follows.",
-  "/studio/write?format=reel": "A 15s vertical Punch — hook first, personality forward.",
-  "/series/new": "A series pilot: cast, story engine, twelve 5s shots, cliffhanger.",
+  if (!contentType.includes("application/json")) {
+    // Consume the body without ever exposing a Next.js HTML error document in
+    // the product UI. A rebuild can briefly make an App Router endpoint return
+    // its HTML fallback even though the next request succeeds.
+    await response.text().catch(() => "");
+    throw new Error(
+      response.status === 404
+        ? "Create is reconnecting. Refresh once, then try again."
+        : "Create was briefly unavailable. Please try again.",
+    );
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("Create received an incomplete response. Please try again.");
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Create received an incomplete response. Please try again.");
+  }
+
+  const data = payload as Partial<ConciergeIntentResponse>;
+  if (!response.ok) {
+    throw new Error(typeof data.error === "string" ? data.error : "Create could not finish that. Please try again.");
+  }
+  if (
+    typeof data.intent !== "string" ||
+    typeof data.reply !== "string" ||
+    !Array.isArray(data.archetypes)
+  ) {
+    throw new Error("Create received an incomplete response. Please try again.");
+  }
+
+  return data as ConciergeIntentResponse;
+}
+
+type SpeechRecognitionResultLike = {
+  readonly isFinal: boolean;
+  readonly [index: number]: { transcript: string };
 };
+
+type SpeechRecognitionEventLike = {
+  readonly results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionErrorLike = {
+  readonly error?: string;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorLike) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+type SpeechWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
+function QuickOptionVisual({ kind }: Pick<ConciergeQuickOption, "kind">) {
+  if (kind === "video") {
+    return (
+      <span className="relative block h-28 overflow-hidden rounded-[1rem] border border-white/12">
+        <video
+          src="/characters/c-selene-video.mp4"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          aria-hidden="true"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+        />
+        <span className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/5" />
+        <span className="absolute bottom-2.5 left-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white text-black shadow-lg">
+          <span className="ml-0.5 h-0 w-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-black" />
+        </span>
+        <span className="absolute bottom-3 right-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/80">
+          Spark · Punch · Episode
+        </span>
+      </span>
+    );
+  }
+
+  if (kind === "actor") {
+    return (
+      <span className="relative flex h-28 items-center justify-center overflow-hidden rounded-[1rem] border border-white/12">
+        <span className="absolute h-24 w-24 rounded-full border border-accent/30 shadow-[0_0_40px_rgba(255,47,109,0.18)]" />
+        <span className="absolute h-16 w-16 rounded-full border border-accent-secondary/25" />
+        <IconMask className="relative h-12 w-12 text-white" />
+        <span className="absolute bottom-3 left-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/60">
+          Face · Voice · World
+        </span>
+      </span>
+    );
+  }
+
+  const Icon = kind === "pipeline"
+    ? IconFilm
+    : kind === "operations"
+      ? IconReceipt
+      : kind === "ad"
+        ? IconBriefcase
+        : IconFilm;
+  const label = kind === "micro-drama" ? "60 sec" : kind === "reel" ? "Vertical" : kind === "ad" ? "30 / 60 sec" : "Open";
+
+  return (
+    <span className="flex h-20 items-center justify-between rounded-[1rem] border border-white/12 px-4">
+      <Icon className="h-8 w-8 text-accent" />
+      <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/55">{label}</span>
+    </span>
+  );
+}
+
+const ALLOWED_ARCHETYPES = [
+  "villain",
+  "mentor",
+  "love-interest",
+  "comic-relief",
+  "hero",
+  "superhero",
+  "horror",
+  "rebel",
+  "sidekick",
+  "outsider",
+];
 
 function fallbackSpeak(text: string, onDone?: () => void) {
   if (typeof window === "undefined" || !window.speechSynthesis) {
@@ -38,8 +185,6 @@ function fallbackSpeak(text: string, onDone?: () => void) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   const voices = window.speechSynthesis.getVoices();
-  // Match the concierge's real voice (Aaditya — calm Indian male) as closely as
-  // the OS allows: named male Indian voices first, then en-IN, then any English.
   const preferred =
     voices.find((voice) => /ravi|rishi|prabhat|madhur/i.test(voice.name)) ??
     voices.find((voice) => /en[-_]IN/i.test(voice.lang)) ??
@@ -52,50 +197,61 @@ function fallbackSpeak(text: string, onDone?: () => void) {
   window.speechSynthesis.speak(utterance);
 }
 
-export default function ConciergeOrb({
-  role,
-  quickOptions,
-  onClose,
-}: {
+const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
   role: string;
   quickOptions: ConciergeQuickOption[];
   onClose: () => void;
-}) {
+  onStateChange?: (state: ConciergeOrbState) => void;
+}>(function ConciergeOrb({
+  role,
+  quickOptions,
+  onClose,
+  onStateChange,
+}, ref) {
   const router = useRouter();
-  const [orbState, setOrbState] = useState<OrbState>("connecting");
+  const [orbState, setOrbState] = useState<ConciergeOrbState>("idle");
   const [agentLine, setAgentLine] = useState("");
   const [userLine, setUserLine] = useState("");
   const [draft, setDraft] = useState("");
-  const [mode, setMode] = useState<"eleven" | "fallback">("fallback");
-  const [steps, setSteps] = useState<MissionStep[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- EL SDK conversation instance
-  const conversationRef = useRef<any>(null);
+  const [savedDrafts, setSavedDrafts] = useState<DraftSummary[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(true);
+  const [draftsNeedLogin, setDraftsNeedLogin] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const transcriptRef = useRef("");
+  const recognitionFailedRef = useRef(false);
   const closedRef = useRef(false);
-  const sessionIdRef = useRef(`ccg-${Math.random().toString(36).slice(2, 10)}`);
+  const sessionIdRef = useRef("");
   const stepClockRef = useRef(0);
   const stepsRef = useRef<MissionStep[]>([]);
-  const modeRef = useRef<"eleven" | "fallback">("fallback");
-
   const mark = useCallback((label: string) => {
     const now = performance.now();
     const ms = stepClockRef.current ? now - stepClockRef.current : 0;
     stepClockRef.current = now;
-    const step = { label, ms };
-    stepsRef.current = [...stepsRef.current, step];
-    setSteps(stepsRef.current);
+    stepsRef.current = [...stepsRef.current, { label, ms }];
   }, []);
 
   const flushTelemetry = useCallback((outcome: string) => {
+    if (!sessionIdRef.current) {
+      sessionIdRef.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? `ccg-${crypto.randomUUID()}`
+          : `ccg-${Date.now().toString(36)}`;
+    }
     const payload = JSON.stringify({
       sessionId: sessionIdRef.current,
-      mode: modeRef.current,
+      mode: "push-to-talk",
       steps: stepsRef.current.map((step) => ({ label: step.label, ms: Math.round(step.ms) })),
       outcome,
     });
     if (navigator.sendBeacon) {
       navigator.sendBeacon("/api/agent/telemetry", new Blob([payload], { type: "application/json" }));
     } else {
-      void fetch("/api/agent/telemetry", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true });
+      void fetch("/api/agent/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        keepalive: true,
+      });
     }
   }, []);
 
@@ -108,139 +264,35 @@ export default function ConciergeOrb({
     }
   }, [flushTelemetry, mark, onClose, router]);
 
-  // ---- Client tools the ElevenLabs agent drives ----
-  const clientTools = {
-    create_character: async ({ name, brief, archetypes }: { name?: string; brief: string; archetypes?: string }) => {
-      mark(`Casting ${name || "a new actor"}`);
-      const params = new URLSearchParams({ auto: "1" });
-      if (name?.trim()) params.set("cname", name.trim());
-      if (brief?.trim()) params.set("cbrief", brief.trim());
-      const cleanArchetypes = (archetypes ?? "")
-        .split(",")
-        .map((value) => value.trim().toLowerCase())
-        .filter((value) => ALLOWED_ARCHETYPES.includes(value));
-      if (cleanArchetypes.length) params.set("carchetypes", cleanArchetypes.join(","));
-      window.setTimeout(() => leaveTo(`/characters/new?${params.toString()}`, `create_character:${name || "unnamed"}`), 1600);
-      return "Builder opening — the full identity is now generating in front of them.";
-    },
-    create_video: async ({ format, brief }: { format: string; brief: string }) => {
-      const safeFormat = ["story", "ad", "reel"].includes(format) ? format : "story";
-      mark(`Writing a ${safeFormat}`);
-      const params = new URLSearchParams({ format: safeFormat, auto: "1" });
-      if (brief?.trim()) params.set("brief", brief.trim());
-      window.setTimeout(() => leaveTo(`/studio/write?${params.toString()}`, `create_video:${safeFormat}`), 1600);
-      return "Writing room opening — the draft is being written for them now.";
-    },
-    open_page: async ({ path }: { path: string }) => {
-      const safePath = typeof path === "string" && path.startsWith("/") ? path : "/characters";
-      mark(`Opening ${safePath}`);
-      window.setTimeout(() => leaveTo(safePath, `open_page:${safePath}`), 900);
-      return "Opening it.";
-    },
-  };
+  const openCharacterBuilder = useCallback((input?: {
+    name?: string | null;
+    brief?: string | null;
+    archetypes?: string[];
+  }) => {
+    const params = new URLSearchParams();
+    if (input?.name?.trim()) params.set("cname", input.name.trim());
+    if (input?.brief?.trim()) params.set("cbrief", input.brief.trim());
+    const archetypes = (input?.archetypes ?? [])
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => ALLOWED_ARCHETYPES.includes(value));
+    if (archetypes.length) params.set("carchetypes", archetypes.join(","));
+    const query = params.toString();
+    leaveTo(`/characters/new${query ? `?${query}` : ""}`, "create_character");
+  }, [leaveTo]);
 
-  // ---- Session bootstrap: try live ElevenLabs voice, fall back to typed intent ----
-  useEffect(() => {
-    closedRef.current = false;
-    stepClockRef.current = performance.now();
-    let cancelled = false;
+  const openVideoBuilder = useCallback((format: "spark" | "punch" | "episode" | "spot", brief?: string | null) => {
+    const params = new URLSearchParams({ format });
+    if (brief?.trim()) params.set("brief", brief.trim());
+    leaveTo(`/studio/write?${params.toString()}`, `create_video:${format}`);
+  }, [leaveTo]);
 
-    async function start() {
-      try {
-        const sessionResponse = await fetch("/api/agent/voice-session", { cache: "no-store" });
-        if (!sessionResponse.ok) throw new Error("voice session unavailable");
-        const { signedUrl } = (await sessionResponse.json()) as { signedUrl: string };
-        mark("Signed session issued");
-        const conversation = await Conversation.startSession({
-          signedUrl,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          clientTools: clientTools as any,
-          onConnect: () => {
-            if (cancelled) return;
-            window.speechSynthesis?.cancel(); // one voice only — the agent's
-            modeRef.current = "eleven";
-            setMode("eleven");
-            setOrbState("listening");
-            mark("Voice agent connected");
-          },
-          onDisconnect: () => {
-            if (!closedRef.current) setOrbState("idle");
-          },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onMessage: (message: any) => {
-            if (cancelled) return;
-            const text = typeof message?.message === "string" ? message.message : "";
-            if (!text) return;
-            if (message.source === "ai") {
-              setAgentLine(text);
-              mark("Agent replied");
-            } else {
-              setUserLine(text);
-              mark("Heard the user");
-            }
-          },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onModeChange: (info: any) => {
-            if (cancelled || closedRef.current) return;
-            setOrbState(info?.mode === "speaking" ? "speaking" : "listening");
-          },
-          onError: () => {
-            /* surface through fallback below if fatal at start */
-          },
-        });
-        // React dev double-mounts effects: if this instance was cancelled while
-        // connecting, kill the session immediately or two agents talk at once.
-        if (cancelled || closedRef.current) {
-          void conversation.endSession?.();
-          return;
-        }
-        conversationRef.current = conversation;
-      } catch {
-        if (cancelled) return;
-        modeRef.current = "fallback";
-        setMode("fallback");
-        setOrbState("idle");
-        mark("Fallback mode (typed)");
-        const greeting = role === "brand" ? "Which face is fronting your next campaign?" : "What are we creating today?";
-        setAgentLine(greeting);
-        setOrbState("speaking");
-        fallbackSpeak(greeting, () => {
-          if (!closedRef.current) setOrbState("idle");
-        });
-      }
-    }
-
-    void start();
-    return () => {
-      cancelled = true;
-      closedRef.current = true;
-      window.speechSynthesis?.cancel();
-      void conversationRef.current?.endSession?.();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- boot once per open
-  }, []);
-
-  // ---- Typed path (works in both modes) ----
-  async function submitTyped(utterance: string) {
+  const submitIntent = useCallback(async (utterance: string) => {
     const text = utterance.trim();
     if (text.length < 3) return;
     setUserLine(text);
-    if (modeRef.current === "eleven") {
-      if (conversationRef.current?.sendUserMessage) {
-        conversationRef.current.sendUserMessage(text);
-        setDraft("");
-        return;
-      }
-      // No text channel on this SDK version: hand off cleanly to the typed
-      // pipeline — one voice at a time, never both.
-      void conversationRef.current?.endSession?.();
-      conversationRef.current = null;
-      modeRef.current = "fallback";
-      setMode("fallback");
-      mark("Switched to typed pipeline");
-    }
+    setDraft("");
     setOrbState("thinking");
-    setAgentLine("Thinking…");
+    setAgentLine("Understanding what you want to make…");
     mark("Understanding");
     try {
       const response = await fetch("/api/agent/intent", {
@@ -248,24 +300,34 @@ export default function ConciergeOrb({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ utterance: text, role }),
       });
-      const data = (await response.json()) as ConciergeIntentResponse;
-      if (!response.ok) throw new Error(data.error || "The concierge lost the thread.");
+      const data = await readIntentResponse(response);
       mark(`Intent: ${data.intent}`);
       setAgentLine(data.reply);
       setOrbState("speaking");
       fallbackSpeak(data.reply, () => {
         if (closedRef.current) return;
         if (data.intent === "create_character") {
-          void clientTools.create_character({
-            name: data.name ?? undefined,
+          openCharacterBuilder({
+            name: data.name,
             brief: data.characterBrief ?? text,
-            archetypes: data.archetypes.join(","),
+            archetypes: data.archetypes,
           });
-        } else if (data.intent === "create_video" || data.intent === "create_ad" || data.intent === "create_reel") {
-          void clientTools.create_video({
-            format: data.intent === "create_ad" ? "ad" : data.intent === "create_reel" ? "reel" : "story",
-            brief: data.storyBrief ?? text,
-          });
+        } else if (
+          data.intent === "create_spark" ||
+          data.intent === "create_punch" ||
+          data.intent === "create_episode" ||
+          data.intent === "create_spot"
+        ) {
+          const roleFormat = role === "brand"
+            ? "spot"
+            : data.intent === "create_spark"
+              ? "spark"
+              : data.intent === "create_episode"
+                ? "episode"
+                : data.intent === "create_spot"
+                  ? "spot"
+                  : "punch";
+          openVideoBuilder(roleFormat, data.storyBrief ?? text);
         } else if (data.intent === "create_series") {
           leaveTo("/series/new", "create_series");
         } else if (data.intent === "browse") {
@@ -276,111 +338,314 @@ export default function ConciergeOrb({
       });
     } catch (error) {
       setOrbState("idle");
-      setAgentLine(error instanceof Error ? error.message : "Something slipped. Say that again?");
+      setAgentLine(error instanceof Error ? error.message : "Something slipped. Try that again.");
     }
-  }
+  }, [leaveTo, mark, openCharacterBuilder, openVideoBuilder, role]);
+
+  const startPushToTalk = useCallback(() => {
+    if (recognitionRef.current || orbState === "thinking" || orbState === "speaking") return;
+    window.speechSynthesis?.cancel();
+    const speechWindow = window as SpeechWindow;
+    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setAgentLine("Push-to-talk is unavailable in this browser. Type the same thought below.");
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    transcriptRef.current = "";
+    recognitionFailedRef.current = false;
+    recognitionRef.current = recognition;
+    recognition.onstart = () => {
+      mark("Push-to-talk started");
+      setUserLine("");
+      setAgentLine("Listening only while you hold…");
+      setOrbState("listening");
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? "")
+        .join(" ")
+        .trim();
+      transcriptRef.current = transcript;
+      setDraft(transcript);
+      setUserLine(transcript);
+    };
+    recognition.onerror = (event) => {
+      recognitionFailedRef.current = true;
+      recognitionRef.current = null;
+      setOrbState("idle");
+      setAgentLine(
+        event.error === "not-allowed"
+          ? "Microphone access is off. Allow it once, or type below."
+          : "I could not hear that clearly. Hold and try again.",
+      );
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setOrbState("idle");
+      const transcript = transcriptRef.current.trim();
+      if (!recognitionFailedRef.current && transcript.length >= 3) {
+        void submitIntent(transcript);
+      } else if (!recognitionFailedRef.current) {
+        setAgentLine("Hold the orb, say one thought, then release.");
+      }
+    };
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setOrbState("idle");
+      setAgentLine("The microphone is already busy. Try once more.");
+    }
+  }, [mark, orbState, submitIntent]);
+
+  const stopPushToTalk = useCallback(() => {
+    if (!recognitionRef.current) return;
+    try {
+      recognitionRef.current.stop();
+    } catch {
+      recognitionRef.current.abort();
+    }
+  }, []);
+
+  useImperativeHandle(ref, () => ({ startPushToTalk, stopPushToTalk }), [startPushToTalk, stopPushToTalk]);
 
   function handleClose() {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    window.speechSynthesis?.cancel();
     flushTelemetry("closed");
     onClose();
   }
 
-  const orbAnimation =
-    orbState === "listening"
-      ? "animate-[chaplin-orb-listen_1.1s_ease-in-out_infinite]"
-      : orbState === "thinking" || orbState === "connecting"
-        ? "animate-[chaplin-orb-think_0.9s_linear_infinite]"
-        : "animate-[chaplin-orb-breathe_3.2s_ease-in-out_infinite]";
+  useEffect(() => {
+    closedRef.current = false;
+    stepClockRef.current = performance.now();
+    return () => {
+      closedRef.current = true;
+      recognitionRef.current?.abort();
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  useEffect(() => {
+    onStateChange?.(orbState);
+  }, [onStateChange, orbState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/drafts", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json() as { drafts?: DraftSummary[] };
+        if (cancelled) return;
+        if (response.status === 401) setDraftsNeedLogin(true);
+        else if (response.ok) setSavedDrafts((data.drafts ?? []).slice(0, 3));
+      })
+      .finally(() => { if (!cancelled) setDraftsLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
-    <div className="fixed inset-0 z-[95] flex flex-col items-center justify-center bg-black/80 px-6 backdrop-blur-xl" data-concierge data-mode={mode}>
+    <>
       <button
         type="button"
+        aria-label="Close create menu"
         onClick={handleClose}
-        aria-label="Close the concierge"
-        className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-lg text-white/70 transition-colors hover:border-accent hover:text-white"
+        className="fixed inset-0 z-[90] cursor-default bg-black/20 backdrop-blur-[2px]"
+      />
+
+      <section
+        className="chaplin-scrollbar fixed bottom-[7.25rem] left-1/2 z-[95] max-h-[calc(100dvh-9rem)] w-[calc(100%-1.5rem)] max-w-[34rem] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-[1.75rem] border border-white/15 bg-[#0b0e09]/95 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.72)] backdrop-blur-2xl sm:p-5"
+        data-concierge
+        data-mode="push-to-talk"
       >
-        ✕
-      </button>
+        <span className="absolute bottom-[-7px] left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 border-b border-r border-white/15 bg-[#0b0e09]" />
 
-      <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-accent">
-        Chaplin Concierge {mode === "eleven" ? "· live voice" : ""}
-      </p>
-
-      {/* The orb */}
-      <div className="relative mt-6 h-36 w-36 rounded-full sm:h-44 sm:w-44" data-orb-state={orbState}>
-        <span className={`absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,#ff5c8a,transparent_55%),radial-gradient(circle_at_70%_72%,#20d9d2,transparent_55%),radial-gradient(circle_at_50%_50%,#7b6cff,#12060e_78%)] shadow-[0_0_70px_rgba(244,70,112,0.4),0_0_110px_rgba(32,217,210,0.25)] ${orbAnimation}`} />
-        <span className="absolute inset-[14%] rounded-full bg-white/5 backdrop-blur-[2px]" />
-        {orbState === "connecting" && (
-          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold uppercase tracking-widest text-white/80">Connecting…</span>
-        )}
-      </div>
-
-      {/* Conversation lines */}
-      <div className="mt-6 flex min-h-16 max-w-md flex-col items-center gap-1.5 text-center">
-        {userLine && <p className="text-xs text-white/50">“{userLine}”</p>}
-        <p className="text-base leading-6 text-white sm:text-lg" aria-live="assertive" data-agent-line>
-          {agentLine || (mode === "eleven" ? "Just talk — I'm listening." : "")}
-        </p>
-      </div>
-
-      {/* Typed input works in both modes */}
-      <form
-        className="mt-4 flex w-full max-w-md items-center gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submitTyped(draft);
-        }}
-      >
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={mode === "eleven" ? "Or type it instead of talking" : "Type what you want to make"}
-          className="min-w-0 flex-1 rounded-full border border-white/20 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:border-accent focus:outline-none"
-          data-concierge-input
-        />
-        <button
-          type="submit"
-          disabled={orbState === "thinking" || draft.trim().length < 3}
-          className="shrink-0 rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-40"
-        >
-          {orbState === "thinking" ? "…" : "Go"}
-        </button>
-      </form>
-
-      {/* Quick paths, with what each one actually makes */}
-      <div className="mt-5 flex max-w-lg flex-wrap items-center justify-center gap-2">
-        {quickOptions.map((option) => (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent">Create with Chaplin</p>
+            <h2 className="mt-1 text-xl font-semibold">What do you want to make?</h2>
+          </div>
           <button
-            key={option.href}
             type="button"
-            title={TIER_PREVIEWS[option.href] ?? option.copy}
-            onClick={() => {
-              mark(`Quick: ${option.title}`);
-              setAgentLine(TIER_PREVIEWS[option.href] ?? option.copy);
-              window.setTimeout(() => leaveTo(option.href, `quick:${option.href}`), 1100);
-            }}
-            className="rounded-full border border-white/20 px-3.5 py-1.5 text-[11px] font-semibold text-white/75 transition-colors hover:border-accent hover:text-white"
+            onClick={handleClose}
+            aria-label="Close"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 text-sm text-white/60 hover:border-accent hover:text-white"
           >
-            {option.title}
+            ×
           </button>
-        ))}
-      </div>
-
-      {/* Mission log: every step, timed */}
-      {steps.length > 0 && (
-        <div className="absolute bottom-5 left-5 hidden w-64 sm:block" data-mission-log>
-          <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.22em] text-white/40">Mission log</p>
-          <ul className="flex flex-col gap-1">
-            {steps.slice(-6).map((step, index) => (
-              <li key={`${step.label}-${index}`} className="flex items-baseline justify-between gap-3 text-[11px] text-white/70">
-                <span className="truncate">{step.label}</span>
-                <span className="shrink-0 tabular-nums text-white/35">{step.ms >= 1000 ? `${(step.ms / 1000).toFixed(1)}s` : `${Math.round(step.ms)}ms`}</span>
-              </li>
-            ))}
-          </ul>
         </div>
-      )}
-    </div>
+
+        <div className="mt-4" data-continue-drafts>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-secondary">Continue from Draft</p>
+            {savedDrafts.length > 0 && (
+              <button type="button" onClick={() => leaveTo("/studio", "all_drafts")} className="text-[10px] text-white/45 hover:text-accent">
+                View all
+              </button>
+            )}
+          </div>
+          {draftsLoading ? (
+            <div className="rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-xs text-white/40">Finding your latest draft…</div>
+          ) : draftsNeedLogin ? (
+            <div className="flex items-center gap-3 rounded-2xl border border-white/12 px-3 py-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/12 text-white/55">
+                <IconLock className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-semibold text-white">Your drafts</span>
+                <span className="mt-0.5 block text-[10px] leading-4 text-white/45">Sign in to continue where you left off.</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => leaveTo("/auth?next=/studio", "sign_in_for_drafts")}
+                className="shrink-0 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              >
+                Sign in
+              </button>
+            </div>
+          ) : savedDrafts.length === 0 ? (
+            <div className="rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-xs text-white/40">Your first idea will autosave here.</div>
+          ) : (
+            <div className="grid gap-2">
+              {savedDrafts.map((saved) => (
+                <button
+                  key={saved.id}
+                  type="button"
+                  onClick={() => leaveTo(`/studio/write?format=${saved.format}&draft=${saved.id}`, `continue_draft:${saved.id}`)}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5 text-left hover:border-accent"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold">{saved.title || "Untitled draft"}</span>
+                    <span className="mt-0.5 block truncate text-[10px] text-white/40">
+                      {saved.format === "episode" ? "Episode · 60s" : saved.format === "punch" ? "Punch · 15s" : saved.format === "spark" ? "Spark · 5s" : "Brand Spot"}
+                      {saved.logline ? ` · ${saved.logline}` : ""}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-accent">→</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="my-4 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-white/10" />
+          <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35">start a new draft</span>
+          <span className="h-px flex-1 bg-white/10" />
+        </div>
+
+        <div
+          className={`grid grid-cols-1 gap-3 ${quickOptions.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+          data-create-choices
+        >
+          {quickOptions.map((option) => (
+            <button
+              key={option.kind}
+              type="button"
+              onClick={() => {
+                mark(`Create choice: ${option.kind}`);
+                leaveTo(option.href, `quick:${option.kind}`);
+              }}
+              className="group rounded-[1.25rem] border border-white/15 p-2 text-left transition duration-300 hover:-translate-y-0.5 hover:border-accent focus-visible:border-accent focus-visible:outline-none"
+              data-create-choice={option.kind}
+            >
+              <QuickOptionVisual kind={option.kind} />
+              <span className="block px-2 pb-2 pt-3">
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-base font-semibold">{option.title}</span>
+                  <span className="text-lg text-accent transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+                </span>
+                <span className="mt-1 block text-[11px] leading-5 text-white/55">{option.copy}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="my-4 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-white/10" />
+          <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35">or tell Chaplin once</span>
+          <span className="h-px flex-1 bg-white/10" />
+        </div>
+
+        {(userLine || agentLine) && (
+          <div className="mb-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5" aria-live="polite">
+            {userLine && <p className="text-[10px] text-white/40">You: {userLine}</p>}
+            {agentLine && <p className="mt-1 text-xs leading-5 text-white/80" data-agent-line>{agentLine}</p>}
+          </div>
+        )}
+
+        <div>
+          <div
+            className={`mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+              orbState === "listening"
+                ? "text-emerald-400"
+                : orbState === "thinking"
+                  ? "text-accent"
+                  : orbState === "speaking"
+                    ? "text-accent-secondary"
+                    : "text-white/35"
+            }`}
+            data-voice-status={orbState}
+            aria-live="polite"
+          >
+            <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+              {orbState === "listening" && <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/70" />}
+              <span
+                className={`relative h-2 w-2 rounded-full ${
+                  orbState === "listening"
+                    ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]"
+                    : orbState === "thinking"
+                      ? "animate-pulse bg-accent"
+                      : orbState === "speaking"
+                        ? "animate-pulse bg-accent-secondary"
+                        : "bg-white/25"
+                }`}
+              />
+            </span>
+            <span>
+              {orbState === "listening"
+                ? "Live · Listening"
+                : orbState === "thinking"
+                  ? "Working on it"
+                  : orbState === "speaking"
+                    ? "Chaplin is speaking"
+                    : "Voice off · Hold the orb to talk"}
+            </span>
+          </div>
+          <form
+            className="flex min-w-0 items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitIntent(draft);
+            }}
+          >
+            <label className="min-w-0 flex-1">
+              <span className="sr-only">Tell Chaplin what you want to make</span>
+              <input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Or type one idea…"
+                className="w-full rounded-full border border-white/15 bg-white/5 px-3.5 py-2.5 text-xs text-white placeholder:text-white/30 focus:border-accent focus:outline-none"
+                data-concierge-input
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={orbState === "thinking" || draft.trim().length < 3}
+              className="mt-4 shrink-0 rounded-full bg-accent px-4 py-2.5 text-xs font-semibold text-paper disabled:opacity-40"
+            >
+              {orbState === "thinking" ? "…" : "Go"}
+            </button>
+          </form>
+        </div>
+      </section>
+    </>
   );
-}
+});
+
+export default ConciergeOrb;

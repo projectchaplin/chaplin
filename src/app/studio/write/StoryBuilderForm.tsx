@@ -13,6 +13,15 @@ import {
   LICENSE_LABEL,
   money,
 } from "@/lib/format";
+import {
+  PRODUCTION_FORMATS,
+  defaultFormatForRole,
+  formatsForRole,
+  normalizeProductionFormat,
+  productionDuration,
+  productionShotCount,
+  type ProductionFormat,
+} from "@/lib/production-formats";
 
 interface DraftLine {
   characterId: string;
@@ -25,8 +34,6 @@ interface DraftScene {
   lines: DraftLine[];
 }
 
-type WritingFormat = "story" | "ad" | "reel";
-
 type MagicDraft = {
   title: string;
   logline: string;
@@ -35,21 +42,43 @@ type MagicDraft = {
   scenes: DraftScene[];
 };
 
-const IDEA_STARTERS: Record<WritingFormat, string[]> = {
-  story: [
+type StoredDraft = {
+  id: string;
+  format: ProductionFormat;
+  title: string;
+  logline: string;
+  body?: {
+    brief?: string;
+    durationSeconds?: number;
+    creativeDirection?: string;
+    castIds?: string[];
+    scenes?: DraftScene[];
+    step?: 1 | 2 | 3;
+  };
+};
+
+type DraftSaveState = "idle" | "loading" | "saving" | "saved" | "signed-out" | "error";
+
+const IDEA_STARTERS: Record<ProductionFormat, string[]> = {
+  episode: [
     "A simple job becomes a moral choice before dawn",
     "Two rivals must protect the same secret",
     "A comic mistake exposes a dangerous truth",
   ],
-  ad: [
+  spot: [
     "Make one product benefit impossible to forget",
     "Show the problem and transformation in one visual move",
     "Turn a customer doubt into visible proof",
   ],
-  reel: [
+  punch: [
     "Open with a pattern-break and land one punchline",
-    "A before-and-after reveal made for vertical video",
-    "One character challenge, one surprising payoff",
+    "Put the actor under pressure and reveal their signature choice",
+    "One visual hook, one reversal, one unforgettable final look",
+  ],
+  spark: [
+    "One look that tells us exactly who this actor is",
+    "A five-second entrance with a visible point of view",
+    "One prop, one gesture, one casting-defining choice",
   ],
 };
 
@@ -60,13 +89,18 @@ export default function StoryBuilderForm() {
   const searchParams = useSearchParams();
   const world = useChaplinStore((s) => s);
   const currentUserId = useChaplinStore((s) => s.currentUserId);
+  const activeRole = useChaplinStore((s) => s.activeRole);
   const addStory = useChaplinStore((s) => s.addStory);
 
-  const [format, setFormat] = useState<WritingFormat>(() => {
-    const requested = searchParams.get("format");
-    return requested === "ad" || requested === "reel" ? requested : "story";
-  });
-  const [durationSeconds, setDurationSeconds] = useState(() => searchParams.get("format") === "ad" ? 30 : 60);
+  const [format, setFormat] = useState<ProductionFormat>(() =>
+    normalizeProductionFormat(searchParams.get("format"), "punch")
+  );
+  const [durationSeconds, setDurationSeconds] = useState<number>(() =>
+    productionDuration(
+      normalizeProductionFormat(searchParams.get("format"), "punch"),
+      Number(searchParams.get("duration")),
+    )
+  );
   const [brief, setBrief] = useState(() => searchParams.get("brief")?.trim() ?? "");
   const [title, setTitle] = useState("");
   const [logline, setLogline] = useState("");
@@ -82,6 +116,109 @@ export default function StoryBuilderForm() {
   const [magicMessage, setMagicMessage] = useState("");
   const [claudeConfigured, setClaudeConfigured] = useState<boolean | null>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [draftId, setDraftId] = useState(() => searchParams.get("draft") ?? "");
+  const [draftReady, setDraftReady] = useState(() => !searchParams.get("draft"));
+  const [draftSaveState, setDraftSaveState] = useState<DraftSaveState>(
+    searchParams.get("draft") ? "loading" : "idle",
+  );
+  const formatOptions = formatsForRole(activeRole);
+  const formatDefinition = PRODUCTION_FORMATS[format];
+  const expectedShotCount = productionShotCount(format, durationSeconds);
+
+  useEffect(() => {
+    if (formatOptions.includes(format)) return;
+    const nextFormat = defaultFormatForRole(activeRole);
+    const timer = window.setTimeout(() => {
+      setFormat(nextFormat);
+      setDurationSeconds(productionDuration(nextFormat));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeRole, format, formatOptions]);
+
+  useEffect(() => {
+    const requestedDraftId = searchParams.get("draft");
+    if (!requestedDraftId) return;
+    let cancelled = false;
+    void fetch(`/api/drafts?id=${encodeURIComponent(requestedDraftId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json() as { draft?: StoredDraft; error?: string };
+        if (!response.ok || !data.draft) throw new Error(data.error || "Could not open this draft.");
+        return data.draft;
+      })
+      .then((stored) => {
+        if (cancelled) return;
+        const body = stored.body ?? {};
+        setFormat(stored.format);
+        setTitle(stored.title);
+        setLogline(stored.logline);
+        setBrief(body.brief ?? "");
+        setDurationSeconds(body.durationSeconds ?? productionDuration(stored.format));
+        setCreativeDirection(body.creativeDirection ?? "");
+        setCastIds(Array.isArray(body.castIds) ? body.castIds : []);
+        setScenes(Array.isArray(body.scenes) && body.scenes.length ? body.scenes : [{ ...EMPTY_SCENE }]);
+        setStep(body.step === 2 || body.step === 3 ? body.step : 1);
+        setDraftId(stored.id);
+        setDraftReady(true);
+        setDraftSaveState("saved");
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : "Could not open this draft.");
+        setDraftReady(true);
+        setDraftSaveState("error");
+      });
+    return () => { cancelled = true; };
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    const hasWork = Boolean(
+      brief.trim() ||
+      title.trim() ||
+      logline.trim() ||
+      creativeDirection.trim() ||
+      castIds.length ||
+      scenes.some((scene) => scene.setting.trim() || scene.objective?.trim() || scene.action?.trim() || scene.lines.some((line) => line.text.trim())),
+    );
+    if (!hasWork) return;
+
+    const timer = window.setTimeout(() => {
+      setDraftSaveState("saving");
+      void fetch("/api/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: draftId || undefined,
+          format,
+          title,
+          logline,
+          body: { brief, durationSeconds, creativeDirection, castIds, scenes, step },
+        }),
+      })
+        .then(async (response) => {
+          const data = await response.json() as { draft?: StoredDraft; error?: string };
+          if (response.status === 401) {
+            setDraftSaveState("signed-out");
+            return null;
+          }
+          if (!response.ok || !data.draft) throw new Error(data.error || "Draft could not be saved.");
+          return data.draft;
+        })
+        .then((saved) => {
+          if (!saved) return;
+          if (!draftId) {
+            setDraftId(saved.id);
+            const params = new URLSearchParams(window.location.search);
+            params.set("draft", saved.id);
+            window.history.replaceState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+          }
+          setDraftSaveState("saved");
+        })
+        .catch(() => setDraftSaveState("error"));
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [brief, castIds, creativeDirection, draftId, draftReady, durationSeconds, format, logline, scenes, step, title]);
 
   useEffect(() => {
     fetch("/api/write/magic", { cache: "no-store" })
@@ -218,14 +355,14 @@ export default function StoryBuilderForm() {
     }
   }
 
-  function handlePublish() {
+  function handleStartProduction() {
     if (!title.trim() || !logline.trim()) {
-      setError("Give the story a title and a logline first.");
+      setError(`Give the ${formatDefinition.label} a title and a logline first.`);
       setStep(1);
       return;
     }
     if (castCharacters.length === 0) {
-      setError("Cast at least one character before you publish.");
+      setError("Lock at least one actor before production.");
       setStep(2);
       return;
     }
@@ -239,7 +376,7 @@ export default function StoryBuilderForm() {
       .filter((sc) => sc.lines.length > 0);
 
     if (validScenes.length === 0) {
-      setError("Write at least one scene with a line of dialogue.");
+      setError("Write at least one playable beat with a line of dialogue.");
       setStep(3);
       return;
     }
@@ -249,13 +386,17 @@ export default function StoryBuilderForm() {
       logline: logline.trim(),
       format,
       durationSeconds,
+      status: "production",
       creativeDirection: creativeDirection.trim() || undefined,
       authorId: currentUserId,
       coverHue: castCharacters[0]?.avatarHue ?? 205,
       castCharacterIds: castIds,
       scenes: validScenes,
     });
-    router.push(`/stories/${story.id}`);
+    if (draftId) {
+      void fetch(`/api/drafts?id=${encodeURIComponent(draftId)}`, { method: "DELETE" });
+    }
+    router.push(`/productions/${story.id}`);
   }
 
   return (
@@ -264,15 +405,104 @@ export default function StoryBuilderForm() {
         ← Stories
       </Link>
 
-      <div className="mt-3 mb-6">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-1">
-          AI Writing Room
-        </p>
-        <h1 className="reel-title text-3xl">From one spark to a shootable script</h1>
+      <div className="mt-3 mb-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-1">
+            AI Writing Room
+          </p>
+          <h1 className="reel-title text-3xl">From one spark to a shootable script</h1>
+        </div>
+        <div className="shrink-0 text-right">
+          <Link href="/studio" className="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-light">
+            Drafts
+          </Link>
+          <p className={`mt-1 text-[10px] ${
+            draftSaveState === "error" ? "text-red-300" :
+            draftSaveState === "saved" ? "text-accent-secondary" :
+            "text-grey"
+          }`}>
+            {draftSaveState === "loading" && "Opening draft…"}
+            {draftSaveState === "saving" && "Saving…"}
+            {draftSaveState === "saved" && "Saved to your account"}
+            {draftSaveState === "signed-out" && "Sign in to save drafts"}
+            {draftSaveState === "error" && "Draft save needs attention"}
+            {draftSaveState === "idle" && "Autosaves when you start"}
+          </p>
+        </div>
       </div>
 
-      <section className="poster-card rounded-md p-5 mb-6 border border-accent/40 bg-accent/[0.04]" data-magic-writer>
-        <div className="flex flex-col gap-4">
+      <section className="mb-6" aria-labelledby="output-contract-heading">
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
+              {activeRole === "brand" ? "Brand production" : activeRole === "admin" ? "Super Admin production" : "Creator production"}
+            </p>
+            <h2 id="output-contract-heading" className="reel-title mt-1 text-2xl">Choose the output before writing</h2>
+          </div>
+          <Link href="/studio/pipelines" className="text-[10px] text-grey hover:text-accent">See the full map →</Link>
+        </div>
+        <div className={`grid gap-2 ${formatOptions.length > 1 ? "sm:grid-cols-3" : ""}`}>
+          {formatOptions.map((option) => {
+            const definition = PRODUCTION_FORMATS[option];
+            const selected = format === option;
+            const optionDuration = option === "spot" ? durationSeconds : definition.durationSeconds;
+            const optionShots = productionShotCount(option, optionDuration);
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  setFormat(option);
+                  setDurationSeconds(productionDuration(option));
+                }}
+                className={`relative overflow-hidden rounded-lg border p-4 text-left transition-all ${
+                  selected
+                    ? "border-accent bg-accent/[0.08] shadow-[0_0_30px_rgba(242,78,112,0.08)]"
+                    : "border-line bg-white/[0.025] hover:border-white/25"
+                }`}
+                data-writing-format={option}
+                aria-pressed={selected}
+              >
+                <span className={`font-mono text-3xl ${selected ? "text-accent" : "text-white/35"}`}>{optionDuration}s</span>
+                <span className="ml-2 text-sm font-semibold">{definition.label}</span>
+                <span className="mt-3 block text-[10px] uppercase tracking-wide text-grey">{optionShots} × five-second shot{optionShots === 1 ? "" : "s"}</span>
+                <span className="mt-2 block text-[11px] leading-4 text-grey">{definition.promise}</span>
+                <span className={`absolute inset-x-0 bottom-0 h-0.5 ${selected ? "pipeline-flow-line" : "bg-white/5"}`} />
+              </button>
+            );
+          })}
+        </div>
+        {format === "spot" && (
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-md border border-line px-4 py-3">
+            <div>
+              <p className="text-xs font-semibold">Spot runtime</p>
+              <p className="mt-0.5 text-[10px] text-grey">Runtime changes the required shot count and delivery contract.</p>
+            </div>
+            <div className="flex rounded-full border border-line p-1">
+              {[30, 60].map((seconds) => (
+                <button
+                  key={seconds}
+                  type="button"
+                  onClick={() => setDurationSeconds(seconds)}
+                  className={`rounded-full px-3 py-1 text-[10px] font-semibold ${durationSeconds === seconds ? "bg-accent text-white" : "text-grey"}`}
+                >
+                  {seconds}s · {seconds / 5} shots
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <details className="poster-card mb-6 overflow-hidden rounded-md border border-accent/40 bg-accent/[0.04]" data-magic-writer>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-accent/[0.05]">
+          <span>
+            <span className="block text-sm font-semibold">✦ Magic assist</span>
+            <span className="mt-0.5 block text-[11px] text-grey">Optional: expand one thought into a complete draft.</span>
+          </span>
+          <span className="shrink-0 rounded-full border border-accent/50 px-3 py-1 text-[10px] font-semibold text-accent">Open</span>
+        </summary>
+        <div className="flex flex-col gap-4 border-t border-line p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -287,24 +517,8 @@ export default function StoryBuilderForm() {
                 Give us one thought, a product, a character idea, or nothing at all. Magic Writer expands it into cast, structure, visual action, and dialogue.
               </p>
             </div>
-            <div className="flex rounded-full border border-line bg-paper p-1">
-              {(["story", "ad", "reel"] as WritingFormat[]).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    setFormat(option);
-                    setDurationSeconds(option === "story" ? 60 : option === "ad" ? 30 : 15);
-                  }}
-                  className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                    format === option ? "bg-accent text-paper" : "text-grey hover:text-ink"
-                  }`}
-                  data-writing-format={option}
-                  aria-pressed={format === option}
-                >
-                  {option}
-                </button>
-              ))}
+            <div className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+              {formatDefinition.label} · {durationSeconds}s · {expectedShotCount} shots
             </div>
           </div>
 
@@ -312,9 +526,11 @@ export default function StoryBuilderForm() {
             value={brief}
             onChange={(event) => setBrief(event.target.value)}
             rows={3}
-            placeholder={format === "story"
+            placeholder={format === "episode"
               ? "e.g. Lightning Raju loses his powers during the one rescue that matters most..."
-              : "e.g. A 15-second launch ad for a fast delivery app, funny but premium..."}
+              : format === "spot"
+                ? "e.g. A launch spot for a fast delivery app, funny but premium..."
+                : `e.g. A ${durationSeconds}-second performance that makes this actor impossible to miscast...`}
             className="w-full border border-line rounded-sm bg-paper px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-accent"
             data-magic-brief
           />
@@ -403,7 +619,7 @@ export default function StoryBuilderForm() {
           </div>
           {magicMessage && <p className="text-xs text-emerald-500">{magicMessage}</p>}
         </div>
-      </section>
+      </details>
 
       <div className="mb-4 flex items-center gap-3" aria-hidden="true">
         <span className="h-px flex-1 bg-line" />
@@ -416,7 +632,7 @@ export default function StoryBuilderForm() {
           [
             [1, "Concept"],
             [2, "Cast"],
-            [3, "Script"],
+            [3, `${formatDefinition.label} script`],
           ] as const
         ).map(([n, label]) => (
           <button
@@ -438,7 +654,7 @@ export default function StoryBuilderForm() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={format === "story" ? "e.g. The Last Reel at Midnight" : "e.g. One Tap Ahead"}
+              placeholder={format === "episode" ? "e.g. The Last Reel at Midnight" : format === "spot" ? "e.g. One Tap Ahead" : `e.g. ${formatDefinition.label}: First Impression`}
               className="border border-line rounded-sm px-3 py-2 focus:outline-none focus:border-accent"
               data-script-field="title"
             />
@@ -449,7 +665,7 @@ export default function StoryBuilderForm() {
               value={logline}
               onChange={(e) => setLogline(e.target.value)}
               rows={2}
-              placeholder={format === "story" ? "One or two sentences that sell the story" : "The audience, promise, and dramatic idea in one sentence"}
+              placeholder={format === "episode" ? "One or two sentences that sell the episode" : "The performance promise and dramatic idea in one sentence"}
               className="border border-line rounded-sm px-3 py-2 focus:outline-none focus:border-accent resize-none"
               data-script-field="logline"
             />
@@ -469,7 +685,7 @@ export default function StoryBuilderForm() {
             onClick={() => setStep(2)}
             className="self-end bg-accent text-paper font-semibold px-4 py-2 rounded-sm hover:bg-accent-light transition-colors"
           >
-            Next: cast your story →
+            Next: lock the cast →
           </button>
         </div>
       )}
@@ -613,10 +829,30 @@ export default function StoryBuilderForm() {
                 })}
               </div>
               <p className="mt-2 text-[10px] text-grey">
-                These locked identities feed every image, voice line, and scene render for this {format}.
+                These locked identities feed every reference frame, voice line, and shot package for this {formatDefinition.label}.
               </p>
             </div>
           )}
+
+          <div className="border-y border-line py-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="font-mono text-2xl text-accent">{durationSeconds}s</p>
+                <p className="text-[9px] uppercase tracking-wide text-grey">Final runtime</p>
+              </div>
+              <div>
+                <p className="font-mono text-2xl text-accent-secondary">{expectedShotCount}</p>
+                <p className="text-[9px] uppercase tracking-wide text-grey">Required shots</p>
+              </div>
+              <div>
+                <p className="font-mono text-2xl text-ink">{scenes.length}</p>
+                <p className="text-[9px] uppercase tracking-wide text-grey">Script beats</p>
+              </div>
+            </div>
+            <p className="mt-3 text-center text-[10px] text-grey">
+              This is still a private production draft. Nothing reaches the feed until every shot is generated, reviewed, assembled, and approved.
+            </p>
+          </div>
 
           {scenes.map((scene, si) => (
             <div key={si} className="poster-card rounded-md p-5">
@@ -720,10 +956,10 @@ export default function StoryBuilderForm() {
               ← Back
             </button>
             <button
-              onClick={handlePublish}
+              onClick={handleStartProduction}
               className="bg-accent text-paper font-semibold px-6 py-2.5 rounded-sm hover:bg-accent-light transition-colors"
             >
-              Publish the {format}
+              {formatDefinition.finalAction} →
             </button>
           </div>
         </div>

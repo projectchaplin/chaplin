@@ -18,22 +18,24 @@ export default function StoriesPage() {
     if (!searching) return [];
     const q = query.trim().toLowerCase();
     return [...world.stories]
+      .filter((story) => (story.status ?? "published") === "published")
       .filter((s) => s.title.toLowerCase().includes(q) || s.logline.toLowerCase().includes(q))
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   }, [world.stories, query, searching]);
 
   const nowShowing = useMemo(
-    () => [...world.stories].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    () => [...world.stories].filter((story) => (story.status ?? "published") === "published").sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
     [world.stories]
   );
 
   const mostWatched = useMemo(
-    () => [...world.stories].sort((a, b) => b.views - a.views),
+    () => [...world.stories].filter((story) => (story.status ?? "published") === "published").sort((a, b) => b.views - a.views),
     [world.stories]
   );
 
   const villainSpotlight = useMemo(() => {
     return [...world.stories]
+      .filter((story) => (story.status ?? "published") === "published")
       .filter((s) => castForStory(world, s.id).some((r) => r.character.archetype === "villain"))
       .sort((a, b) => b.views - a.views);
   }, [world]);

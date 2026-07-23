@@ -133,8 +133,9 @@ export interface Story {
   authorId: string;
   title: string;
   logline: string;
-  format?: "story" | "ad" | "reel";
+  format?: "story" | "ad" | "reel" | "spark" | "punch" | "episode" | "spot";
   durationSeconds?: number;
+  status?: "production" | "published";
   creativeDirection?: string;
   coverHue: number; // fallback gradient when backdropUrl is unset
   backdropUrl?: string;

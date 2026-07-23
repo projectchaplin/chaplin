@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useChaplinStore } from "@/lib/store";
 import {
@@ -19,12 +19,36 @@ import StoryCard from "@/components/StoryCard";
 import SectionHeading from "@/components/SectionHeading";
 import { money, formatDate, compactNumber } from "@/lib/format";
 
-type Tab = "characters" | "stories" | "earnings";
+type Tab = "drafts" | "characters" | "stories" | "earnings";
+
+type DraftSummary = {
+  id: string;
+  format: "spark" | "punch" | "episode" | "spot";
+  title: string;
+  logline: string;
+  updated_at: string;
+};
 
 export default function StudioPage() {
   const world = useChaplinStore((s) => s);
   const currentUserId = useChaplinStore((s) => s.currentUserId);
-  const [tab, setTab] = useState<Tab>("characters");
+  const [tab, setTab] = useState<Tab>("drafts");
+  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(true);
+  const [draftsNeedLogin, setDraftsNeedLogin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/drafts", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json() as { drafts?: DraftSummary[] };
+        if (cancelled) return;
+        if (response.status === 401) setDraftsNeedLogin(true);
+        else if (response.ok) setDrafts(data.drafts ?? []);
+      })
+      .finally(() => { if (!cancelled) setDraftsLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const user = getUser(world, currentUserId);
   const myCharacters = charactersByMaker(world, currentUserId);
@@ -69,9 +93,21 @@ export default function StudioPage() {
         </div>
       </div>
 
+      <Link
+        href="/studio/pipelines"
+        className="poster-card mb-6 flex items-center justify-between gap-4 rounded-md p-4 hover:border-accent"
+      >
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-accent">Production system</p>
+          <p className="mt-1 text-sm font-semibold">See every image, shot, video, audio, and delivery pipeline</p>
+        </div>
+        <span className="text-accent">→</span>
+      </Link>
+
       <div className="flex gap-2 mb-6 text-sm">
         {(
           [
+            ["drafts", `Drafts (${drafts.length})`],
             ["characters", `My identities (${myCharacters.length})`],
             ["stories", `My scenes (${myStories.length})`],
             ["earnings", `Earnings (${myLedger.length})`],
@@ -90,6 +126,49 @@ export default function StudioPage() {
           </button>
         ))}
       </div>
+
+      {tab === "drafts" && (
+        <div>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="reel-title text-2xl">Continue where you stopped</h2>
+              <p className="mt-1 text-xs text-grey">Private, account-owned work automatically saved from the writing room.</p>
+            </div>
+            <Link href="/studio/write" className="shrink-0 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-white">
+              + New draft
+            </Link>
+          </div>
+          {draftsLoading ? (
+            <div className="poster-card rounded-md p-10 text-center text-sm text-grey">Loading your drafts…</div>
+          ) : draftsNeedLogin ? (
+            <div className="poster-card rounded-md p-10 text-center">
+              <p className="text-sm font-semibold">Sign in to keep drafts private and available on every device.</p>
+              <Link href="/auth?next=/studio" className="mt-4 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white">Create creator account</Link>
+            </div>
+          ) : drafts.length === 0 ? (
+            <Link href="/studio/write" className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-line p-6 text-grey transition-colors hover:border-accent hover:text-accent">
+              <span className="text-2xl">+</span>
+              <span className="text-sm">Start your first Spark, Punch, Episode, or Spot</span>
+            </Link>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {drafts.map((draft) => (
+                <Link key={draft.id} href={`/studio/write?format=${draft.format}&draft=${draft.id}`} className="poster-card rounded-md p-5 hover:border-accent">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                      {draft.format === "episode" ? "Episode · 60s" : draft.format === "punch" ? "Punch · 15s" : draft.format === "spark" ? "Spark · 5s" : "Brand Spot"}
+                    </span>
+                    <span className="text-[10px] text-grey">{new Date(draft.updated_at).toLocaleDateString()}</span>
+                  </div>
+                  <h3 className="mt-3 text-lg font-semibold">{draft.title || "Untitled draft"}</h3>
+                  <p className="mt-2 line-clamp-3 text-xs leading-5 text-grey">{draft.logline || "Open this draft and continue writing."}</p>
+                  <span className="mt-5 block text-xs font-semibold text-accent">Continue →</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === "characters" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -113,7 +192,7 @@ export default function StudioPage() {
             className="border border-dashed border-line rounded-md flex flex-col items-center justify-center gap-2 text-grey hover:border-accent hover:text-accent transition-colors p-6 min-h-48"
           >
             <span className="text-2xl">+</span>
-            <span className="text-sm">Write a new story</span>
+            <span className="text-sm">Start a new production</span>
           </Link>
           {myStories.map((story) => {
             const cast = castForStory(world, story.id).map((r) => r.character);

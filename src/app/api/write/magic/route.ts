@@ -2,11 +2,14 @@ import { buildProductionBible } from "@/lib/production-prompting";
 import { anthropicImageBlock, type AnthropicImageBlock } from "@/lib/server/anthropic-image";
 import { getCharacterProductionState } from "@/lib/server/supabase-admin";
 import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
+import {
+  normalizeProductionFormat,
+  productionDuration,
+  type ProductionFormat,
+} from "@/lib/production-formats";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // json_schema output on a full scene draft can run 35-55s; give real headroom over the wall clock
-
-type WritingFormat = "story" | "ad" | "reel";
 
 type PromptCharacter = {
   id: string;
@@ -32,7 +35,7 @@ type MagicDraft = {
   }>;
 };
 
-const FORMATS = new Set<WritingFormat>(["story", "ad", "reel"]);
+const FORMATS = new Set<ProductionFormat>(["spark", "punch", "episode", "spot"]);
 
 function clean(value: unknown, max = 2000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -65,7 +68,7 @@ function parseCharacters(value: unknown): PromptCharacter[] {
 }
 
 function fallbackDraft(input: {
-  format: WritingFormat;
+  format: ProductionFormat;
   durationSeconds: number;
   brief: string;
   title: string;
@@ -76,10 +79,10 @@ function fallbackDraft(input: {
   const selected = input.castIds
     .map((id) => input.characters.find((character) => character.id === id))
     .filter((character): character is PromptCharacter => Boolean(character));
-  const cast = (selected.length ? selected : input.characters.slice(0, input.format === "story" ? 2 : 1)).slice(0, 4);
+  const cast = (selected.length ? selected : input.characters.slice(0, input.format === "episode" ? 2 : 1)).slice(0, 4);
   const lead = cast[0];
   const foil = cast[1] ?? lead;
-  const subject = input.brief || (input.format === "story"
+  const subject = input.brief || (input.format === "episode"
     ? `${lead?.name ?? "An unlikely hero"} must make one irreversible choice before dawn.`
     : `${lead?.name ?? "A charismatic AI actor"} introduces one memorable product benefit.`);
   const leadId = lead?.id ?? "";
@@ -88,12 +91,15 @@ function fallbackDraft(input: {
   const foilName = foil?.name ?? leadName;
   const storyEngine = lead?.productionBible.story;
 
-  if (input.format === "ad" || input.format === "reel") {
-    const reel = input.format === "reel";
+  if (input.format !== "episode") {
+    const creatorShort = input.format === "spark" || input.format === "punch";
+    const spark = input.format === "spark";
     return {
-      title: input.title || (reel ? `${leadName}: Stop the Scroll` : `${leadName} Makes the Case`),
-      logline: input.logline || `${leadName} turns ${subject.toLowerCase()} into one sharp, visual promise and a direct invitation to act.`,
-      creativeDirection: `${input.durationSeconds}-second ${reel ? "vertical reel" : "cinematic ad"}. Hook grammar: ${storyEngine?.hookPattern ?? "open on a visible interruption"}. Communicate one benefit through proof on screen, then finish on a specific call to action.`,
+      title: input.title || (creatorShort ? `${leadName}: Casting Proof` : `${leadName} Makes the Case`),
+      logline: input.logline || (creatorShort
+        ? `${leadName} turns ${subject.toLowerCase()} into one unmistakable performance choice.`
+        : `${leadName} turns ${subject.toLowerCase()} into one sharp, visual promise and a direct invitation to act.`),
+      creativeDirection: `${input.durationSeconds}-second ${spark ? "private Spark audition" : input.format === "punch" ? "public Punch performance" : "managed brand Spot"}. Hook grammar: ${storyEngine?.hookPattern ?? "open on a visible interruption"}. ${creatorShort ? "Prove the actor's personality through visible pressure and choice." : "Communicate one benefit through proof on screen, then finish on a specific call to action."}`,
       castIds: cast.map((character) => character.id),
       scenes: [
         {
@@ -118,9 +124,9 @@ function fallbackDraft(input: {
           setting: "EXT. CLEAN END FRAME - DAY",
           objective: `Pay off the actor's pattern (${storyEngine?.payoffPattern ?? "turn the demonstrated proof into a decision"}) and land a clear next action.`,
           action: `${leadName} faces camera. Product, result, and brand space resolve into one uncluttered final composition.`,
-          lines: [{ characterId: leadId, text: reel ? "Try it once. Then tell me you want to go back." : "Make the next move. Start today." }],
+          lines: [{ characterId: leadId, text: creatorShort ? "You wanted proof. Keep watching." : "Make the next move. Start today." }],
         },
-      ].filter((scene) => scene.lines.length > 0),
+      ].filter((scene) => scene.lines.length > 0).slice(0, spark ? 1 : input.format === "punch" ? 3 : 4),
     };
   }
 
@@ -203,9 +209,9 @@ export async function POST(request: Request) {
   let fallbackInput: Parameters<typeof fallbackDraft>[0] | null = null;
   try {
     const body = await request.json() as Record<string, unknown>;
-    const requestedFormat = clean(body.format, 20) as WritingFormat;
-    const format = FORMATS.has(requestedFormat) ? requestedFormat : "story";
-    const durationSeconds = Math.min(180, Math.max(5, Number(body.durationSeconds) || (format === "story" ? 60 : 15)));
+    const requestedFormat = normalizeProductionFormat(clean(body.format, 20), "punch");
+    const format = FORMATS.has(requestedFormat) ? requestedFormat : "punch";
+    const durationSeconds = productionDuration(format, Number(body.durationSeconds));
     const characters = parseCharacters(body.characters);
     if (characters.length === 0) {
       return Response.json({ error: "At least one available AI actor is required." }, { status: 400 });
@@ -237,7 +243,7 @@ export async function POST(request: Request) {
     }));
     const selectedCharacters = (castIds.length
       ? castIds.map((id) => characters.find((character) => character.id === id)).filter((character): character is PromptCharacter => Boolean(character))
-      : characters.slice(0, format === "story" ? 2 : 1)
+      : characters.slice(0, format === "episode" ? 2 : 1)
     ).slice(0, 6);
     const visualContexts = (await Promise.all(selectedCharacters.map(async (character) => {
       try {
@@ -285,7 +291,7 @@ export async function POST(request: Request) {
         model,
         max_tokens: 8000,
         thinking: { type: "disabled" },
-        system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. For ads and reels, dramatize one benefit through visible proof and finish with a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
+        system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. Spark is a private five-second audition with one performance choice. Punch is a public fifteen-second personality proof with hook, pressure, and choice. Episode is a sixty-second microdrama ending on a situation-changing cliffhanger. Spot is a managed thirty- or sixty-second brand output that dramatizes one benefit through visible proof and a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
         messages: [{
           role: "user",
           content: messageContent,

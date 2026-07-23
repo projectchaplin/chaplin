@@ -8,6 +8,7 @@ import {
   refreshAuthSession,
   type AccountRole,
 } from "@/lib/server/auth";
+import { getSupabaseAdminClient } from "@/lib/server/supabase-admin";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,30 @@ function clearSessionCookies(response: NextResponse) {
   response.cookies.set(ACCESS_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
   response.cookies.set(REFRESH_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
   response.cookies.set("chaplin-demo-role", "", { path: "/", maxAge: 0 });
+}
+
+function autoConfirmEmailEnabled() {
+  const configured = process.env.AUTH_AUTO_CONFIRM?.trim().toLowerCase();
+  if (configured === "true") return true;
+  if (configured === "false") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
+async function confirmAuthUser(userId: string) {
+  const result = await getSupabaseAdminClient().auth.admin.updateUserById(userId, { email_confirm: true });
+  if (result.error) throw new Error(`Confirm local account: ${result.error.message}`);
+}
+
+async function findAuthUserIdByEmail(email: string) {
+  const admin = getSupabaseAdminClient();
+  for (let page = 1; page <= 10; page += 1) {
+    const result = await admin.auth.admin.listUsers({ page, perPage: 100 });
+    if (result.error) throw new Error(`Find local account: ${result.error.message}`);
+    const user = result.data.users.find((candidate) => candidate.email?.toLowerCase() === email);
+    if (user) return user.id;
+    if (result.data.users.length < 100) return null;
+  }
+  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -73,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "signup") {
       const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
-      const role: AccountRole = input.role === "brand" ? "brand" : "creator";
+      const role: AccountRole = "creator";
       if (!name) throw new Error("Enter your name or studio name.");
       const result = await supabase.auth.signUp({
         email,
@@ -85,16 +110,33 @@ export async function POST(request: NextRequest) {
       });
       if (result.error) throw new Error(result.error.message);
       if (!result.data.user) throw new Error("Supabase did not create an account.");
-      const identity = await ensureAuthProfile(result.data.user);
-      if (!result.data.session) return NextResponse.json({ identity, requiresEmailConfirmation: true }, { status: 201 });
+      let session = result.data.session;
+      let user = result.data.user;
+      if (!session && autoConfirmEmailEnabled()) {
+        await confirmAuthUser(user.id);
+        const login = await supabase.auth.signInWithPassword({ email, password });
+        if (login.error) throw new Error(login.error.message);
+        if (!login.data.session || !login.data.user) throw new Error("Supabase did not return a session after confirming the local account.");
+        session = login.data.session;
+        user = login.data.user;
+      }
+      const identity = await ensureAuthProfile(user);
+      if (!session) return NextResponse.json({ identity, requiresEmailConfirmation: true }, { status: 201 });
       const response = NextResponse.json({ identity, requiresEmailConfirmation: false }, { status: 201 });
-      setSessionCookies(response, result.data.session);
+      setSessionCookies(response, session);
       setRoleCookie(response, identity.role);
       return response;
     }
 
     if (action === "login") {
-      const result = await supabase.auth.signInWithPassword({ email, password });
+      let result = await supabase.auth.signInWithPassword({ email, password });
+      if (result.error && autoConfirmEmailEnabled() && /email not confirmed/i.test(result.error.message)) {
+        const userId = await findAuthUserIdByEmail(email);
+        if (userId) {
+          await confirmAuthUser(userId);
+          result = await supabase.auth.signInWithPassword({ email, password });
+        }
+      }
       if (result.error) throw new Error(result.error.message);
       if (!result.data.session || !result.data.user) throw new Error("Supabase did not return a session.");
       const identity = await ensureAuthProfile(result.data.user);

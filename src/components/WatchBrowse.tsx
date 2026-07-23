@@ -65,8 +65,9 @@ export default function WatchBrowse({ series }: { series: SeriesSummary[] }) {
 
   const brollByCharacter = useMemo(() => new Map(brolls.map((b) => [b.characterId, b])), [brolls]);
 
-  const stories = world.stories.filter((story) => (story.format ?? "story") === "story");
-  const adsAndReels = world.stories.filter((story) => story.format === "ad" || story.format === "reel");
+  const published = world.stories.filter((story) => (story.status ?? "published") === "published");
+  const stories = published.filter((story) => story.format === "episode" || (story.format ?? "story") === "story");
+  const adsAndReels = published.filter((story) => ["ad", "reel", "punch", "spot"].includes(story.format ?? ""));
   const sparks = world.characters
     .map((character) => ({ character, videoUrl: brollByCharacter.get(character.id)?.videoUrl ?? character.videoUrl ?? null }))
     .filter((entry): entry is { character: Character; videoUrl: string } => Boolean(entry.videoUrl));

@@ -42,8 +42,9 @@ export interface NewSceneInput {
 export interface NewStoryInput {
   title: string;
   logline: string;
-  format?: "story" | "ad" | "reel";
+  format?: "story" | "ad" | "reel" | "spark" | "punch" | "episode" | "spot";
   durationSeconds?: number;
+  status?: "production" | "published";
   creativeDirection?: string;
   authorId: string;
   coverHue: number;
@@ -206,6 +207,7 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       logline: input.logline,
       format: input.format,
       durationSeconds: input.durationSeconds,
+      status: input.status ?? "published",
       creativeDirection: input.creativeDirection,
       coverHue: input.coverHue,
       createdAt: timestamp,

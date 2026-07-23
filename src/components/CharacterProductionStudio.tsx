@@ -610,30 +610,39 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <p><span className="text-grey">Story hook:</span> {productionBible.story.hookPattern}</p>
           </div>
         </details>
-        <div className="rounded-md border border-accent/40 bg-accent/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold">Quick scene change</p>
-              {magicSceneIndex >= 0 && (
-                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[9px] uppercase tracking-wide text-accent">
-                  {sceneBlueprint.sceneName}
-                </span>
-              )}
+        <details className="rounded-md border border-accent/40 bg-accent/5 px-4 py-3" data-magic-scene-assist>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <span>
+              <span className="block text-sm font-semibold">✦ Magic scene assist</span>
+              <span className="mt-0.5 block text-[11px] text-grey">Optional: coordinate every production prompt from one dramatic beat.</span>
+            </span>
+            <span className="shrink-0 rounded-full border border-accent/50 px-3 py-1 text-[10px] font-semibold text-accent">Open</span>
+          </summary>
+          <div className="mt-3 flex flex-col justify-between gap-3 border-t border-line pt-3 sm:flex-row sm:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold">Quick scene change</p>
+                {magicSceneIndex >= 0 && (
+                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[9px] uppercase tracking-wide text-accent">
+                    {sceneBlueprint.sceneName}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-grey mt-1">
+                AI directs one playable beat, then writes separate instructions for dialogue, SFX, music, the first frame, and image-to-video motion.
+              </p>
             </div>
-            <p className="text-xs text-grey mt-1">
-              AI directs one playable beat, then writes separate instructions for dialogue, SFX, music, the first frame, and image-to-video motion.
-            </p>
+            <button
+              type="button"
+              onClick={applyMagicScene}
+              disabled={Boolean(busy)}
+              data-action="magic-scene"
+              className="shrink-0 rounded-full bg-accent text-paper px-4 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-40"
+            >
+              {busy === "magic-scene" ? "Directing scene..." : "✦ Build scene prompts"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={applyMagicScene}
-            disabled={Boolean(busy)}
-            data-action="magic-scene"
-            className="shrink-0 rounded-full bg-accent text-paper px-4 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-40"
-          >
-            {busy === "magic-scene" ? "Directing scene..." : "✦ Magic Scene"}
-          </button>
-        </div>
+        </details>
         <div className="flex items-end justify-between gap-4 border-b border-line pb-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">Step {activeStepMeta.id} of {WORKFLOW_STEPS.length}</p>
@@ -653,7 +662,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
         </details>
         <div className="grid gap-5">
-          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 1 ? "" : "hidden"}`}>
+          <div data-production-stage="voice" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 1 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">1. Unique voice identity</h3>
               {character.voiceId && <span className="text-[10px] text-emerald-600 uppercase">Voice locked</span>}
@@ -702,7 +711,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             ))}
           </div>
 
-          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 2 ? "" : "hidden"}`}>
+          <div data-production-stage="dialogue" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 2 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">2. Dialogue in the locked voice</h3>
               <QuickWriteButton
@@ -725,7 +734,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
         </div>
 
-        <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 3 ? "" : "hidden"}`}>
+        <div data-production-stage="sfx" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 3 ? "" : "hidden"}`}>
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold text-sm">3. Signature SFX</h3>
             <QuickWriteButton
@@ -771,7 +780,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           )}
         </div>
 
-        <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 4 ? "" : "hidden"}`}>
+        <div data-production-stage="theme" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 4 ? "" : "hidden"}`}>
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold text-sm">4. Theme score</h3>
             <QuickWriteButton
@@ -791,7 +800,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         </div>
 
         <div className="grid gap-5">
-          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 5 ? "" : "hidden"}`}>
+          <div data-production-stage="image" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 5 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">5. Define the actor on screen</h3>
               <QuickWriteButton
@@ -864,7 +873,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             )}
           </div>
 
-          <div className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 6 ? "" : "hidden"}`}>
+          <div data-production-stage="video" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 6 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">6. Animate a five-second scene</h3>
               <QuickWriteButton

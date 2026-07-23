@@ -53,6 +53,51 @@ type CharacterSuggestion = {
   productionBible: CharacterProductionBible;
 };
 
+type CharacterBuilderDraft = {
+  version: 1;
+  updatedAt: string;
+  name: string;
+  archetypes: Archetype[];
+  characterBrief: string;
+  tagline: string;
+  personality: string;
+  appearanceBrief: string;
+  worldBrief: string;
+  voiceGender: VoiceGender;
+  voicePreset: string;
+  customVoice: string;
+  sfxPreset: string;
+  customSfx: string;
+  scorePreset: string;
+  customScore: string;
+  licenseType: LicenseType;
+  royaltyRate: number;
+  hue: number;
+  productionBible?: CharacterProductionBible;
+};
+
+const IDENTITY_BUILD_STAGES = [
+  { label: "Read canon", startsAt: 0 },
+  { label: "Shape identity", startsAt: 8 },
+  { label: "Direct voice", startsAt: 18 },
+  { label: "Build bible", startsAt: 30 },
+  { label: "Continuity pass", startsAt: 42 },
+] as const;
+
+function estimatedBuildProgress(target: SuggestionTarget, elapsedSeconds: number) {
+  if (target !== "all") return Math.min(92, 12 + elapsedSeconds * 4);
+  if (elapsedSeconds <= 8) return 4 + elapsedSeconds;
+  if (elapsedSeconds <= 30) return Math.round(12 + (elapsedSeconds - 8) * 2.4);
+  return Math.min(94, Math.round(65 + (elapsedSeconds - 30) * 1.2));
+}
+
+function activeBuildStage(elapsedSeconds: number) {
+  return IDENTITY_BUILD_STAGES.reduce(
+    (active, stage, index) => elapsedSeconds >= stage.startsAt ? index : active,
+    0,
+  );
+}
+
 function SuggestButton({
   target,
   activeTarget,
@@ -106,6 +151,10 @@ export default function NewCharacterPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [revealingField, setRevealingField] = useState("");
   const suggestStartedAt = useRef<number | null>(null);
+  const restoredDraftKey = useRef<string | null>(null);
+  const draftStorageKey = `chaplin-character-builder:${currentUserId}`;
+  const progress = suggestingTarget ? estimatedBuildProgress(suggestingTarget, elapsedSeconds) : 0;
+  const buildStage = activeBuildStage(elapsedSeconds);
 
   useEffect(() => {
     if (!suggestingTarget) {
@@ -121,8 +170,99 @@ export default function NewCharacterPage() {
     return () => clearInterval(interval);
   }, [suggestingTarget]);
 
-  // Concierge hand-off: /characters/new?cname=…&cbrief=…&carchetypes=hero,rebel&auto=1
-  // prefills the builder and, with auto=1, runs Magic Character immediately.
+  useEffect(() => {
+    if (restoredDraftKey.current === draftStorageKey) return;
+    restoredDraftKey.current = draftStorageKey;
+    const stored = window.localStorage.getItem(draftStorageKey);
+    if (!stored) return;
+    try {
+      const draft = JSON.parse(stored) as Partial<CharacterBuilderDraft>;
+      if (draft.version !== 1) return;
+      const timer = window.setTimeout(() => {
+        setName(draft.name ?? "");
+        setArchetypes(
+          Array.isArray(draft.archetypes) && draft.archetypes.length
+            ? draft.archetypes.filter((value): value is Archetype => (ARCHETYPES as readonly string[]).includes(value))
+            : ["hero"],
+        );
+        setCharacterBrief(draft.characterBrief ?? "");
+        setTagline(draft.tagline ?? "");
+        setPersonality(draft.personality ?? "");
+        setAppearanceBrief(draft.appearanceBrief ?? "");
+        setWorldBrief(draft.worldBrief ?? "");
+        setVoiceGender(draft.voiceGender ?? "feminine");
+        setVoicePreset(draft.voicePreset ?? VOICE_PRESETS[0]);
+        setCustomVoice(draft.customVoice ?? "");
+        setSfxPreset(draft.sfxPreset ?? SFX_PRESETS[0]);
+        setCustomSfx(draft.customSfx ?? "");
+        setScorePreset(draft.scorePreset ?? SCORE_PRESETS[0]);
+        setCustomScore(draft.customScore ?? "");
+        setLicenseType(draft.licenseType ?? "paid");
+        setRoyaltyRate(typeof draft.royaltyRate === "number" ? draft.royaltyRate : 30);
+        setHue(typeof draft.hue === "number" ? draft.hue : 205);
+        setProductionBible(draft.productionBible);
+        if (draft.name || draft.characterBrief || draft.tagline) {
+          setSuggestionMessage("Draft recovered. Your character work is safe after refresh.");
+        }
+      }, 0);
+      return () => window.clearTimeout(timer);
+    } catch {
+      window.localStorage.removeItem(draftStorageKey);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (restoredDraftKey.current !== draftStorageKey) return;
+    const timer = window.setTimeout(() => {
+      const draft: CharacterBuilderDraft = {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        name,
+        archetypes,
+        characterBrief,
+        tagline,
+        personality,
+        appearanceBrief,
+        worldBrief,
+        voiceGender,
+        voicePreset,
+        customVoice,
+        sfxPreset,
+        customSfx,
+        scorePreset,
+        customScore,
+        licenseType,
+        royaltyRate,
+        hue,
+        productionBible,
+      };
+      window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [
+    appearanceBrief,
+    archetypes,
+    characterBrief,
+    customScore,
+    customSfx,
+    customVoice,
+    draftStorageKey,
+    hue,
+    licenseType,
+    name,
+    personality,
+    productionBible,
+    royaltyRate,
+    scorePreset,
+    sfxPreset,
+    tagline,
+    voiceGender,
+    voicePreset,
+    worldBrief,
+  ]);
+
+  // Concierge hand-off prefills the editable builder but never starts a paid
+  // generation automatically. The creator stays in control of every action.
   const conciergeRan = useRef(false);
   useEffect(() => {
     if (conciergeRan.current) return;
@@ -135,17 +275,12 @@ export default function NewCharacterPage() {
       .filter((value): value is Archetype => (ARCHETYPES as readonly string[]).includes(value));
     if (!cname && !cbrief && carchetypes.length === 0) return;
     conciergeRan.current = true;
-    if (cname) setName(cname);
-    if (cbrief) setCharacterBrief(cbrief);
-    if (carchetypes.length) setArchetypes(carchetypes);
-    if (params.get("auto") === "1" && cname && cbrief.length >= 20) {
-      void suggestCharacter("all", {
-        name: cname,
-        characterBrief: cbrief,
-        archetypes: carchetypes.length ? carchetypes : ["hero"],
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot hand-off on mount
+    const timer = window.setTimeout(() => {
+      if (cname) setName(cname);
+      if (cbrief) setCharacterBrief(cbrief);
+      if (carchetypes.length) setArchetypes(carchetypes);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const archetype = archetypes[0] ?? "hero";
@@ -215,6 +350,33 @@ export default function NewCharacterPage() {
       if (!response.ok || !data.suggestion) throw new Error(data.error || "Character suggestions failed.");
       const suggestion = data.suggestion;
       if (target === "all") {
+        // Save the complete response before the staged reveal begins. A dev
+        // refresh during the animation can therefore restore every generated
+        // field, not only the brief that was present when the request started.
+        const recoveredDraft: CharacterBuilderDraft = {
+          version: 1,
+          updatedAt: new Date().toISOString(),
+          name: effectiveName,
+          archetypes: effectiveArchetypes,
+          characterBrief: effectiveBrief,
+          tagline: suggestion.tagline,
+          personality: suggestion.personality,
+          appearanceBrief,
+          worldBrief,
+          voiceGender: suggestion.voiceGender,
+          voicePreset: VOICE_PRESETS[VOICE_PRESETS.length - 1],
+          customVoice: suggestion.voiceDescription,
+          sfxPreset: SFX_PRESETS[SFX_PRESETS.length - 1],
+          customSfx: suggestion.signatureSfx,
+          scorePreset: SCORE_PRESETS[SCORE_PRESETS.length - 1],
+          customScore: suggestion.themeScore,
+          licenseType,
+          royaltyRate,
+          hue,
+          productionBible: suggestion.productionBible,
+        };
+        window.localStorage.setItem(draftStorageKey, JSON.stringify(recoveredDraft));
+
         // Magic Create fills the form field by field, so you watch the actor
         // assemble instead of everything appearing in one blink.
         const reveal: Array<[string, () => void]> = [
@@ -323,6 +485,7 @@ export default function NewCharacterPage() {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(data?.error ?? `Saving the AI actor returned ${response.status}.`);
       }
+      window.localStorage.removeItem(draftStorageKey);
       window.dispatchEvent(new CustomEvent("chaplin:catalogue-updated", { detail: { characterId: character.id } }));
       router.push(`/characters/${character.id}`);
     } catch (submitError) {
@@ -333,22 +496,37 @@ export default function NewCharacterPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10 w-full">
-      <Link href="/characters" className="text-xs text-grey hover:text-accent">
-        ← The Shelf
+    <div className="mx-auto w-full max-w-2xl px-4 pb-36 pt-5 sm:px-6 sm:py-10">
+      <Link href="/characters" className="inline-flex items-center gap-1.5 text-xs text-grey hover:text-accent">
+        <span aria-hidden="true">←</span> Actors
       </Link>
 
-      <div className="mt-3 mb-6">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold mb-1">
-          AI Actor Builder
-        </p>
-        <h1 className="reel-title text-3xl">Bring a new performer to the shelf</h1>
-        <p className="text-sm text-grey mt-1">
-          Give it a personality and a voice, then leave it live: storytellers will find it.
-        </p>
+      <div className="mb-5 mt-4">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">New actor</p>
+        <h1 className="reel-title text-3xl sm:text-4xl">Create an AI actor</h1>
+        <p className="mt-1 text-sm text-grey">Name them. Describe the vibe. Chaplin builds the rest.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="poster-card rounded-md p-6 flex flex-col gap-5">
+      <section className="mb-6" aria-label="Actor production pipeline">
+        <div className="grid grid-cols-5 gap-1.5">
+          {[
+            ["01", "Identity"],
+            ["02", "Look"],
+            ["03", "Voice"],
+            ["04", "Spark"],
+            ["05", "Publish"],
+          ].map(([number, label], index) => (
+            <div key={number} className="min-w-0">
+              <span className={`block h-1 rounded-full ${index === 0 ? "bg-accent" : "bg-line"}`} />
+              <p className={`mt-2 truncate text-[9px] font-semibold uppercase tracking-[0.08em] ${index === 0 ? "text-ink" : "text-grey"}`}>
+                {label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <form onSubmit={handleSubmit} className="poster-card flex flex-col gap-5 rounded-2xl p-4 sm:rounded-md sm:p-6">
         <div className="flex items-center gap-4">
           <Avatar hue={hue} label={name || "?"} size={56} />
           <div className="flex flex-wrap gap-1.5">
@@ -380,10 +558,7 @@ export default function NewCharacterPage() {
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Archetype mix</span>
-          <span className="text-[11px] text-grey">
-            Pick as many as fit. The first one you pick leads; the rest add contradiction.
-          </span>
+          <span className="font-medium">Pick the vibe</span>
           <div className="flex flex-wrap gap-1.5">
             {ARCHETYPES.map((a) => (
               <button type="button" key={a} onClick={() => toggleArchetype(a)}>
@@ -397,12 +572,20 @@ export default function NewCharacterPage() {
           </div>
         </label>
 
-        <div className="rounded-md border border-accent/50 bg-accent/5 p-4">
+        <details className="overflow-hidden rounded-md border border-accent/50 bg-accent/5" data-magic-character-assist>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-accent/[0.05]">
+            <span>
+              <span className="block text-sm font-semibold">✦ Magic character assist</span>
+              <span className="mt-0.5 block text-[11px] text-grey">Optional: use one brief to prefill the identity boxes below.</span>
+            </span>
+            <span className="shrink-0 rounded-full border border-accent/50 px-3 py-1 text-[10px] font-semibold text-accent">Open</span>
+          </summary>
+          <div className="border-t border-line p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
-              <p className="text-sm font-semibold">✦ Magic Create</p>
+              <p className="text-sm font-semibold">One brief, editable results</p>
               <p className="mt-1 text-xs text-grey">
-                Pipeline one: name the actor, pick the archetype mix, write a line or two — the AI writes every field below, one by one, in front of you.
+                Name the actor, pick the archetype mix, then let AI prefill every field. Nothing is generated or charged until you choose it.
               </p>
             </div>
             <div className="shrink-0">
@@ -425,17 +608,80 @@ export default function NewCharacterPage() {
             Minimum a line or two. This brief is treated as canon for every generated field.
           </p>
           {suggestingTarget && (
-            <p className="mt-3 text-[11px] text-accent" data-suggest-progress>
-              Claude is writing{suggestingTarget === "all" ? " the full identity" : ""}… {elapsedSeconds}s
-              {elapsedSeconds > 10 && " — a full identity build usually takes 30–55s, hang tight"}
-            </p>
+            <div
+              className="mt-3 overflow-hidden rounded-xl border border-accent/35 bg-[linear-gradient(135deg,rgba(244,67,108,0.10),rgba(26,52,38,0.28))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+              data-suggest-progress
+              role="progressbar"
+              aria-label={suggestingTarget === "all" ? "Building the actor identity" : `Writing ${suggestingTarget}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/40 bg-accent/10">
+                    <span className="absolute inset-1 animate-ping rounded-full bg-accent/15" />
+                    <span className="relative h-2 w-2 rounded-full bg-accent shadow-[0_0_12px_var(--accent)]" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[9px] font-semibold uppercase tracking-[0.2em] text-grey">
+                      Magic identity build
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs font-semibold text-ink">
+                      {suggestingTarget === "all"
+                        ? IDENTITY_BUILD_STAGES[buildStage].label
+                        : `Writing ${suggestingTarget}`}
+                    </span>
+                  </span>
+                </div>
+                <span className="shrink-0 font-mono text-lg font-semibold tabular-nums text-accent">
+                  {progress}%
+                </span>
+              </div>
+
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/25">
+                <div
+                  className="relative h-full rounded-full bg-[linear-gradient(90deg,var(--accent),var(--accent-light))] transition-[width] duration-1000 ease-out"
+                  style={{ width: `${progress}%` }}
+                >
+                  <span className="absolute inset-y-0 right-0 w-8 animate-pulse bg-white/40 blur-sm" />
+                </div>
+              </div>
+
+              {suggestingTarget === "all" && (
+                <div className="mt-3 grid grid-cols-5 gap-1">
+                  {IDENTITY_BUILD_STAGES.map((stage, index) => (
+                    <div key={stage.label} className="min-w-0">
+                      <span
+                        className={`block h-0.5 rounded-full transition-colors ${
+                          index <= buildStage ? "bg-accent" : "bg-white/10"
+                        }`}
+                      />
+                      <span
+                        className={`mt-1 block truncate text-[8px] ${
+                          index === buildStage ? "font-semibold text-ink" : "text-grey/70"
+                        }`}
+                      >
+                        {stage.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-2.5 flex items-center justify-between gap-3 text-[9px] text-grey">
+                <span>Usually ready in 30–55 seconds</span>
+                <span className="shrink-0 tabular-nums">{elapsedSeconds}s elapsed</span>
+              </div>
+            </div>
           )}
           {suggestionMessage && (
             <p className="mt-3 text-[11px] text-grey" data-suggestion-message>
               {suggestionMessage}
             </p>
           )}
-        </div>
+          </div>
+        </details>
 
         <div className="flex items-center gap-3" aria-hidden="true">
           <span className="h-px flex-1 bg-line" />
@@ -630,7 +876,7 @@ export default function NewCharacterPage() {
         </div>
 
         {productionBible && (
-          <details className="rounded-md border border-line bg-paper/40 p-4" data-character-bible open>
+          <details className="rounded-md border border-line bg-paper/40 p-4" data-character-bible>
             <summary className="cursor-pointer text-sm font-semibold">Actor Direction Bible</summary>
             <p className="mt-1 text-[11px] text-grey">Saved with the actor and reused by stills, motion, voice, sound, music, and stories.</p>
             <div className="mt-4 grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">

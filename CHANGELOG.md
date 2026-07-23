@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-23 · Role-aware production contracts
+
+- Replaced the generic story/ad/reel choice with exact outputs chosen before prompting: Spark (5 seconds, 1 shot), Punch (15 seconds, 3 shots), Episode (60 seconds, 12 shots), and Brand Spot (30 or 60 seconds, 6 or 12 shots).
+- Split Create by Creator, Brand, and Super Admin, with matching quick actions, Concierge intents, writer choices, and admin operations.
+- Changed the writer's final action from instant publishing to a private production handoff. Cast, script, runtime, shot count, pipeline steps, providers, and approval gates now stay visible until the output is ready.
+- Added the character path from canon brief through identity, voice lock, a five-second Spark test, and casting shelf readiness.
+- Kept in-progress productions out of the public Story and Watch feeds.
+
+## 2026-07-23 · Durable media output pipelines
+
+- Defined ten first-class outputs: identity still, gallery still, poster, Spark, Punch, shot package, episode, brand spot, trailer/cutdown, and delivery package.
+- Added provider-neutral pipeline runs and ordered steps with idempotency, retries, review gates, manifests, generation-job lineage, and explicit terminal states.
+- Added versioned episode-shot takes so rejected generations remain traceable; only an approved take with a final muxed asset is promoted to the active shot.
+- Added `/api/pipeline` orchestration endpoints, the `/studio/pipelines` output catalog, and an episode production board for initializing the 12-shot master workflow.
+- Locked the production boundary: Seedream makes reference frames, Seedance makes silent motion plates, ElevenLabs makes separate audio stems, and FFmpeg performs deterministic mix, mux, QC, captions, and assembly.
+
 ## 2026-07-23 · Live-voice Concierge (ElevenLabs agent) + three quick views + speed telemetry
 
 - The Concierge is now a real ElevenLabs Conversational AI agent ("Chaplin Concierge", provisioned programmatically by scripts/setup-concierge-agent.mjs with persona, guardrails — no celebrity likeness, brand-safe briefs — and three client tools). You talk to it live; it calls create_character / create_video / open_page in the browser and the builders start generating in front of you.

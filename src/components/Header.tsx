@@ -73,6 +73,8 @@ export default function Header() {
   const currentUser = users.find((user) => user.id === currentUserId) ?? users[0];
   const contextLink = activeRole === "admin"
     ? { href: "/admin", label: "Admin" }
+    : activeRole === "brand"
+      ? { href: "/brand", label: "Brand desk" }
     : { href: "/feed", label: "Creator feed" };
 
   return (
@@ -151,22 +153,35 @@ export default function Header() {
                   <button onClick={() => setOpen(false)} className="text-grey hover:text-ink text-lg leading-none" aria-label="Close role switcher">×</button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {ROLE_ORDER.map((role) => (
-                    <button
-                      key={role}
-                      data-quick-view={role}
-                      onClick={() => {
-                        switchDemoRole(role);
-                        setOpen(false);
-                      }}
-                      className={`rounded-md border p-3 text-left transition-colors ${activeRole === role ? "border-accent bg-accent/10" : "border-line hover:border-accent/60"}`}
-                    >
-                      <span className="block text-xs font-semibold">{ROLE_META[role].label}</span>
-                      <span className="block text-[10px] text-grey mt-1 leading-snug">{ROLE_META[role].description}</span>
-                    </button>
-                  ))}
-                </div>
+                {authIdentity && authIdentity.role !== "admin" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link href="/studio" onClick={() => setOpen(false)} className="rounded-md border border-line p-3 hover:border-accent/60">
+                      <span className="block text-xs font-semibold">My Studio</span>
+                      <span className="mt-1 block text-[10px] leading-snug text-grey">Your actors, published work, and earnings.</span>
+                    </Link>
+                    <Link href="/studio" onClick={() => setOpen(false)} className="rounded-md border border-accent bg-accent/10 p-3">
+                      <span className="block text-xs font-semibold">My Drafts</span>
+                      <span className="mt-1 block text-[10px] leading-snug text-grey">Resume private ads, reels, and micro dramas.</span>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {ROLE_ORDER.map((role) => (
+                      <button
+                        key={role}
+                        data-quick-view={role}
+                        onClick={() => {
+                          switchDemoRole(role);
+                          setOpen(false);
+                        }}
+                        className={`rounded-md border p-3 text-left transition-colors ${activeRole === role ? "border-accent bg-accent/10" : "border-line hover:border-accent/60"}`}
+                      >
+                        <span className="block text-xs font-semibold">{ROLE_META[role].label}</span>
+                        <span className="block text-[10px] text-grey mt-1 leading-snug">{ROLE_META[role].description}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="border-t border-line mt-3 pt-3 px-1 flex items-center justify-between gap-3">
                   {authIdentity ? <button type="button" onClick={() => void signOut()} className="text-xs font-semibold text-grey hover:text-accent">Sign out</button> : <Link href="/auth" onClick={() => setOpen(false)} className="text-xs font-semibold text-accent">Sign in or create account</Link>}

@@ -16,7 +16,7 @@ export default function StoryCard({
 
   return (
     <Link
-      href={`/stories/${story.id}`}
+      href={(story.status ?? "published") === "production" ? `/productions/${story.id}` : `/stories/${story.id}`}
       className="poster-card rounded-md overflow-hidden flex flex-col h-full"
     >
       <div
@@ -27,7 +27,7 @@ export default function StoryCard({
         }}
       >
         <span className="text-[11px] uppercase tracking-widest text-ink/70">
-          {story.scenes.length} scenes · {lineCount} lines
+          {(story.status ?? "published") === "production" ? "IN PRODUCTION · " : ""}{story.scenes.length} beats · {lineCount} lines
         </span>
       </div>
 
@@ -51,7 +51,9 @@ export default function StoryCard({
               </span>
             )}
           </div>
-          <span className="text-xs text-grey">{compactNumber(story.views)} views</span>
+          <span className="text-xs text-grey">
+            {(story.status ?? "published") === "production" ? `${story.durationSeconds ?? 0}s output` : `${compactNumber(story.views)} views`}
+          </span>
         </div>
       </div>
     </Link>
