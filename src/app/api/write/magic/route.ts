@@ -175,6 +175,8 @@ const OUTPUT_SCHEMA = {
     castIds: { type: "array", items: { type: "string" } },
     scenes: {
       type: "array",
+      minItems: 1,
+      maxItems: 10,
       items: {
         type: "object",
         additionalProperties: false,
@@ -339,16 +341,39 @@ export async function POST(request: Request) {
     if (!text) throw new Error("Claude returned no script draft.");
     const draft = JSON.parse(text) as MagicDraft;
     const allowedIds = new Set(characters.map((character) => character.id));
-    draft.scenes = draft.scenes.slice(0, 10).map((scene) => ({
-      ...scene,
-      lines: scene.lines.filter((line) => allowedIds.has(line.characterId)).slice(0, 12),
-    })).filter((scene) =>
-      Boolean(scene.setting.trim() || scene.objective.trim() || scene.action.trim() || scene.lines.length)
-    );
+    const returnedScenes = Array.isArray(draft.scenes) ? draft.scenes : [];
+    draft.scenes = returnedScenes.slice(0, 10).flatMap((scene) => {
+      if (!scene || typeof scene !== "object") return [];
+      const setting = clean(scene.setting, 300);
+      const objective = clean(scene.objective, 700);
+      const action = clean(scene.action, 1600);
+      const lines = Array.isArray(scene.lines)
+        ? scene.lines
+          .filter((line) => line && allowedIds.has(line.characterId) && clean(line.text, 800))
+          .slice(0, 12)
+          .map((line) => ({ characterId: line.characterId, text: clean(line.text, 800) }))
+        : [];
+      return setting || objective || action || lines.length
+        ? [{ setting, objective, action, lines }]
+        : [];
+    });
+    const repairedEmptyScenes = draft.scenes.length === 0;
+    if (repairedEmptyScenes) {
+      draft.scenes = fallbackDraft(input).scenes;
+    }
     const speakingCastIds = draft.scenes.flatMap((scene) => scene.lines.map((line) => line.characterId));
     draft.castIds = [...new Set([...draft.castIds, ...speakingCastIds])]
       .filter((id) => allowedIds.has(id));
-    return Response.json({ draft, provider: "anthropic", model, usage: data.usage, configured: true });
+    return Response.json({
+      draft,
+      provider: repairedEmptyScenes ? "chaplin-local" : "anthropic",
+      model,
+      usage: data.usage,
+      configured: true,
+      warning: repairedEmptyScenes
+        ? "Claude returned no playable scene, so Chaplin repaired the draft with a complete local scene beat."
+        : undefined,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not build the magic draft.";
     if (fallbackInput) {

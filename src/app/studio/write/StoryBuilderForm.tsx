@@ -308,14 +308,6 @@ export default function StoryBuilderForm() {
 
   // Concierge hand-off: ?brief=…&auto=1 lands here with the draft already writing.
   const conciergeRan = useRef(false);
-  useEffect(() => {
-    if (conciergeRan.current) return;
-    if (searchParams.get("auto") !== "1") return;
-    if (brief.trim().length < 5 || world.characters.length === 0) return;
-    conciergeRan.current = true;
-    void createMagicDraft();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot hand-off once characters exist
-  }, [world.characters.length]);
 
   const castCharacters = castIds
     .map((id) => world.characters.find((c) => c.id === id))
@@ -450,7 +442,13 @@ export default function StoryBuilderForm() {
       setCreativeDirection(draft.creativeDirection);
       if (!conceptOnly) {
         setCastIds(draft.castIds.filter((id) => world.characters.some((character) => character.id === id)));
-        setScenes(draft.scenes.length ? draft.scenes : [emptyScene()]);
+        const lead = castCharacters[0];
+        setScenes(draft.scenes.length ? draft.scenes : [{
+          setting: "INT. CHARACTER WORLD - CONTINUOUS",
+          objective: `Reveal ${lead?.name ?? "the actor"} through one visible, situation-changing choice.`,
+          action: `${lead?.name ?? "The actor"} enters under immediate pressure, finds the detail everyone else missed, and makes one physical choice that changes the scene.`,
+          lines: [],
+        }]);
         setStep(3);
       }
       setClaudeConfigured(Boolean(data.configured));
@@ -469,6 +467,16 @@ export default function StoryBuilderForm() {
       setMagicBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (conciergeRan.current) return;
+    if (searchParams.get("auto") !== "1") return;
+    if (brief.trim().length < 5 || world.characters.length === 0) return;
+    conciergeRan.current = true;
+    const timer = window.setTimeout(() => void createMagicDraft(), 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot hand-off once characters exist
+  }, [world.characters.length]);
 
   function continueToScenes() {
     setStep(3);
@@ -532,20 +540,29 @@ export default function StoryBuilderForm() {
         warning?: string;
       };
       if (!response.ok || !data.draft) throw new Error(data.error || "Magic Scene could not shape this beat.");
-      const candidate = data.draft.scenes[Math.min(sceneIndex, data.draft.scenes.length - 1)] ?? data.draft.scenes[0];
-      if (!candidate) throw new Error("Magic Scene returned no playable beat.");
+      const returnedScenes = Array.isArray(data.draft.scenes) ? data.draft.scenes : [];
+      const candidate = returnedScenes[Math.min(sceneIndex, returnedScenes.length - 1)] ?? returnedScenes[0];
+      const lead = castCharacters[0];
+      const playableScene = candidate ?? {
+        setting: currentScene.setting || "INT. CHARACTER WORLD - CONTINUOUS",
+        objective: currentScene.objective || `Reveal ${lead?.name ?? "the actor"} through one visible, situation-changing choice.`,
+        action: currentScene.action || `${lead?.name ?? "The actor"} enters frame under immediate pressure, notices the one detail everyone else missed, and makes a physical choice that changes the balance of the scene.`,
+        lines: currentScene.lines,
+      };
       const validCastIds = new Set(castCharacters.map((character) => character.id));
       updateScene(sceneIndex, {
-        setting: candidate.setting || currentScene.setting,
-        objective: candidate.objective || currentScene.objective,
-        action: candidate.action || currentScene.action,
-        lines: candidate.lines
+        setting: playableScene.setting || currentScene.setting,
+        objective: playableScene.objective || currentScene.objective,
+        action: playableScene.action || currentScene.action,
+        lines: playableScene.lines
           .filter((line) => validCastIds.has(line.characterId) && line.text.trim())
           .slice(0, 3),
       });
       setSceneAssistMessage({
         index: sceneIndex,
-        text: data.warning || (data.provider === "anthropic"
+        text: data.warning || (!candidate
+          ? `Scene ${sceneIndex + 1} was repaired locally and is ready to edit.`
+          : data.provider === "anthropic"
           ? `Scene ${sceneIndex + 1} is shaped and still completely editable.`
           : `Scene ${sceneIndex + 1} was tightened locally and remains editable.`),
       });
