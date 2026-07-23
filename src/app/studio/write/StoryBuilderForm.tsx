@@ -61,6 +61,94 @@ type StoredDraft = {
 };
 
 type DraftSaveState = "idle" | "loading" | "saving" | "saved" | "signed-out" | "error";
+type MagicRunKind = "concept" | "draft";
+
+const MAGIC_TIMELINES: Record<MagicRunKind, Array<{ label: string; detail: string; startsAt: number }>> = {
+  concept: [
+    { label: "Read the idea", detail: "Finding the strongest promise in your brief", startsAt: 0 },
+    { label: "Study the cast", detail: "Connecting the chosen actor's identity and range", startsAt: 3 },
+    { label: "Find the hook", detail: "Building the opening image and dramatic angle", startsAt: 7 },
+    { label: "Write the concept", detail: "Shaping title, logline, and creative direction", startsAt: 13 },
+    { label: "Continuity check", detail: "Making the concept playable for the selected runtime", startsAt: 21 },
+  ],
+  draft: [
+    { label: "Read the brief", detail: "Locking the idea, runtime, and output format", startsAt: 0 },
+    { label: "Connect the cast", detail: "Loading identity, voice, look, and performance rules", startsAt: 3 },
+    { label: "Build the hook", detail: "Finding the first visual interruption", startsAt: 8 },
+    { label: "Shape scene beats", detail: "Writing objectives, action, pressure, and turns", startsAt: 15 },
+    { label: "Check the cut", detail: "Testing duration, continuity, and playable output", startsAt: 27 },
+  ],
+};
+
+function MagicWritingTimeline({ kind, elapsedSeconds }: { kind: MagicRunKind; elapsedSeconds: number }) {
+  const stages = MAGIC_TIMELINES[kind];
+  let currentIndex = stages.length - 1;
+  for (let index = 0; index < stages.length - 1; index += 1) {
+    if (elapsedSeconds < stages[index + 1].startsAt) {
+      currentIndex = index;
+      break;
+    }
+  }
+  const current = stages[currentIndex];
+  const next = stages[currentIndex + 1];
+  const phaseProgress = next
+    ? Math.min(1, Math.max(0, (elapsedSeconds - current.startsAt) / (next.startsAt - current.startsAt)))
+    : Math.min(0.9, (elapsedSeconds - current.startsAt) / 18);
+  const progress = Math.min(94, ((currentIndex + phaseProgress) / stages.length) * 100);
+
+  return (
+    <div
+      className="overflow-hidden rounded-xl border border-accent/45 bg-black/25"
+      aria-live="polite"
+      aria-label="Chaplin writing progress"
+      data-magic-timeline
+    >
+      <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-70" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-ink">{current.label}</p>
+            <p className="truncate text-[9px] text-grey">{current.detail}</p>
+          </div>
+        </div>
+        <span className="shrink-0 font-mono text-[10px] text-accent">{elapsedSeconds}s live</span>
+      </div>
+      <div className="h-1 bg-white/[0.06]">
+        <div
+          className="pipeline-flow-line h-full transition-[width] duration-700 ease-out"
+          style={{ width: `${Math.max(4, progress)}%` }}
+        />
+      </div>
+      <ol className="grid gap-0 px-3 py-3 sm:grid-cols-5">
+        {stages.map((stage, index) => {
+          const complete = index < currentIndex;
+          const active = index === currentIndex;
+          return (
+            <li key={stage.label} className="relative flex items-center gap-2 py-1.5 sm:block sm:px-1.5 sm:py-0">
+              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border font-mono text-[8px] ${
+                complete
+                  ? "border-accent-secondary bg-accent-secondary/15 text-accent-secondary"
+                  : active
+                    ? "animate-pulse border-accent bg-accent/15 text-accent"
+                    : "border-white/15 text-white/30"
+              }`}>
+                {complete ? "✓" : index + 1}
+              </span>
+              <span className={`text-[8px] font-semibold uppercase tracking-[0.08em] sm:mt-1.5 sm:block ${
+                complete ? "text-accent-secondary" : active ? "text-ink" : "text-white/30"
+              }`}>
+                {stage.label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 const IDEA_STARTERS: Record<ProductionFormat, string[]> = {
   episode: [
@@ -121,6 +209,8 @@ export default function StoryBuilderForm() {
   const [scenes, setScenes] = useState<DraftScene[]>([emptyScene()]);
   const [error, setError] = useState("");
   const [magicBusy, setMagicBusy] = useState(false);
+  const [magicRunKind, setMagicRunKind] = useState<MagicRunKind>("draft");
+  const [magicElapsedSeconds, setMagicElapsedSeconds] = useState(0);
   const [magicMessage, setMagicMessage] = useState("");
   const [magicWriterOpen, setMagicWriterOpen] = useState(false);
   const [startChoiceOpen, setStartChoiceOpen] = useState(false);
@@ -282,6 +372,15 @@ export default function StoryBuilderForm() {
   }, []);
 
   useEffect(() => {
+    if (!magicBusy) return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setMagicElapsedSeconds(Math.max(1, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [magicBusy]);
+
+  useEffect(() => {
     const sceneIndex = pendingSceneFocusRef.current;
     if (sceneIndex === null) return;
     pendingSceneFocusRef.current = null;
@@ -400,6 +499,8 @@ export default function StoryBuilderForm() {
       document.querySelector("[data-product-reference]")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
+    setMagicRunKind(conceptOnly ? "concept" : "draft");
+    setMagicElapsedSeconds(0);
     setMagicBusy(true);
     setError("");
     setMagicMessage("");
@@ -985,6 +1086,9 @@ export default function StoryBuilderForm() {
               {magicBusy ? "Writing the draft..." : "✦ Magic: write everything"}
             </button>
           </div>
+          {magicBusy && magicRunKind === "draft" && (
+            <MagicWritingTimeline kind="draft" elapsedSeconds={magicElapsedSeconds} />
+          )}
           {magicMessage && <p className="text-xs text-emerald-500">{magicMessage}</p>}
         </div>
       </details>
@@ -1058,6 +1162,11 @@ export default function StoryBuilderForm() {
               <span>{magicBusy ? "Shaping the concept…" : "✦ Fill the concept"}</span>
               <span className="text-[10px] font-medium opacity-70">{formatDefinition.label} · {durationSeconds}s</span>
             </button>
+            {magicBusy && magicRunKind === "concept" && (
+              <div className="mt-3">
+                <MagicWritingTimeline kind="concept" elapsedSeconds={magicElapsedSeconds} />
+              </div>
+            )}
             {magicMessage && <p className="mt-2 text-[10px] leading-relaxed text-accent-secondary">{magicMessage}</p>}
           </div>
 
@@ -1288,6 +1397,9 @@ export default function StoryBuilderForm() {
               {magicBusy ? "Building scenes…" : scenes.some((scene) => scene.setting || scene.objective || scene.action) ? "Regenerate all scenes" : "✦ Generate scenes"}
             </button>
           </div>
+          {magicBusy && magicRunKind === "draft" && (
+            <MagicWritingTimeline kind="draft" elapsedSeconds={magicElapsedSeconds} />
+          )}
 
           {scenes.map((scene, si) => (
             <div key={si} className="poster-card scroll-mt-24 rounded-md p-5" data-scene-card={si}>
