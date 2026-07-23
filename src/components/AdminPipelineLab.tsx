@@ -58,9 +58,13 @@ const STAGE_FIELDS: Record<PipelineStageId, FieldDefinition[]> = {
     { key: "signWithC2pa", label: "C2PA provenance", type: "boolean", note: "Requests provider provenance signing when available." },
   ],
   image: [
-    { key: "size", label: "Output size", type: "text", note: "Seedream output dimensions, for example 2560x1440." },
-    { key: "watermark", label: "Provider watermark", type: "boolean", note: "Adds the provider watermark to generated stills." },
-    { key: "sequentialImageGeneration", label: "Sequential mode", type: "text", note: "Provider sequential-image setting." },
+    { key: "size", label: "Output size", type: "text", note: "Exact output dimensions used by Seedream and GPT Image, for example 2560x1440." },
+    { key: "resolution", label: "OpenRouter resolution", type: "text", note: "Normalized OpenRouter tier such as 1K, 2K, or 4K." },
+    { key: "aspectRatio", label: "Aspect ratio", type: "text", note: "OpenRouter output ratio, for example 16:9, 9:16, or 1:1." },
+    { key: "quality", label: "Quality", type: "text", note: "OpenRouter and OpenAI quality: low, medium, high, or auto." },
+    { key: "outputFormat", label: "Output format", type: "text", note: "OpenRouter and OpenAI output: png, jpeg, or webp." },
+    { key: "watermark", label: "Seedream watermark", type: "boolean", note: "Adds the BytePlus provider watermark to generated stills." },
+    { key: "sequentialImageGeneration", label: "Seedream sequential mode", type: "text", note: "BytePlus sequential-image setting." },
     { key: "negativePrompt", label: "Global negative prompt", type: "text", note: "Always appended to image exclusions." },
   ],
   video: [
@@ -94,9 +98,11 @@ function formatMoney(value: number | null) {
 export default function AdminPipelineLab({
   initialConfig,
   recentRuns,
+  imageProviderReadiness,
 }: {
   initialConfig: PipelineConfig;
   recentRuns: RecentRun[];
+  imageProviderReadiness: Record<"byteplus" | "openrouter" | "openai", boolean>;
 }) {
   const [config, setConfig] = useState(initialConfig);
   const [activeStage, setActiveStage] = useState<PipelineStageId>("writing");
@@ -106,6 +112,11 @@ export default function AdminPipelineLab({
   const [requestPreview, setRequestPreview] = useState("");
   const stage = config.stages[activeStage];
   const meta = PIPELINE_STAGE_META[activeStage];
+  const imageModels = stage.provider === "openrouter"
+    ? ["google/gemini-2.5-flash-image", "openai/gpt-image-2", "bytedance-seed/seedream-4.5"]
+    : stage.provider === "openai"
+      ? ["gpt-image-2", "gpt-image-1.5"]
+      : ["seedream-4-5-251128"];
   const stageRuns = useMemo(
     () => recentRuns.filter((run) => stageForRun(run.kind) === activeStage).slice(0, 6),
     [activeStage, recentRuns]
@@ -221,11 +232,52 @@ export default function AdminPipelineLab({
           <div className="p-5 sm:p-6 grid md:grid-cols-2 gap-4">
             <label className="block">
               <span className="text-[10px] uppercase tracking-wider text-grey">Provider</span>
-              <input className="field mt-2 w-full" value={stage.provider} onChange={(event) => replaceStage({ ...stage, provider: event.target.value })} />
+              {activeStage === "image" ? (
+                <>
+                  <select
+                    className="field mt-2 w-full"
+                    value={stage.provider}
+                    onChange={(event) => {
+                      const provider = event.target.value;
+                      const model = provider === "openrouter"
+                        ? "google/gemini-2.5-flash-image"
+                        : provider === "openai"
+                          ? "gpt-image-2"
+                          : "seedream-4-5-251128";
+                      replaceStage({ ...stage, provider, model });
+                    }}
+                  >
+                    <option value="byteplus" disabled={!imageProviderReadiness.byteplus}>
+                      BytePlus · Seedream{imageProviderReadiness.byteplus ? "" : " · key required"}
+                    </option>
+                    <option value="openrouter" disabled={!imageProviderReadiness.openrouter}>
+                      OpenRouter · Nano Banana / routed models{imageProviderReadiness.openrouter ? "" : " · key required"}
+                    </option>
+                    <option value="openai" disabled={!imageProviderReadiness.openai}>
+                      OpenAI · GPT Image{imageProviderReadiness.openai ? "" : " · key required"}
+                    </option>
+                  </select>
+                  <span className="mt-1 block text-[10px] text-grey">
+                    Only configured providers can be selected. Every active choice keeps canonical references, generation logs, provider usage, USD, INR, and Chaplin-token accounting.
+                  </span>
+                </>
+              ) : (
+                <input className="field mt-2 w-full" value={stage.provider} onChange={(event) => replaceStage({ ...stage, provider: event.target.value })} />
+              )}
             </label>
             <label className="block">
               <span className="text-[10px] uppercase tracking-wider text-grey">Model</span>
-              <input className="field mt-2 w-full" value={stage.model} onChange={(event) => replaceStage({ ...stage, model: event.target.value })} />
+              <input
+                className="field mt-2 w-full"
+                value={stage.model}
+                list={activeStage === "image" ? "chaplin-image-models" : undefined}
+                onChange={(event) => replaceStage({ ...stage, model: event.target.value })}
+              />
+              {activeStage === "image" && (
+                <datalist id="chaplin-image-models">
+                  {imageModels.map((model) => <option key={model} value={model} />)}
+                </datalist>
+              )}
             </label>
             <label className="block md:col-span-2">
               <span className="text-[10px] uppercase tracking-wider text-grey">Global creative instruction</span>

@@ -53,7 +53,7 @@ async function findAuthUserIdByEmail(email: string) {
   return null;
 }
 
-async function ensureSuperAdminUser(email: string, password: string) {
+async function ensureSuperAdminUser(email: string, password: string, resetExisting = false) {
   const admin = getSupabaseAdminClient();
   const userId = await findAuthUserIdByEmail(email);
   const attributes = {
@@ -66,6 +66,7 @@ async function ensureSuperAdminUser(email: string, password: string) {
     },
   };
   if (userId) {
+    if (!resetExisting) return;
     const result = await admin.auth.admin.updateUserById(userId, attributes);
     if (result.error) throw new Error(`Prepare Super Admin: ${result.error.message}`);
     return;
@@ -123,7 +124,11 @@ export async function POST(request: NextRequest) {
         throw new Error("Incorrect Super Admin email or password.");
       }
       await ensureSuperAdminUser(expectedEmail, expectedPassword);
-      const result = await supabase.auth.signInWithPassword({ email: expectedEmail, password: expectedPassword });
+      let result = await supabase.auth.signInWithPassword({ email: expectedEmail, password: expectedPassword });
+      if (result.error) {
+        await ensureSuperAdminUser(expectedEmail, expectedPassword, true);
+        result = await supabase.auth.signInWithPassword({ email: expectedEmail, password: expectedPassword });
+      }
       if (result.error) throw new Error(result.error.message);
       if (!result.data.session || !result.data.user) throw new Error("Supabase did not return an admin session.");
       const identity = await ensureAuthProfile(result.data.user);

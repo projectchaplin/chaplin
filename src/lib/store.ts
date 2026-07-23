@@ -36,6 +36,9 @@ export interface NewSceneInput {
   setting: string;
   objective?: string;
   action?: string;
+  durationSeconds?: number;
+  previewImageUrl?: string;
+  previewAssetId?: string;
   lines: Array<{ characterId: string; text: string }>;
 }
 
@@ -100,8 +103,8 @@ function nowIso() {
 
 export const useChaplinStore = create<ChaplinState>((set, get) => ({
   ...SEED_WORLD,
-  currentUserId: "u-admin",
-  activeRole: "admin",
+  currentUserId: "u-meera",
+  activeRole: "maker",
   hydrated: false,
 
   setCurrentUser: (userId) => {
@@ -191,6 +194,9 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
       setting: sc.setting,
       objective: sc.objective,
       action: sc.action,
+      durationSeconds: sc.durationSeconds,
+      previewImageUrl: sc.previewImageUrl,
+      previewAssetId: sc.previewAssetId,
       lines: sc.lines.map((ln, li) => ({
         id: `${storyId}-sc${si}-l${li}`,
         characterId: ln.characterId,

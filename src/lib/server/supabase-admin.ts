@@ -614,12 +614,12 @@ export async function getCharacterProviderHealth(characterId: string) {
     .from("generation_jobs")
     .select("provider,status,error_message,created_at")
     .eq("character_id", characterId)
-    .in("provider", ["elevenlabs", "byteplus", "fal"])
+    .in("provider", ["elevenlabs", "byteplus", "fal", "openrouter", "openai"])
     .order("created_at", { ascending: false })
     .limit(50);
   assert(error, "Load provider health");
 
-  const latest = (provider: "elevenlabs" | "byteplus" | "fal") => {
+  const latest = (provider: "elevenlabs" | "byteplus" | "fal" | "openrouter" | "openai") => {
     const providerJobs = (data ?? []).filter((row) => row.provider === provider);
     const job = providerJobs[0];
     const lastSuccess = providerJobs.find((row) => row.status === "succeeded");
@@ -637,6 +637,8 @@ export async function getCharacterProviderHealth(characterId: string) {
   return {
     elevenLabs: latest("elevenlabs"),
     seedModels: latest("byteplus") ?? latest("fal"),
+    openRouter: latest("openrouter"),
+    openAI: latest("openai"),
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useChaplinStore } from "@/lib/store";
 import { getCharacter, getUser, resumeForCharacter, ledgerForCharacter } from "@/lib/selectors";
 import Avatar from "@/components/Avatar";
@@ -26,11 +26,96 @@ import {
   timeAgo,
 } from "@/lib/format";
 
+type CharacterVideoAsset = {
+  id: string;
+  url: string;
+  durationSeconds: number | null;
+  label: string;
+  createdAt: string | null;
+};
+
 export default function CharacterProfilePage() {
   const params = useParams<{ id: string }>();
   const world = useChaplinStore((s) => s);
   const character = getCharacter(world, params.id);
   const [productionOpen, setProductionOpen] = useState(false);
+  const [availableVideos, setAvailableVideos] = useState<CharacterVideoAsset[]>([]);
+  const [videosLoading, setVideosLoading] = useState(true);
+
+  useEffect(() => {
+    if (!character?.id) return;
+    let active = true;
+    const loadVideos = async () => {
+      setVideosLoading(true);
+      try {
+        const response = await fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`, { cache: "no-store" });
+        const data = await response.json() as {
+          production?: {
+            assets?: Array<{
+              id: string;
+              kind: string;
+              url: string;
+              duration_seconds: number | null;
+              metadata: Record<string, unknown> | null;
+              created_at: string;
+            }>;
+          };
+        };
+        if (!response.ok) throw new Error("Character media could not be loaded.");
+        const seen = new Set<string>();
+        const videos: CharacterVideoAsset[] = [];
+        for (const asset of data.production?.assets ?? []) {
+          if (asset.kind !== "video" || !asset.url || seen.has(asset.url)) continue;
+          seen.add(asset.url);
+          const outputType = typeof asset.metadata?.outputType === "string" ? asset.metadata.outputType : "";
+          const duration = asset.duration_seconds;
+          videos.push({
+            id: asset.id,
+            url: asset.url,
+            durationSeconds: duration,
+            label: outputType === "punch"
+              ? "Punch master"
+              : outputType === "spark"
+                ? "Spark"
+                : duration && duration <= 5
+                  ? "Four-second scene"
+                  : "Performance video",
+            createdAt: asset.created_at,
+          });
+        }
+        if (character.videoUrl && !seen.has(character.videoUrl)) {
+          videos.unshift({
+            id: "profile-video",
+            url: character.videoUrl,
+            durationSeconds: null,
+            label: "Featured performance",
+            createdAt: null,
+          });
+        }
+        if (active) setAvailableVideos(videos);
+      } catch {
+        if (active) setAvailableVideos(character.videoUrl ? [{
+          id: "profile-video",
+          url: character.videoUrl,
+          durationSeconds: null,
+          label: "Featured performance",
+          createdAt: null,
+        }] : []);
+      } finally {
+        if (active) setVideosLoading(false);
+      }
+    };
+    void loadVideos();
+    const refresh = (event: Event) => {
+      const detail = (event as CustomEvent<{ characterId?: string }>).detail;
+      if (!detail?.characterId || detail.characterId === character.id) void loadVideos();
+    };
+    window.addEventListener("chaplin:media-updated", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("chaplin:media-updated", refresh);
+    };
+  }, [character?.id, character?.videoUrl]);
 
   if (!character) {
     return (
@@ -204,6 +289,69 @@ export default function CharacterProfilePage() {
 
         {/* Right: license terms + earnings + CTA */}
         <div className="flex flex-col gap-6">
+          <section className="poster-card overflow-hidden rounded-md">
+            <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-grey">Available videos</h2>
+                <p className="mt-0.5 text-[9px] text-grey">Spark, scenes, and finished performances</p>
+              </div>
+              <span className="rounded-full border border-accent-secondary/35 px-2 py-1 font-mono text-[9px] text-accent-secondary">
+                {availableVideos.length}
+              </span>
+            </div>
+            {videosLoading ? (
+              <div className="flex items-center gap-2 px-4 py-5 text-xs text-grey">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+                Loading performances…
+              </div>
+            ) : availableVideos.length ? (
+              <div className="max-h-[34rem] space-y-3 overflow-y-auto p-3 scrollbar-thin">
+                {availableVideos.map((video, index) => (
+                  <article key={video.id} className="overflow-hidden rounded-lg border border-line bg-black/30">
+                    <video
+                      src={video.url}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      poster={character.imageUrl ?? character.bannerUrl}
+                      className="aspect-video w-full bg-black object-cover"
+                      aria-label={`${video.label} for ${character.name}`}
+                    />
+                    <div className="flex items-center justify-between gap-2 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-[10px] font-semibold">{video.label}</p>
+                        <p className="mt-0.5 text-[8px] uppercase tracking-[0.12em] text-grey">
+                          {video.durationSeconds ? `${Math.round(video.durationSeconds)} sec` : index === 0 ? "Profile selection" : "Saved video"}
+                        </p>
+                      </div>
+                      {index === 0 && (
+                        <span className="shrink-0 rounded-full bg-accent/15 px-2 py-1 text-[8px] font-bold uppercase tracking-wide text-accent">
+                          Latest
+                        </span>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-5">
+                <p className="text-xs font-semibold">No performance video yet</p>
+                <p className="mt-1 text-[10px] leading-4 text-grey">
+                  A Spark or generated scene will appear here as soon as it is saved.
+                </p>
+                {canProduce && (
+                  <button
+                    type="button"
+                    onClick={openProductionStudio}
+                    className="mt-3 rounded-full border border-accent/55 px-3 py-1.5 text-[9px] font-semibold text-accent"
+                  >
+                    Create the first video
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+
           <section className="poster-card rounded-md p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-grey mb-2">
               License terms

@@ -91,7 +91,7 @@ export default function ShelfPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search actors, voices, worldsâ€¦"
+              placeholder="Search actors, voices, worlds..."
               className="shelf-search w-full rounded-full py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:outline-none"
             />
           </div>

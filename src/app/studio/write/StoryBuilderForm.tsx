@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useChaplinStore } from "@/lib/store";
+import { getClientAuthIdentity } from "@/lib/client-auth";
 import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
 import {
@@ -32,6 +33,9 @@ interface DraftScene {
   setting: string;
   objective: string;
   action: string;
+  durationSeconds?: number;
+  previewImageUrl?: string;
+  previewAssetId?: string;
   lines: DraftLine[];
 }
 
@@ -174,7 +178,7 @@ const IDEA_STARTERS: Record<ProductionFormat, string[]> = {
 };
 
 function emptyScene(): DraftScene {
-  return { setting: "", objective: "", action: "", lines: [] };
+  return { setting: "", objective: "", action: "", durationSeconds: 4, lines: [] };
 }
 
 export default function StoryBuilderForm() {
@@ -216,6 +220,8 @@ export default function StoryBuilderForm() {
   const [startChoiceOpen, setStartChoiceOpen] = useState(false);
   const [sceneAssistBusy, setSceneAssistBusy] = useState<number | null>(null);
   const [sceneAssistMessage, setSceneAssistMessage] = useState<{ index: number; text: string } | null>(null);
+  const [scenePreviewBusy, setScenePreviewBusy] = useState<number | null>(null);
+  const [autoPreviewBatch, setAutoPreviewBatch] = useState<{ scenes: DraftScene[]; leadId: string } | null>(null);
   const [claudeConfigured, setClaudeConfigured] = useState<boolean | null>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [draftId, setDraftId] = useState(() => searchParams.get("draft") ?? "");
@@ -223,6 +229,8 @@ export default function StoryBuilderForm() {
   const [draftSaveState, setDraftSaveState] = useState<DraftSaveState>(
     searchParams.get("draft") ? "loading" : "idle",
   );
+  const [draftAccountReady, setDraftAccountReady] = useState(false);
+  const [draftAccountId, setDraftAccountId] = useState<string | null>(null);
   const pendingSceneFocusRef = useRef<number | null>(null);
   const formatOptions = formatsForRole(activeRole);
   const formatDefinition = PRODUCTION_FORMATS[format];
@@ -245,9 +253,9 @@ export default function StoryBuilderForm() {
   function chooseSparkStart(path: "magic" | "manual") {
     setStartChoiceOpen(false);
     if (path === "magic") {
-      setMagicWriterOpen(true);
+      setStep(1);
       window.setTimeout(() => {
-        document.querySelector("[data-magic-writer]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.querySelector("[data-concept-magic]")?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 0);
       return;
     }
@@ -268,8 +276,33 @@ export default function StoryBuilderForm() {
   }, [activeRole, format, formatOptions]);
 
   useEffect(() => {
+    let cancelled = false;
+    void getClientAuthIdentity()
+      .then((identity) => {
+        if (cancelled) return;
+        setDraftAccountId(identity?.id ?? null);
+        setDraftAccountReady(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDraftAccountId(null);
+        setDraftAccountReady(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
     const requestedDraftId = searchParams.get("draft");
     if (!requestedDraftId) return;
+    if (!draftAccountReady) return;
+    if (!draftAccountId) {
+      const signedOutTimer = window.setTimeout(() => {
+        setDraftReady(true);
+        setDraftSaveState("signed-out");
+        setError("Sign in to open this private draft.");
+      }, 0);
+      return () => window.clearTimeout(signedOutTimer);
+    }
     let cancelled = false;
     void fetch(`/api/drafts?id=${encodeURIComponent(requestedDraftId)}`, { cache: "no-store" })
       .then(async (response) => {
@@ -289,7 +322,11 @@ export default function StoryBuilderForm() {
         setProductImageUrl(body.productImageUrl ?? "");
         setProductImageName(body.productImageName ?? "");
         setCastIds(Array.isArray(body.castIds) ? body.castIds : []);
-        setScenes(Array.isArray(body.scenes) && body.scenes.length ? body.scenes : [emptyScene()]);
+        setScenes(
+          Array.isArray(body.scenes) && body.scenes.length
+            ? body.scenes.map((scene) => ({ ...scene, durationSeconds: 4 }))
+            : [emptyScene()]
+        );
         setStep(body.step === 2 || body.step === 3 ? body.step : 1);
         setDraftId(stored.id);
         setDraftReady(true);
@@ -302,10 +339,10 @@ export default function StoryBuilderForm() {
         setDraftSaveState("error");
       });
     return () => { cancelled = true; };
-  }, [searchParams]);
+  }, [draftAccountId, draftAccountReady, searchParams]);
 
   useEffect(() => {
-    if (!draftReady) return;
+    if (!draftReady || !draftAccountReady) return;
     const hasWork = Boolean(
       brief.trim() ||
       title.trim() ||
@@ -316,6 +353,10 @@ export default function StoryBuilderForm() {
       scenes.some((scene) => scene.setting.trim() || scene.objective?.trim() || scene.action?.trim() || scene.lines.some((line) => line.text.trim())),
     );
     if (!hasWork) return;
+    if (!draftAccountId) {
+      const signedOutTimer = window.setTimeout(() => setDraftSaveState("signed-out"), 0);
+      return () => window.clearTimeout(signedOutTimer);
+    }
 
     const timer = window.setTimeout(() => {
       setDraftSaveState("saving");
@@ -362,7 +403,7 @@ export default function StoryBuilderForm() {
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [brief, castIds, creativeDirection, draftId, draftReady, durationSeconds, format, logline, productImageName, productImageUrl, scenes, step, title]);
+  }, [brief, castIds, creativeDirection, draftAccountId, draftAccountReady, draftId, draftReady, durationSeconds, format, logline, productImageName, productImageUrl, scenes, step, title]);
 
   useEffect(() => {
     fetch("/api/write/magic", { cache: "no-store" })
@@ -458,10 +499,21 @@ export default function StoryBuilderForm() {
     setScenes((prev) => prev.filter((_, idx) => idx !== i));
   }
   function updateSceneSetting(i: number, value: string) {
-    setScenes((prev) => prev.map((sc, idx) => (idx === i ? { ...sc, setting: value } : sc)));
+    setScenes((prev) => prev.map((sc, idx) => (
+      idx === i ? { ...sc, setting: value, previewImageUrl: undefined, previewAssetId: undefined } : sc
+    )));
   }
   function updateScene(i: number, patch: Partial<DraftScene>) {
-    setScenes((prev) => prev.map((scene, index) => (index === i ? { ...scene, ...patch } : scene)));
+    const invalidatesPreview = patch.setting !== undefined || patch.objective !== undefined || patch.action !== undefined;
+    setScenes((prev) => prev.map((scene, index) => (
+      index === i
+        ? {
+            ...scene,
+            ...patch,
+            ...(invalidatesPreview ? { previewImageUrl: undefined, previewAssetId: undefined } : {}),
+          }
+        : scene
+    )));
   }
   function addLine(sceneIdx: number) {
     setScenes((prev) =>
@@ -542,15 +594,19 @@ export default function StoryBuilderForm() {
       setLogline(draft.logline);
       setCreativeDirection(draft.creativeDirection);
       if (!conceptOnly) {
-        setCastIds(draft.castIds.filter((id) => world.characters.some((character) => character.id === id)));
+        const nextCastIds = draft.castIds.filter((id) => world.characters.some((character) => character.id === id));
+        setCastIds(nextCastIds);
         const lead = castCharacters[0];
-        setScenes(draft.scenes.length ? draft.scenes : [{
+        const nextScenes = (draft.scenes.length ? draft.scenes : [{
           setting: "INT. CHARACTER WORLD - CONTINUOUS",
           objective: `Reveal ${lead?.name ?? "the actor"} through one visible, situation-changing choice.`,
           action: `${lead?.name ?? "The actor"} enters under immediate pressure, finds the detail everyone else missed, and makes one physical choice that changes the scene.`,
           lines: [],
-        }]);
+        }]).map((scene) => ({ ...scene, durationSeconds: 4 }));
+        setScenes(nextScenes);
         setStep(3);
+        const previewLead = world.characters.find((character) => character.id === nextCastIds[0]) ?? lead;
+        if (previewLead) setAutoPreviewBatch({ scenes: nextScenes, leadId: previewLead.id });
       }
       setClaudeConfigured(Boolean(data.configured));
       setMagicMessage(
@@ -651,14 +707,17 @@ export default function StoryBuilderForm() {
         lines: currentScene.lines,
       };
       const validCastIds = new Set(castCharacters.map((character) => character.id));
-      updateScene(sceneIndex, {
+      const shapedScene: DraftScene = {
         setting: playableScene.setting || currentScene.setting,
         objective: playableScene.objective || currentScene.objective,
         action: playableScene.action || currentScene.action,
+        durationSeconds: 4,
         lines: playableScene.lines
           .filter((line) => validCastIds.has(line.characterId) && line.text.trim())
           .slice(0, 3),
-      });
+      };
+      updateScene(sceneIndex, shapedScene);
+      await generateScenePreview(shapedScene, sceneIndex);
       setSceneAssistMessage({
         index: sceneIndex,
         text: data.warning || (!candidate
@@ -673,6 +732,81 @@ export default function StoryBuilderForm() {
       setSceneAssistBusy(null);
     }
   }
+
+  async function generateScenePreview(scene: DraftScene, sceneIndex: number, lead = castCharacters[0]) {
+    if (!lead) return false;
+    setScenePreviewBusy(sceneIndex);
+    setError("");
+    try {
+      const referenceImages = [
+        lead.imageUrl ?? lead.galleryUrls?.[0] ?? lead.bannerUrl ?? "",
+        productImageUrl,
+      ].filter(Boolean);
+      const prompt = [
+        `PURPOSE: Production thumbnail and binding first frame for scene ${sceneIndex + 1} of "${title || "Untitled production"}".`,
+        `FOUR-SECOND BEAT: This image is the exact visual start of one four-second clip in a multi-scene edit.`,
+        `SETTING: ${scene.setting || "A specific location grounded in the production concept."}`,
+        `SCENE OBJECTIVE: ${scene.objective || "Create one visible situation change."}`,
+        `VISIBLE ACTION: ${scene.action || `${lead.name} begins one concise, camera-readable action.`}`,
+        `ACTOR: ${lead.name}. Match the supplied identity reference exactly. ${lead.personality}`,
+        ...(productImageUrl
+          ? [`PRODUCT: The supplied product reference is ${productImageName || "the advertised product"}. Preserve its exact design and make it clearly visible in this scene.`]
+          : []),
+        "COMPOSITION: cinematic 16:9 frame with a clear foreground, actor, environment, and room for the planned movement. This must look like a scene, not a portrait.",
+        "CAMERA: choose one intentional angle and realistic lens that best expresses this beat; face, hands, important props, and environment must be readable.",
+        "LIGHT: motivated cinematic light from believable sources in the setting, realistic skin and materials, controlled contrast.",
+        "CONTINUITY: preserve the exact actor face, age, hair, body, wardrobe, accessories, palette, and product design across every scene thumbnail.",
+        "REALISM: photoreal live-action unless the concept explicitly requests animation, manga, or illustration.",
+        "EXCLUSIONS: no replacement actor, identity blend, empty generic background, text overlay, subtitle, UI, border, watermark, or unexplained extra subject.",
+      ].join("\n");
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "image",
+          characterId: lead.id,
+          imagePurpose: "scene",
+          referenceImages,
+          prompt,
+        }),
+      });
+      const data = await response.json() as { url?: string; assetId?: string; error?: string };
+      if (!response.ok || !data.url || !data.assetId) {
+        throw new Error(data.error || `Scene ${sceneIndex + 1} thumbnail was not created.`);
+      }
+      updateScene(sceneIndex, {
+        durationSeconds: 4,
+        previewImageUrl: data.url,
+        previewAssetId: data.assetId,
+      });
+      return true;
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : `Scene ${sceneIndex + 1} thumbnail failed.`);
+      return false;
+    } finally {
+      setScenePreviewBusy(null);
+    }
+  }
+
+  async function generateAllScenePreviews(nextScenes = scenes, lead = castCharacters[0]) {
+    if (!lead) return;
+    for (let index = 0; index < nextScenes.length; index += 1) {
+      await generateScenePreview(nextScenes[index], index, lead);
+    }
+  }
+
+  useEffect(() => {
+    if (!autoPreviewBatch) return;
+    const lead = world.characters.find((character) => character.id === autoPreviewBatch.leadId);
+    if (lead) {
+      void generateAllScenePreviews(autoPreviewBatch.scenes, lead)
+        .finally(() => setAutoPreviewBatch(null));
+    } else {
+      window.setTimeout(() => setAutoPreviewBatch(null), 0);
+    }
+    // This is a one-shot handoff after Magic Writer replaces the complete scene array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPreviewBatch]);
 
   async function handleStartProduction() {
     if (format === "spot" && !productImageUrl) {
@@ -696,6 +830,9 @@ export default function StoryBuilderForm() {
         setting: sc.setting.trim() || "An unnamed scene",
         objective: sc.objective.trim() || undefined,
         action: sc.action.trim() || undefined,
+        durationSeconds: 4,
+        previewImageUrl: sc.previewImageUrl,
+        previewAssetId: sc.previewAssetId,
         lines: sc.lines.filter((ln) => ln.characterId && ln.text.trim()),
       }))
       .filter((sc) => Boolean(sc.objective || sc.action || sc.lines.length > 0));
@@ -932,7 +1069,9 @@ export default function StoryBuilderForm() {
               >
                 <span className={`font-mono text-3xl ${selected ? "text-accent" : "text-white/35"}`}>{optionDuration}s</span>
                 <span className="ml-2 text-sm font-semibold">{definition.label}</span>
-                <span className="mt-3 block text-[10px] uppercase tracking-wide text-grey">{optionShots} × five-second shot{optionShots === 1 ? "" : "s"}</span>
+                <span className="mt-3 block text-[10px] uppercase tracking-wide text-grey">
+                  {option === "spark" ? "1 × five-second audition" : `${optionShots} × four-second scene${optionShots === 1 ? "" : "s"}`}
+                </span>
                 <span className="mt-2 block text-[11px] leading-4 text-grey">{definition.promise}</span>
                 <span className={`absolute inset-x-0 bottom-0 h-0.5 ${selected ? "pipeline-flow-line" : "bg-white/5"}`} />
               </button>
@@ -964,7 +1103,7 @@ export default function StoryBuilderForm() {
       <details
         open={magicWriterOpen}
         onToggle={(event) => setMagicWriterOpen(event.currentTarget.open)}
-        className="poster-card mb-6 scroll-mt-24 overflow-hidden rounded-md border border-accent/40 bg-accent/[0.04]"
+        className="hidden"
         data-magic-writer
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-accent/[0.05]">
@@ -1085,6 +1224,14 @@ export default function StoryBuilderForm() {
             >
               {magicBusy ? "Writing the draft..." : "✦ Magic: write everything"}
             </button>
+            <button
+              type="button"
+              onClick={() => void generateAllScenePreviews()}
+              disabled={scenePreviewBusy !== null || castCharacters.length === 0 || !scenes.some((scene) => scene.setting || scene.action)}
+              className="shrink-0 rounded-full border border-accent-secondary/55 px-4 py-2 text-xs font-semibold text-accent-secondary hover:bg-accent-secondary/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {scenePreviewBusy !== null ? `Framing scene ${scenePreviewBusy + 1}…` : "Generate all thumbnails"}
+            </button>
           </div>
           {magicBusy && magicRunKind === "draft" && (
             <MagicWritingTimeline kind="draft" elapsedSeconds={magicElapsedSeconds} />
@@ -1120,9 +1267,9 @@ export default function StoryBuilderForm() {
           <div className="concept-magic rounded-xl border border-accent/45 p-3.5 sm:p-4" data-concept-magic>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-ink">✦ Concept Magic</p>
+                <p className="text-sm font-semibold text-ink">✦ Magic</p>
                 <p className="mt-0.5 text-[10px] leading-relaxed text-grey">
-                  Chaplin fills only the title, logline, and creative direction. Review everything before Cast.
+                  Give Chaplin one thought. It fills the concept, chooses cast when needed, and writes the complete editable scene plan.
                 </p>
               </div>
               <span className="shrink-0 rounded-full border border-accent-secondary/35 bg-accent-secondary/10 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-accent-secondary">
@@ -1154,17 +1301,17 @@ export default function StoryBuilderForm() {
 
             <button
               type="button"
-              onClick={() => createMagicDraft({ conceptOnly: true })}
-              disabled={magicBusy}
+              onClick={() => createMagicDraft()}
+              disabled={magicBusy || world.characters.length === 0}
               className="mt-3 flex w-full items-center justify-between rounded-lg bg-accent px-4 py-2.5 text-left text-sm font-semibold text-paper shadow-[0_10px_26px_rgba(242,78,112,0.18)] hover:bg-accent-light disabled:opacity-50"
-              data-action="magic-concept"
+              data-action="magic-script"
             >
-              <span>{magicBusy ? "Shaping the concept…" : "✦ Fill the concept"}</span>
+              <span>{magicBusy ? "Writing everything..." : "✦ Magic: write everything"}</span>
               <span className="text-[10px] font-medium opacity-70">{formatDefinition.label} · {durationSeconds}s</span>
             </button>
-            {magicBusy && magicRunKind === "concept" && (
+            {magicBusy && magicRunKind === "draft" && (
               <div className="mt-3">
-                <MagicWritingTimeline kind="concept" elapsedSeconds={magicElapsedSeconds} />
+                <MagicWritingTimeline kind="draft" elapsedSeconds={magicElapsedSeconds} />
               </div>
             )}
             {magicMessage && <p className="mt-2 text-[10px] leading-relaxed text-accent-secondary">{magicMessage}</p>}
@@ -1437,6 +1584,57 @@ export default function StoryBuilderForm() {
                   {sceneAssistMessage.text}
                 </p>
               )}
+
+              <div className="mb-4 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+                <div className="relative aspect-video overflow-hidden bg-black">
+                  {scene.previewImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- generated scene frames use dynamic provider URLs
+                    <img
+                      src={scene.previewImageUrl}
+                      alt={`Scene ${si + 1} starting frame`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="relative flex h-full items-center justify-center">
+                      {castCharacters[0] && (castCharacters[0].imageUrl ?? castCharacters[0].bannerUrl ?? castCharacters[0].galleryUrls?.[0]) ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- dynamic actor seed URL
+                        <img
+                          src={castCharacters[0].imageUrl ?? castCharacters[0].bannerUrl ?? castCharacters[0].galleryUrls?.[0]}
+                          alt=""
+                          className="absolute inset-0 h-full w-full scale-105 object-cover opacity-25 blur-[2px]"
+                        />
+                      ) : null}
+                      <div className="relative z-10 text-center">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-grey">No starting frame yet</p>
+                        <p className="mt-1 text-xs text-white/60">Generate the visual before animation.</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/20" />
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3">
+                    <div>
+                      <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-accent-secondary">Scene {String(si + 1).padStart(2, "0")}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-white">{scene.setting || "Untitled scene"}</p>
+                    </div>
+                    <span className="rounded-full border border-white/25 bg-black/55 px-2.5 py-1 font-mono text-[9px] text-white backdrop-blur">
+                      4 SEC
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-white/10 px-3 py-2.5">
+                  <p className="text-[9px] text-grey">
+                    {scene.previewImageUrl ? "This frame becomes the video’s visual starting point." : "Actor, setting, action, light, and product will be composed here."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void generateScenePreview(scene, si)}
+                    disabled={scenePreviewBusy !== null || castCharacters.length === 0}
+                    className="shrink-0 rounded-full border border-accent/55 px-3 py-1.5 text-[9px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40"
+                  >
+                    {scenePreviewBusy === si ? "Generating…" : scene.previewImageUrl ? "Regenerate frame" : "Generate frame"}
+                  </button>
+                </div>
+              </div>
 
               <div className="grid gap-3 mb-4 sm:grid-cols-2">
                 <label className="flex flex-col gap-1">

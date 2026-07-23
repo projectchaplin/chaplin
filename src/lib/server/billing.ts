@@ -34,6 +34,7 @@ const ELEVEN_MUSIC_USD_PER_MINUTE = Number(
   process.env.ELEVEN_MUSIC_USD_PER_MINUTE ?? "0.15"
 );
 const SEEDREAM_USD_PER_IMAGE = Number(process.env.SEEDREAM_USD_PER_IMAGE ?? "0.04");
+const OPENAI_IMAGE_USD_PER_IMAGE = Number(process.env.OPENAI_IMAGE_USD_PER_IMAGE ?? "0.041");
 const SEEDANCE_USD_PER_SECOND = Number(process.env.SEEDANCE_USD_PER_SECOND ?? "0.10");
 const ANTHROPIC_INPUT_USD_PER_MILLION_TOKENS = Number(
   process.env.ANTHROPIC_INPUT_USD_PER_MILLION_TOKENS ?? "2"
@@ -74,6 +75,8 @@ function round(value: number, places: number) {
 
 export async function calculateGenerationBilling(input: {
   kind: string;
+  provider?: string;
+  model?: string;
   usage?: GenerationUsage;
   providerCostUsd?: number;
 }): Promise<GenerationBilling> {
@@ -103,8 +106,17 @@ export async function calculateGenerationBilling(input: {
     costUsd = ((usage.durationSeconds ?? 0) / 60) * ELEVEN_MUSIC_USD_PER_MINUTE;
     pricingNote = `ElevenLabs Music rate-card estimate at $${ELEVEN_MUSIC_USD_PER_MINUTE}/minute.`;
   } else if (input.kind === "gallery") {
-    costUsd = (usage.imageCount ?? 1) * SEEDREAM_USD_PER_IMAGE;
-    pricingNote = `Seedream estimate at $${SEEDREAM_USD_PER_IMAGE}/image; override with SEEDREAM_USD_PER_IMAGE when your ModelArk contract differs.`;
+    const provider = input.provider?.toLowerCase();
+    if (provider === "openai") {
+      costUsd = (usage.imageCount ?? 1) * OPENAI_IMAGE_USD_PER_IMAGE;
+      pricingNote = `OpenAI ${input.model ?? "image"} rate-card estimate at $${OPENAI_IMAGE_USD_PER_IMAGE}/image; provider token usage is stored separately. Override with OPENAI_IMAGE_USD_PER_IMAGE when quality or size changes.`;
+    } else if (provider === "openrouter") {
+      costUsd = 0;
+      pricingNote = "OpenRouter did not return a billed dollar amount. Token usage is stored, but cost remains zero rather than inventing a rate.";
+    } else {
+      costUsd = (usage.imageCount ?? 1) * SEEDREAM_USD_PER_IMAGE;
+      pricingNote = `Seedream estimate at $${SEEDREAM_USD_PER_IMAGE}/image; override with SEEDREAM_USD_PER_IMAGE when your ModelArk contract differs.`;
+    }
   } else if (input.kind === "video") {
     costUsd = (usage.durationSeconds ?? 0) * SEEDANCE_USD_PER_SECOND;
     pricingNote = `Seedance estimate at $${SEEDANCE_USD_PER_SECOND}/second; override with SEEDANCE_USD_PER_SECOND when your ModelArk contract differs.`;

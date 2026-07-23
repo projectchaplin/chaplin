@@ -8,7 +8,7 @@ export type ProductionFormatDefinition = {
   label: string;
   durationSeconds: 5 | 15 | 30 | 60;
   alternateDurationSeconds?: 60;
-  shotCount: 1 | 3 | 6 | 12;
+  shotCount: number;
   owner: "creator" | "brand";
   publishable: boolean;
   promise: string;
@@ -32,22 +32,22 @@ export const PRODUCTION_FORMATS: Record<ProductionFormat, ProductionFormatDefini
     type: "punch",
     label: "Punch",
     durationSeconds: 15,
-    shotCount: 3,
+    shotCount: 4,
     owner: "creator",
     publishable: true,
     promise: "A public personality proof: hook, pressure, and one memorable choice.",
-    structure: "3 approved five-second shots",
+    structure: "4 authored four-second scenes, cut to a 15-second master",
     finalAction: "Build Punch production",
   },
   episode: {
     type: "episode",
     label: "Episode",
     durationSeconds: 60,
-    shotCount: 12,
+    shotCount: 15,
     owner: "creator",
     publishable: true,
     promise: "A complete microdrama that changes the situation and ends on a cliffhanger.",
-    structure: "12 approved five-second shots",
+    structure: "15 authored four-second scenes",
     finalAction: "Build Episode production",
   },
   spot: {
@@ -55,11 +55,11 @@ export const PRODUCTION_FORMATS: Record<ProductionFormat, ProductionFormatDefini
     label: "Brand Spot",
     durationSeconds: 30,
     alternateDurationSeconds: 60,
-    shotCount: 6,
+    shotCount: 8,
     owner: "brand",
     publishable: true,
     promise: "A managed commercial performance with rights, claims, and client approval gates.",
-    structure: "6 or 12 approved five-second shots",
+    structure: "8 or 15 authored four-second scenes, trimmed to delivery runtime",
     finalAction: "Send Spot to production",
   },
 };
@@ -96,6 +96,6 @@ export function productionDuration(format: ProductionFormat, requested?: number)
 }
 
 export function productionShotCount(format: ProductionFormat, durationSeconds: number) {
-  if (format === "spot" && durationSeconds === 60) return 12;
+  if (format === "spot" && durationSeconds === 60) return 15;
   return PRODUCTION_FORMATS[format].shotCount;
 }

@@ -58,9 +58,9 @@ export default function CharacterCard({
         <p className="line-clamp-2 flex-1 text-[11px] italic leading-snug text-white/58 sm:text-sm">&ldquo;{character.tagline}&rdquo;</p>
 
         <p className="truncate whitespace-nowrap border-t border-white/10 pt-1.5 text-[10px] text-white/48 sm:pt-2 sm:text-xs">
-          <b className="text-white/90">{character.stats.castings}</b> cast Â· <b className="text-white/90">{compactNumber(character.stats.fans)}</b> fans
+          <b className="text-white/90">{character.stats.castings}</b> cast <span aria-hidden="true">·</span> <b className="text-white/90">{compactNumber(character.stats.fans)}</b> fans
           {character.stats.earnings > 0 && (
-            <span className="text-accent font-semibold"> Â· {money(character.stats.earnings)}</span>
+            <span className="text-accent font-semibold"> <span aria-hidden="true">·</span> {money(character.stats.earnings)}</span>
           )}
         </p>
       </div>

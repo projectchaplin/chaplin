@@ -46,6 +46,8 @@ Create `.env.local` in the project root:
 ```bash
 ELEVEN_LABS_API_KEY=your_elevenlabs_key
 SEEDANCE_API_KEY=your_byteplus_modelark_key
+OPENROUTER_API_KEY=your_openrouter_key
+OPENAI_API_KEY=your_openai_key
 ELEVEN_MUSIC_USD_PER_MINUTE=0.15
 ```
 
@@ -58,6 +60,7 @@ dollar. Optional rate overrides:
 ELEVEN_TTS_USD_PER_1K_CHARACTERS=0.10
 ELEVEN_SFX_USD_PER_MINUTE=0.12
 SEEDREAM_USD_PER_IMAGE=0.04
+OPENAI_IMAGE_USD_PER_IMAGE=0.041
 SEEDANCE_USD_PER_SECOND=0.10
 CHAPLIN_TOKENS_PER_USD=1000
 USD_TO_INR_RATE=96.45
@@ -73,8 +76,13 @@ dollar amount, so both are configurable and labeled as estimates in the UI.
   voice.
 - ElevenLabs Sound Effects generates the character's five-second signature
   sound.
-- BytePlus ModelArk runs Seedream 4.5 directly to create a 16:9 character still
-  and add it to the gallery.
+- The Super Admin Image stage can switch between BytePlus Seedream, OpenRouter
+  (including Nano Banana), and OpenAI GPT Image. All three preserve the
+  character's canonical reference image and add the result to the same gallery.
+- OpenRouter logs its returned prompt/completion/total tokens and billed USD
+  cost. OpenAI logs its returned usage object and uses
+  `OPENAI_IMAGE_USD_PER_IMAGE` for the USD estimate when the provider does not
+  return a dollar cost.
 - BytePlus ModelArk runs Seedance 1.5 Pro directly using that still as its
   identity reference and renders a
   five-second 720p video with synchronized audio.

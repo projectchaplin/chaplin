@@ -92,6 +92,38 @@ export async function listMediaPipelineRuns(scopeType: PipelineScope, scopeId: s
   return Promise.all((result.data ?? []).map((row) => hydrateRun(row)));
 }
 
+export async function attachMediaPipelineOutput(input: {
+  runId: string;
+  stepKeys: string[];
+  output: JsonRecord;
+  outputAssetId: string;
+}) {
+  const supabase = getSupabaseAdminClient();
+  const now = new Date().toISOString();
+  const update = await supabase
+    .from("media_pipeline_steps")
+    .update({
+      output: input.output,
+      output_asset_id: input.outputAssetId,
+      updated_at: now,
+    })
+    .eq("run_id", input.runId)
+    .in("step_key", input.stepKeys);
+  fail(update.error, "Attach rendered output");
+
+  const runUpdate = await supabase
+    .from("media_pipeline_runs")
+    .update({
+      updated_at: now,
+    })
+    .eq("id", input.runId);
+  fail(runUpdate.error, "Attach output to pipeline");
+
+  const refreshed = await getMediaPipelineRun(input.runId);
+  if (!refreshed) throw new Error("The rendered pipeline could not be reloaded.");
+  return refreshed;
+}
+
 export async function createMediaPipelineRun(input: {
   scopeType: PipelineScope;
   scopeId: string;

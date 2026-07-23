@@ -125,6 +125,9 @@ export interface Scene {
   setting: string;
   objective?: string;
   action?: string;
+  durationSeconds?: number;
+  previewImageUrl?: string;
+  previewAssetId?: string;
   lines: Line[];
 }
 

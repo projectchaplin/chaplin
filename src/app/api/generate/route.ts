@@ -29,6 +29,8 @@ export const maxDuration = 300;
 
 const ELEVEN_API = "https://api.elevenlabs.io/v1";
 const MODEL_ARK_API = "https://ark.ap-southeast.bytepluses.com/api/v3";
+const OPENROUTER_IMAGE_API = "https://openrouter.ai/api/v1/images";
+const OPENAI_IMAGE_API = "https://api.openai.com/v1/images";
 const DIALOGUE_MODEL = "eleven_multilingual_v2";
 const DIALOGUE_VOICE_SETTINGS = {
   stability: 0.78,
@@ -39,10 +41,12 @@ const DIALOGUE_VOICE_SETTINGS = {
 
 type Input = Record<string, unknown>;
 
+class RequestValidationError extends Error {}
+
 function text(input: Input, key: string, min = 1, max = 4000) {
   const value = input[key];
   if (typeof value !== "string" || value.trim().length < min || value.length > max) {
-    throw new Error(`${key} must be between ${min} and ${max} characters.`);
+    throw new RequestValidationError(`${key} must be between ${min} and ${max} characters.`);
   }
   return value.trim();
 }
@@ -274,6 +278,172 @@ async function imageInput(reference: string) {
   return `data:${contentType};base64,${bytes.toString("base64")}`;
 }
 
+type GeneratedImage = {
+  bytes?: ArrayBuffer;
+  remoteUrl?: string;
+  contentType: string;
+  providerUsage?: Record<string, unknown>;
+  requestId?: string | null;
+};
+
+function imageProvider(provider: string) {
+  const normalized = provider.trim().toLowerCase();
+  if (["byteplus", "modelark", "seedream"].includes(normalized)) return "byteplus";
+  if (["openrouter", "open-router"].includes(normalized)) return "openrouter";
+  if (["openai", "chatgpt", "gpt-image"].includes(normalized)) return "openai";
+  throw new Error(`Unsupported image provider "${provider}". Choose byteplus, openrouter, or openai in Super Admin.`);
+}
+
+async function providerError(response: Response, provider: string) {
+  const detail = await response.text();
+  let message = detail;
+  try {
+    const parsed = JSON.parse(detail) as { error?: { message?: string } | string; message?: string };
+    message = typeof parsed.error === "string"
+      ? parsed.error
+      : parsed.error?.message ?? parsed.message ?? detail;
+  } catch {
+    // Keep the provider's plain-text error.
+  }
+  throw new Error(`${provider} returned ${response.status}: ${message.slice(0, 700)}`);
+}
+
+function decodeBase64Image(value: string, contentType = "image/png") {
+  const match = /^data:([^;,]+);base64,([\s\S]+)$/.exec(value);
+  const encoded = match?.[2] ?? value;
+  const resolvedContentType = match?.[1] ?? contentType;
+  const bytes = Buffer.from(encoded, "base64");
+  if (!bytes.length) throw new Error("The image provider returned an empty image.");
+  return {
+    bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    contentType: resolvedContentType,
+  };
+}
+
+async function referenceImageFile(reference: string, index: number) {
+  const input = await imageInput(reference);
+  if (input.startsWith("data:")) {
+    const decoded = decodeBase64Image(input);
+    const extension = decoded.contentType.includes("jpeg") ? "jpg" : decoded.contentType.split("/")[1] || "png";
+    return {
+      blob: new Blob([decoded.bytes], { type: decoded.contentType }),
+      filename: `reference-${index + 1}.${extension}`,
+    };
+  }
+  const response = await fetch(input, { signal: AbortSignal.timeout(30000), cache: "no-store" });
+  if (!response.ok) throw new Error(`Reference image download failed with ${response.status}.`);
+  const bytes = await response.arrayBuffer();
+  const contentType = response.headers.get("content-type")?.split(";")[0] || "image/png";
+  const extension = contentType.includes("jpeg") ? "jpg" : contentType.split("/")[1] || "png";
+  return {
+    blob: new Blob([bytes], { type: contentType }),
+    filename: `reference-${index + 1}.${extension}`,
+  };
+}
+
+async function generateWithOpenRouter(
+  stage: PipelineStageConfig,
+  prompt: string,
+  references: string[]
+): Promise<GeneratedImage> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("OPENROUTER_API_KEY is not configured.");
+  const body: Record<string, unknown> = {
+    model: stage.model,
+    prompt,
+    n: 1,
+    resolution: settingString(stage, "resolution", "2K"),
+    aspect_ratio: settingString(stage, "aspectRatio", "16:9"),
+    quality: settingString(stage, "quality", "medium"),
+    output_format: settingString(stage, "outputFormat", "png"),
+  };
+  if (references.length) {
+    body.input_references = await Promise.all(references.map(async (reference) => ({
+      type: "image_url",
+      image_url: { url: await imageInput(reference) },
+    })));
+  }
+  const response = await fetch(OPENROUTER_IMAGE_API, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "https://projectchaplin.com",
+      "X-Title": "Chaplin",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) await providerError(response, "OpenRouter");
+  const data = await response.json() as {
+    id?: string;
+    data?: Array<{ b64_json?: string; media_type?: string }>;
+    usage?: Record<string, unknown>;
+  };
+  const image = data.data?.[0];
+  if (!image?.b64_json) throw new Error("OpenRouter completed without returning an image.");
+  return {
+    ...decodeBase64Image(image.b64_json, image.media_type ?? "image/png"),
+    providerUsage: data.usage,
+    requestId: response.headers.get("x-request-id") ?? data.id ?? null,
+  };
+}
+
+async function generateWithOpenAI(
+  stage: PipelineStageConfig,
+  prompt: string,
+  references: string[]
+): Promise<GeneratedImage> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("OPENAI_API_KEY is not configured.");
+  const size = settingString(stage, "size", "2560x1440");
+  const quality = settingString(stage, "quality", "medium");
+  const outputFormat = settingString(stage, "outputFormat", "png");
+  let response: Response;
+  if (references.length) {
+    const form = new FormData();
+    form.set("model", stage.model);
+    form.set("prompt", prompt);
+    form.set("size", size);
+    form.set("quality", quality);
+    form.set("output_format", outputFormat);
+    const files = await Promise.all(references.map(referenceImageFile));
+    files.forEach((file) => form.append("image[]", file.blob, file.filename));
+    response = await fetch(`${OPENAI_IMAGE_API}/edits`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+    });
+  } else {
+    response = await fetch(`${OPENAI_IMAGE_API}/generations`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: stage.model,
+        prompt,
+        size,
+        quality,
+        output_format: outputFormat,
+        n: 1,
+      }),
+    });
+  }
+  if (!response.ok) await providerError(response, "OpenAI");
+  const data = await response.json() as {
+    data?: Array<{ b64_json?: string }>;
+    usage?: Record<string, unknown>;
+  };
+  const image = data.data?.[0];
+  if (!image?.b64_json) throw new Error("OpenAI completed without returning an image.");
+  return {
+    ...decodeBase64Image(image.b64_json, `image/${outputFormat}`),
+    providerUsage: data.usage,
+    requestId: response.headers.get("x-request-id"),
+  };
+}
+
 function lockVisualIdentity(prompt: string, hasReference: boolean) {
   if (!hasReference) return prompt;
   return `${prompt}\n\nVISUAL IDENTITY LOCK: The attached image is the canonical seed for this actor. Preserve the exact same person: facial geometry, eye spacing and shape, nose, mouth, jaw, skin tone and texture, hairline, hair, apparent age, body proportions, and signature wardrobe materials. The requested prompt may change only performance, blocking, camera, lighting, environment, and story action. Do not reinterpret, beautify, average, recast, age-shift, gender-shift, or redesign the actor.`;
@@ -291,6 +461,8 @@ export async function GET(request: Request) {
   return Response.json({
     elevenLabs: Boolean(elevenKey()),
     seedModels: Boolean(process.env.SEEDANCE_API_KEY ?? process.env.SEEDREAM_API_KEY),
+    openRouter: Boolean(process.env.OPENROUTER_API_KEY),
+    openAI: Boolean(process.env.OPENAI_API_KEY),
     database: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
     production,
     providers,
@@ -306,7 +478,7 @@ export async function POST(request: Request) {
     const characterId = text(input, "characterId", 1, 100);
     if (input.character && typeof input.character === "object") {
       const character = input.character as Character;
-      if (character.id !== characterId) throw new Error("AI actor identity does not match this generation request.");
+      if (character.id !== characterId) throw new RequestValidationError("AI actor identity does not match this generation request.");
       await ensureCharacter(character);
     }
 
@@ -547,48 +719,95 @@ export async function POST(request: Request) {
         referenceSource: canonicalReference?.source ?? (requestedReference ? "request-fallback" : null),
         referenceImages: references,
       };
-      jobId = await beginGeneration({ characterId, kind: "gallery", provider: imageConfig.provider, model: imageConfig.model, prompt });
-      const generationRequest: Record<string, unknown> = {
-        model: imageConfig.model,
-        prompt,
-        negative_prompt: stylizedOutput
-          ? configuredNegativePrompt
-          : `${configuredNegativePrompt}, ${REALISM_NEGATIVE}`,
-        size: settingString(imageConfig, "size", "2560x1440"),
-        response_format: "url",
-        sequential_image_generation: settingString(imageConfig, "sequentialImageGeneration", "disabled"),
-        watermark: settingBoolean(imageConfig, "watermark", false),
-      };
-      if (references.length) {
-        const imageReferences = await Promise.all(references.map((value) => imageInput(value)));
-        generationRequest.image = imageReferences.length === 1 ? imageReferences[0] : imageReferences;
+      const provider = imageProvider(imageConfig.provider);
+      const exclusions = stylizedOutput
+        ? configuredNegativePrompt
+        : `${configuredNegativePrompt}, ${REALISM_NEGATIVE}`;
+      const effectivePrompt = provider === "byteplus"
+        ? prompt
+        : `${prompt}\n\nEXCLUDE: ${exclusions}`;
+      jobId = await beginGeneration({ characterId, kind: "gallery", provider, model: imageConfig.model, prompt: effectivePrompt });
+      let generated: GeneratedImage;
+      if (provider === "openrouter") {
+        generated = await generateWithOpenRouter(imageConfig, effectivePrompt, references);
+      } else if (provider === "openai") {
+        generated = await generateWithOpenAI(imageConfig, effectivePrompt, references);
+      } else {
+        const generationRequest: Record<string, unknown> = {
+          model: imageConfig.model,
+          prompt,
+          negative_prompt: exclusions,
+          size: settingString(imageConfig, "size", "2560x1440"),
+          response_format: "url",
+          sequential_image_generation: settingString(imageConfig, "sequentialImageGeneration", "disabled"),
+          watermark: settingBoolean(imageConfig, "watermark", false),
+        };
+        if (references.length) {
+          const imageReferences = await Promise.all(references.map((value) => imageInput(value)));
+          generationRequest.image = imageReferences.length === 1 ? imageReferences[0] : imageReferences;
+        }
+        const response = await modelArk("/images/generations", generationRequest);
+        const result = response.data;
+        const images = result.data as Array<{ url?: string }> | undefined;
+        const remoteUrl = images?.[0]?.url;
+        if (!remoteUrl) throw new Error("Seedream completed without returning an image.");
+        generated = {
+          remoteUrl,
+          contentType: "image/png",
+          providerUsage: result.usage as Record<string, unknown> | undefined,
+          requestId: response.requestId,
+        };
       }
-      const generated = await modelArk("/images/generations", generationRequest);
-      const result = generated.data;
-      const images = result.data as Array<{ url?: string }> | undefined;
-      const url = images?.[0]?.url;
-      if (!url) throw new Error("Seedream completed without returning an image.");
-      const asset = await saveRemoteMediaAsset({
-        characterId,
-        kind: "gallery",
-        provider: "byteplus",
-        remoteUrl: url,
-        prompt,
-        metadata: referenceMetadata,
-      });
-      const providerUsage = result.usage as Record<string, unknown> | undefined;
+      const providerMetadata = {
+        ...referenceMetadata,
+        provider,
+        model: imageConfig.model,
+        quality: settingString(imageConfig, "quality", "medium"),
+        size: settingString(imageConfig, "size", "2560x1440"),
+      };
+      const asset = generated.remoteUrl
+        ? await saveRemoteMediaAsset({
+            characterId,
+            kind: "gallery",
+            provider,
+            remoteUrl: generated.remoteUrl,
+            prompt: effectivePrompt,
+            metadata: providerMetadata,
+          })
+        : await saveMediaAsset({
+            characterId,
+            kind: "gallery",
+            provider,
+            bytes: generated.bytes!,
+            contentType: generated.contentType,
+            prompt: effectivePrompt,
+            metadata: providerMetadata,
+          });
+      const providerUsage = generated.providerUsage;
+      const inputTokens = recordNumber(providerUsage, "prompt_tokens", "input_tokens");
+      const outputTokens = recordNumber(providerUsage, "completion_tokens", "output_tokens");
+      const providerTokens = recordNumber(providerUsage, "total_tokens")
+        ?? ((inputTokens ?? 0) + (outputTokens ?? 0) || undefined);
       await completeGeneration(
         jobId,
         asset.id,
-        referenceMetadata,
+        providerMetadata,
         await calculateGenerationBilling({
           kind: "gallery",
-          usage: { imageCount: images.length, providerUsage },
+          provider,
+          model: imageConfig.model,
+          usage: {
+            imageCount: 1,
+            inputTokens,
+            outputTokens,
+            providerTokens,
+            providerUsage,
+          },
           providerCostUsd: recordNumber(providerUsage, "cost_usd", "cost"),
         }),
         generated.requestId
       );
-      return Response.json({ url: asset.url, assetId: asset.id });
+      return Response.json({ url: asset.url, assetId: asset.id, provider, model: imageConfig.model });
     }
 
     if (action === "video") {
@@ -601,12 +820,14 @@ export async function POST(request: Request) {
       const requestedReference = typeof input.referenceImage === "string" ? input.referenceImage : "";
       const production = await getCharacterProductionState(characterId);
       const canonicalReference = production.visualReference;
-      const reference = canonicalReference?.url ?? requestedReference;
+      // A production-approved frame is more specific than the actor's general
+      // profile image and must remain the binding source for image-to-video.
+      const reference = requestedReference || canonicalReference?.url || "";
       const prompt = lockVisualIdentity(visualGenerationPrompt(videoConfig, silentPrompt, "video"), Boolean(reference));
       const referenceMetadata = {
         referenceImage: reference || null,
-        referenceAssetId: canonicalReference?.assetId ?? null,
-        referenceSource: canonicalReference?.source ?? (requestedReference ? "request-fallback" : null),
+        referenceAssetId: requestedReference ? null : canonicalReference?.assetId ?? null,
+        referenceSource: requestedReference ? "production-approved-frame" : canonicalReference?.source ?? null,
       };
       const durationSeconds = settingNumber(videoConfig, "durationSeconds", 5);
       jobId = await beginGeneration({ characterId, kind: "video", provider: videoConfig.provider, model: videoConfig.model, prompt });
@@ -671,6 +892,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Generation failed.";
     if (jobId) await failGeneration(jobId, message);
-    return Response.json({ error: message }, { status: 500 });
+    const status = error instanceof RequestValidationError || error instanceof SyntaxError ? 400 : 500;
+    return Response.json({ error: message }, { status });
   }
 }

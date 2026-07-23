@@ -6,6 +6,7 @@ import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/typ
 import {
   normalizeProductionFormat,
   productionDuration,
+  productionShotCount,
   type ProductionFormat,
 } from "@/lib/production-formats";
 
@@ -129,7 +130,7 @@ function fallbackDraft(input: {
           action: `${leadName} faces camera. Product, result, and brand space resolve into one uncluttered final composition.`,
           lines: [{ characterId: leadId, text: creatorShort ? "You wanted proof. Keep watching." : "Make the next move. Start today." }],
         },
-      ].filter((scene) => scene.lines.length > 0).slice(0, spark ? 1 : input.format === "punch" ? 3 : 4),
+      ].filter((scene) => scene.lines.length > 0).slice(0, spark ? 1 : 4),
     };
   }
 
@@ -175,8 +176,6 @@ const OUTPUT_SCHEMA = {
     castIds: { type: "array", items: { type: "string" } },
     scenes: {
       type: "array",
-      minItems: 1,
-      maxItems: 10,
       items: {
         type: "object",
         additionalProperties: false,
@@ -228,6 +227,8 @@ export async function POST(request: Request) {
     const input = {
       format,
       durationSeconds,
+      sceneDurationSeconds: 4,
+      requiredSceneCount: productionShotCount(format, durationSeconds),
       brief: clean(body.brief, 4000),
       title: clean(body.title, 200),
       logline: clean(body.logline, 700),
@@ -316,7 +317,7 @@ export async function POST(request: Request) {
         model,
         max_tokens: Math.max(4000, writingConfig.maxTokens ?? 8000),
         thinking: { type: "disabled" },
-        system: `${writingConfig.promptPrelude} You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. For a Spot, the supplied product image is equally binding canon: preserve its exact shape, packaging, proportions, colors, materials, label placement, and recognizable details; build the idea around what is actually visible instead of inventing or redesigning the product. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. Spark is a private five-second audition with one performance choice. Punch is a public fifteen-second personality proof with hook, pressure, and choice. Episode is a sixty-second microdrama ending on a situation-changing cliffhanger. Spot is a managed thirty- or sixty-second brand output that dramatizes one benefit through visible proof and a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
+        system: `${writingConfig.promptPrelude} You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. For a Spot, the supplied product image is equally binding canon: preserve its exact shape, packaging, proportions, colors, materials, label placement, and recognizable details; build the idea around what is actually visible instead of inventing or redesigning the product. Never restate biography as dialogue. Every returned scene is exactly one four-second visual unit and must have a screenplay slugline, one playable objective, one concise visible action that can complete in four seconds, and dialogue short enough to perform inside that same four-second window. Return exactly the requiredSceneCount supplied in the task. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. Spark is a private five-second audition with one performance choice. Punch is a public fifteen-second personality proof assembled from four authored four-second scenes and trimmed to runtime. Episode is a sixty-second microdrama ending on a situation-changing cliffhanger. Spot is a managed thirty- or sixty-second brand output that dramatizes one benefit through visible proof and a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
         messages: [{
           role: "user",
           content: messageContent,
@@ -360,6 +361,19 @@ export async function POST(request: Request) {
     const repairedEmptyScenes = draft.scenes.length === 0;
     if (repairedEmptyScenes) {
       draft.scenes = fallbackDraft(input).scenes;
+    }
+    const requiredSceneCount = productionShotCount(format, durationSeconds);
+    if (format !== "spark") {
+      const fallbackScenes = fallbackDraft(input).scenes;
+      while (draft.scenes.length < requiredSceneCount && fallbackScenes.length) {
+        const source = fallbackScenes[draft.scenes.length % fallbackScenes.length];
+        draft.scenes.push({
+          ...source,
+          setting: source.setting.replace(/ - (DAY|NIGHT|CONTINUOUS)$/i, ` - CONTINUOUS ${draft.scenes.length + 1}`),
+          lines: source.lines.map((line) => ({ ...line })),
+        });
+      }
+      draft.scenes = draft.scenes.slice(0, requiredSceneCount);
     }
     const speakingCastIds = draft.scenes.flatMap((scene) => scene.lines.map((line) => line.characterId));
     draft.castIds = [...new Set([...draft.castIds, ...speakingCastIds])]

@@ -25,6 +25,20 @@ export async function PUT(request: NextRequest) {
   try {
     const identity = await requireAdmin(request);
     const body = await request.json() as { config?: unknown };
+    const imageProvider = (body.config as { stages?: { image?: { provider?: unknown } } } | undefined)
+      ?.stages?.image?.provider;
+    if (imageProvider === "openrouter" && !process.env.OPENROUTER_API_KEY) {
+      throw new Error("Add OPENROUTER_API_KEY before activating OpenRouter.");
+    }
+    if (imageProvider === "openai" && !process.env.OPENAI_API_KEY) {
+      throw new Error("Add OPENAI_API_KEY before activating OpenAI.");
+    }
+    if (
+      imageProvider === "byteplus"
+      && !(process.env.SEEDANCE_API_KEY ?? process.env.SEEDREAM_API_KEY)
+    ) {
+      throw new Error("Add SEEDANCE_API_KEY or SEEDREAM_API_KEY before activating BytePlus.");
+    }
     return Response.json({ config: await savePipelineConfig(body.config, identity.id) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Pipeline settings could not be saved.";

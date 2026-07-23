@@ -50,6 +50,8 @@ type ImagePurpose = "identity" | "scene";
 type ProviderStatus = {
   elevenLabs: boolean;
   seedModels: boolean;
+  openRouter: boolean;
+  openAI: boolean;
   database: boolean;
   production: ProductionState | null;
   providers: {
@@ -60,6 +62,10 @@ type ProviderStatus = {
     stages?: {
       sfx?: {
         settings?: Record<string, string | number | boolean>;
+      };
+      image?: {
+        provider?: string;
+        model?: string;
       };
     };
   };
@@ -431,7 +437,7 @@ export default function CharacterProductionStudio({
                   : 1;
         setActiveStep((current) => current === 1 ? Math.max(current, resumeAt) : current);
       })
-      .catch(() => setStatus({ elevenLabs: false, seedModels: false, database: false, production: null, providers: null }));
+      .catch(() => setStatus({ elevenLabs: false, seedModels: false, openRouter: false, openAI: false, database: false, production: null, providers: null }));
   }, [addCharacterImage, character.galleryUrls, character.id, character.videoUrl, character.voiceId, setCharacterVideo, setCharacterVoice]);
 
   async function refreshHistory() {
@@ -824,6 +830,17 @@ export default function CharacterProductionStudio({
   }
 
   const seedModelsReady = status?.seedModels ?? false;
+  const configuredImageProvider = status?.pipeline?.stages?.image?.provider?.toLowerCase() ?? "byteplus";
+  const imageProviderReady = configuredImageProvider === "openrouter"
+    ? status?.openRouter ?? false
+    : configuredImageProvider === "openai"
+      ? status?.openAI ?? false
+      : seedModelsReady;
+  const imageProviderLabel = configuredImageProvider === "openrouter"
+    ? "OpenRouter"
+    : configuredImageProvider === "openai"
+      ? "GPT Image"
+      : "Seedream";
   const elevenReady = status?.elevenLabs ?? false;
   const elevenOperational =
     status?.providers?.elevenLabs?.status === "succeeded" ||
@@ -865,6 +882,9 @@ export default function CharacterProductionStudio({
             </span>
             <span className={`rounded-full border px-2 py-1 ${seedModelsFailed ? "border-red-500 text-red-500" : seedModelsReady ? "border-amber-400 text-amber-400" : "border-line text-grey"}`}>
               Seed models {seedModelsNeedActivation ? "activation required" : seedModelsFailed ? "last run failed" : seedModelsReady ? "ModelArk configured" : "needs Seed API key"}
+            </span>
+            <span className={`rounded-full border px-2 py-1 ${imageProviderReady ? "border-emerald-500 text-emerald-600" : "border-line text-grey"}`}>
+              Still engine {imageProviderReady ? `${imageProviderLabel} ready` : `${imageProviderLabel} needs key`}
             </span>
             <span className={`rounded-full border px-2 py-1 ${status?.database ? "border-emerald-500 text-emerald-600" : "border-line text-grey"}`}>
               Database {status?.database ? "ready" : "needs Supabase"}
@@ -1345,13 +1365,13 @@ export default function CharacterProductionStudio({
                 <img src={referenceImage} alt={`${character.name} canonical identity seed`} className="h-14 w-20 shrink-0 rounded-sm object-cover" />
                 <span className="min-w-0">
                   <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Identity seed locked</span>
-                  <span className="mt-1 block text-[10px] leading-snug text-grey">Every Seedream still and Seedance video preserves this face, age, hair, proportions, and signature wardrobe.</span>
+                  <span className="mt-1 block text-[10px] leading-snug text-grey">Every generated still and Seedance video preserves this face, age, hair, proportions, and signature wardrobe.</span>
                 </span>
               </div>
             )}
             <textarea data-scene-field="image" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
-            <button onClick={generateImage} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
-              {busy === "image" ? "Seedream is creating..." : imagePurpose === "identity" ? "Generate identity hero" : "Generate scene frame"}
+            <button onClick={generateImage} disabled={!imageProviderReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+              {busy === "image" ? `${imageProviderLabel} is creating...` : imagePurpose === "identity" ? "Generate identity hero" : "Generate scene frame"}
             </button>
             <GenerationTimeline generationKey="image" run={generationRun} />
             <div className="flex items-center gap-2">
@@ -1501,7 +1521,7 @@ export default function CharacterProductionStudio({
                     {profileOption && (
                       <details className="relative mt-3" data-profile-media-menu>
                         <summary className="cursor-pointer list-none rounded-sm border border-accent/60 px-3 py-2 text-center text-[11px] font-semibold text-accent hover:bg-accent/10">
-                          {isFeatured ? "On profile âœ“" : "Set as..."}
+                          {isFeatured ? "On profile" : "Set as..."}
                         </summary>
                         <div className="mt-2 rounded-sm border border-line bg-paper p-2 shadow-xl">
                           <button

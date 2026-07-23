@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Character } from "@/lib/types";
 import { ARCHETYPE_LABEL, ARCHETYPE_HUE, hsl } from "@/lib/format";
 
@@ -28,6 +28,7 @@ export default function HeroGridCard({
 }) {
   const hue = ARCHETYPE_HUE[character.archetype];
   const [progress, setProgress] = useState(0);
+  const wasActiveOnPointerDown = useRef(false);
 
   const videoSource = broll?.videoUrl ?? character.videoUrl ?? null;
   const artworkSource = character.imageUrl ?? character.bannerUrl ?? character.galleryUrls?.[0] ?? null;
@@ -37,13 +38,7 @@ export default function HeroGridCard({
   }
 
   function handleClick(e: React.MouseEvent) {
-    // Devices with real hover (mouse/trackpad) always navigate on click, since
-    // hovering already previewed the tile. Touch-only devices never fire our
-    // onMouseEnter, so there a first tap should preview instead of navigating,
-    // and only a second tap (on the now-active tile) goes through.
-    const canHover =
-      typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
-    if (!canHover && !active) {
+    if (!wasActiveOnPointerDown.current) {
       e.preventDefault();
       activateInPlace();
     }
@@ -51,8 +46,11 @@ export default function HeroGridCard({
 
   return (
     <div
-      className={`relative rounded-lg transition-shadow duration-300 ${active ? "z-10 col-span-2 row-span-2" : "z-0"}`}
+      className={`relative aspect-[4/5] min-w-0 rounded-xl transition-[transform,box-shadow] duration-500 ease-out ${
+        active ? "z-10 scale-[1.015]" : "z-0 scale-100"
+      }`}
       data-hero-character-id={character.id}
+      data-home-video-ready={videoSource ? "true" : undefined}
       data-home-video={active && videoSource ? "active" : undefined}
       style={
         active
@@ -62,8 +60,10 @@ export default function HeroGridCard({
     >
       <Link
         href={`/characters/${character.id}`}
-        onMouseEnter={activateInPlace}
         onFocus={activateInPlace}
+        onPointerDown={() => {
+          wasActiveOnPointerDown.current = active;
+        }}
         onClick={handleClick}
         className="group absolute inset-0 block overflow-hidden rounded-lg"
       >
@@ -74,6 +74,8 @@ export default function HeroGridCard({
               alt={character.name}
               fill
               quality={90}
+              loading={active ? "eager" : "lazy"}
+              fetchPriority={active ? "high" : "auto"}
               sizes={active ? "(max-width: 640px) 100vw, 480px" : "(max-width: 640px) 200px, 320px"}
               className="object-cover"
               data-hero-artwork
@@ -92,6 +94,7 @@ export default function HeroGridCard({
               autoPlay
               muted
               playsInline
+              loop={!onPlaybackComplete}
               preload="auto"
               onLoadedMetadata={() => {
                 setProgress(0);

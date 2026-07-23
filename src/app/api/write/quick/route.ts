@@ -150,7 +150,6 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         max_tokens: Math.min(2000, writingConfig.maxTokens ?? 700),
-        temperature: Math.min(1, Math.max(0.7, writingConfig.temperature ?? 0.9)),
         system: `${writingConfig.promptPrelude} You are Chaplin's production copywriter. Rewrite exactly one field for an original fictional AI actor. This is creative regeneration pass ${variation}: make a materially new creative choice rather than paraphrasing the existing text. Preserve useful user intent, character continuity, and provider constraints. Return only the requested field in structured JSON. ${FIELD_RULES[field]}`,
         messages: [{
           role: "user",

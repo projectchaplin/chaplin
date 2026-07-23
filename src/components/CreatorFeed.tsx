@@ -52,6 +52,7 @@ function ReplyRow({ reply, onReply }: { reply: FeedReply; onReply: (reply: FeedR
 }
 
 function PostCard({ post, currentUserId, refresh, expanded, following, onToggleFollow }: { post: FeedPost; currentUserId: string; refresh: () => Promise<void>; expanded?: boolean; following: boolean; onToggleFollow: (authorId: string) => void }) {
+  const stories = useChaplinStore((state) => state.stories);
   const [replying, setReplying] = useState(Boolean(expanded));
   const [replyBody, setReplyBody] = useState("");
   const [parentReply, setParentReply] = useState<FeedReply | null>(null);
@@ -92,6 +93,7 @@ function PostCard({ post, currentUserId, refresh, expanded, following, onToggleF
     list.push(reply);
     children.set(reply.parentReplyId!, list);
   }
+  const linkedProduction = stories.find((story) => post.body.startsWith(`Script locked: ${story.title}\n`));
 
   return <article data-feed-post={post.id} className="border-b border-line bg-paper px-4 py-6 sm:px-0">
     <div className="flex gap-3">
@@ -109,6 +111,20 @@ function PostCard({ post, currentUserId, refresh, expanded, following, onToggleF
 
     {post.sharedPost && <div className="ml-12"><SharedPostCard post={post.sharedPost} /></div>}
     {post.mediaKind && post.mediaUrl && <div className="ml-12 mt-3 overflow-hidden rounded-lg border border-line"><FeedMedia kind={post.mediaKind} url={post.mediaUrl} /></div>}
+    {linkedProduction && (
+      <div className="ml-12 mt-3">
+        <Link
+          href={`/productions/${linkedProduction.id}`}
+          className="flex items-center justify-between gap-4 rounded-xl border border-accent/45 bg-accent/[0.07] px-4 py-3 text-xs font-semibold text-ink transition hover:border-accent hover:bg-accent/[0.12]"
+        >
+          <span>
+            <span className="block text-[9px] uppercase tracking-[0.16em] text-accent">Production</span>
+            <span className="mt-1 block">Watch {linkedProduction.title}</span>
+          </span>
+          <span className="shrink-0 text-lg text-accent" aria-hidden="true">▶</span>
+        </Link>
+      </div>
+    )}
 
     <div className="ml-12 mt-4 grid grid-cols-4 gap-1 text-[11px] text-grey">
       <button type="button" onClick={() => setReplying((value) => !value)} className="rounded-full py-2 hover:bg-white/5 hover:text-accent">↩ {post.replyCount || "Reply"}</button>

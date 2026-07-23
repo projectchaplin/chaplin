@@ -58,7 +58,15 @@ export default async function AdminPipelinePage() {
         ))}
       </div>
 
-      <AdminPipelineLab initialConfig={config} recentRuns={recentRuns} />
+      <AdminPipelineLab
+        initialConfig={config}
+        recentRuns={recentRuns}
+        imageProviderReadiness={{
+          byteplus: Boolean(process.env.SEEDANCE_API_KEY ?? process.env.SEEDREAM_API_KEY),
+          openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+          openai: Boolean(process.env.OPENAI_API_KEY),
+        }}
+      />
     </div>
   );
 }

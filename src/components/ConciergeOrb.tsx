@@ -142,11 +142,11 @@ function QuickOptionVisual({ kind }: Pick<ConciergeQuickOption, "kind">) {
     return (
       <span className="relative block h-24 overflow-hidden rounded-xl border border-white/12 sm:h-28 sm:rounded-[1rem]">
         <Image
-          src="/characters/c-rustam-banner.webp"
+          src="/characters/c-bramble-banner.webp"
           alt=""
           fill
           sizes="(max-width: 640px) 44vw, 240px"
-          className="object-cover object-[50%_30%] transition-transform duration-500 group-hover:scale-[1.04]"
+          className="object-cover object-[50%_28%] transition-transform duration-500 group-hover:scale-[1.04]"
         />
         <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/5 to-black/10" />
         <span className="absolute bottom-2 left-2 rounded-full border border-white/20 bg-black/45 px-2 py-1 text-[7px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-sm sm:bottom-3 sm:left-3 sm:text-[8px]">
