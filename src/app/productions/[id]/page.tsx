@@ -11,7 +11,12 @@ import {
   normalizeProductionFormat,
   productionShotCount,
 } from "@/lib/production-formats";
-import type { MediaPipelineRun, PipelineScope } from "@/lib/media-pipeline-types";
+import type {
+  MediaPipelineRun,
+  MediaPipelineStep,
+  PipelineScope,
+  PipelineStepAction,
+} from "@/lib/media-pipeline-types";
 
 function stepTone(status: string) {
   if (status === "ready") return "border-accent-secondary text-accent-secondary";
@@ -34,6 +39,10 @@ export default function ProductionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const referenceStep = run?.steps.find((step) => step.key === "reference-frame");
+  const referenceImageUrl = typeof referenceStep?.output.url === "string"
+    ? referenceStep.output.url
+    : null;
 
   const contract = useMemo(() => {
     if (!story) return null;
@@ -91,6 +100,7 @@ export default function ProductionDetailPage() {
           scopeType: contract.scopeType,
           scopeId: contract.scopeId,
           outputType: contract.format,
+          createdBy: world.currentUserId,
           idempotencyKey: `production:${story.id}:${contract.format}:v1`,
           spec: {
             productionId: story.id,
@@ -115,6 +125,110 @@ export default function ProductionDetailPage() {
       setRun(data.run);
     } catch (initializeError) {
       setError(initializeError instanceof Error ? initializeError.message : "Could not initialize production.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function transitionStep(
+    activeRun: MediaPipelineRun,
+    stepKey: string,
+    action: PipelineStepAction,
+    extra?: { output?: Record<string, unknown>; outputAssetId?: string; errorMessage?: string },
+  ) {
+    const response = await fetch(`/api/pipeline/${activeRun.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stepKey, action, ...extra }),
+    });
+    const data = await response.json() as { run?: MediaPipelineRun; error?: string };
+    if (!response.ok || !data.run) throw new Error(data.error ?? `Could not ${action} ${stepKey}.`);
+    setRun(data.run);
+    return data.run;
+  }
+
+  async function runInstantStep(activeRun: MediaPipelineRun, step: MediaPipelineStep) {
+    let nextRun = activeRun;
+    if (step.status === "failed") nextRun = await transitionStep(nextRun, step.key, "retry");
+    const refreshed = nextRun.steps.find((candidate) => candidate.key === step.key);
+    if (refreshed?.status === "ready") nextRun = await transitionStep(nextRun, step.key, "queue");
+    const queued = nextRun.steps.find((candidate) => candidate.key === step.key);
+    if (queued?.status === "queued") nextRun = await transitionStep(nextRun, step.key, "start");
+    return transitionStep(nextRun, step.key, "complete", {
+      output: { lockedAt: new Date().toISOString(), productionId: story?.id },
+    });
+  }
+
+  async function generateReferenceFrame() {
+    if (!run || !story || !cast[0]) return;
+    setBusy(true);
+    setError("");
+    let activeRun = run;
+    let providerStepStarted = false;
+    try {
+      const planStep = activeRun.steps.find((step) => step.key === "plan-lock");
+      if (planStep && ["ready", "queued", "failed"].includes(planStep.status)) {
+        activeRun = await runInstantStep(activeRun, planStep);
+      }
+
+      let imageStep = activeRun.steps.find((step) => step.key === "reference-frame");
+      if (!imageStep) throw new Error("This production does not have a reference-frame step.");
+      if (imageStep.status === "failed") {
+        activeRun = await transitionStep(activeRun, imageStep.key, "retry");
+        imageStep = activeRun.steps.find((step) => step.key === "reference-frame") ?? imageStep;
+      }
+      if (imageStep.status === "ready") {
+        activeRun = await transitionStep(activeRun, imageStep.key, "queue");
+        imageStep = activeRun.steps.find((step) => step.key === "reference-frame") ?? imageStep;
+      }
+      if (imageStep.status === "queued") {
+        activeRun = await transitionStep(activeRun, imageStep.key, "start");
+        providerStepStarted = true;
+      } else if (imageStep.status === "running") {
+        providerStepStarted = true;
+      } else {
+        throw new Error(`The reference frame is ${imageStep.status}, so it cannot be generated now.`);
+      }
+
+      const firstScene = story.scenes[0];
+      const prompt = [
+        `PURPOSE: First production frame for "${story.title}".`,
+        `ACTOR: ${cast[0].name}. ${cast[0].personality}`,
+        `DRAMATIC MOMENT: ${firstScene?.action ?? firstScene?.objective ?? story.logline}`,
+        `SET: ${firstScene?.setting ?? "A location grounded in the locked script."}`,
+        "CAMERA: cinematic 16:9 medium-wide frame, eye-level camera, 40mm lens, clear face and hands, intentional negative space for movement.",
+        "LIGHTING: motivated directional key from the practical source in the scene, restrained fill, subtle edge separation, realistic contrast.",
+        "CONTINUITY: preserve the actor's canonical face, age, hair, proportions, wardrobe materials, and palette exactly.",
+        "EXCLUSIONS: no text, logo, watermark, montage, duplicate person, generic pose, or unexplained visual effects.",
+      ].join("\n");
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "image",
+          characterId: cast[0].id,
+          character: cast[0],
+          prompt,
+          imagePurpose: "scene",
+          referenceImage: cast[0].imageUrl ?? cast[0].galleryUrls?.[0] ?? cast[0].bannerUrl ?? "",
+        }),
+      });
+      const data = await response.json() as { url?: string; assetId?: string; error?: string };
+      if (!response.ok || !data.url || !data.assetId) {
+        throw new Error(data.error ?? "Seedream completed without a saved reference frame.");
+      }
+      activeRun = await transitionStep(activeRun, "reference-frame", "complete", {
+        outputAssetId: data.assetId,
+        output: { url: data.url, imagePrompt: prompt, characterId: cast[0].id },
+      });
+      setRun(activeRun);
+    } catch (generationError) {
+      if (providerStepStarted) {
+        await transitionStep(activeRun, "reference-frame", "fail", {
+          errorMessage: generationError instanceof Error ? generationError.message : "Reference-frame generation failed.",
+        }).catch(() => undefined);
+      }
+      setError(generationError instanceof Error ? generationError.message : "Reference-frame generation failed.");
     } finally {
       setBusy(false);
     }
@@ -160,7 +274,7 @@ export default function ProductionDetailPage() {
         {[
           ["01", "Script locked", `${story.scenes.length} playable beat${story.scenes.length === 1 ? "" : "s"}`],
           ["02", "Cast locked", `${cast.length} production identit${cast.length === 1 ? "y" : "ies"}`],
-          ["03", run ? "Pipeline initialized" : "Pipeline waiting", run ? `Current gate: ${run.currentStep ?? "complete"}` : "No media has been generated"],
+          ["03", run ? "Production plan created" : "Ready to initialize", run ? `Current gate: ${run.currentStep ?? "complete"}` : "Start the production pipeline"],
         ].map(([number, label, detail]) => (
           <div key={number} className="flex items-start gap-3">
             <span className="font-mono text-xs text-accent">{number}</span>
@@ -169,7 +283,84 @@ export default function ProductionDetailPage() {
         ))}
       </section>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[0.72fr_1.28fr]">
+      {!run && (
+        <button
+          type="button"
+          onClick={() => void initializeProduction()}
+          disabled={busy || loading || !contract.scopeId}
+          className="group relative mt-6 w-full overflow-hidden rounded-[2rem] border border-accent/60 bg-[radial-gradient(circle_at_82%_20%,rgba(43,211,190,0.18),transparent_34%),linear-gradient(135deg,rgba(244,63,105,0.16),rgba(7,22,10,0.96)_52%)] p-6 text-left shadow-[0_24px_80px_rgba(0,0,0,0.3)] transition hover:-translate-y-0.5 hover:border-accent disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 sm:p-8"
+        >
+          <div className="relative z-10 flex flex-col gap-7 sm:flex-row sm:items-center sm:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-accent">
+                  Ready for production
+                </p>
+              </div>
+              <h2 className="reel-title mt-3 text-3xl leading-[0.95] sm:text-5xl">
+                Initialize the pipeline
+              </h2>
+              <p className="mt-3 max-w-xl text-xs leading-5 text-white/60 sm:text-sm">
+                Turn the locked script and cast into a live shot plan with generation, review, and delivery gates.
+              </p>
+            </div>
+            <span className="flex min-h-14 shrink-0 items-center justify-center rounded-full bg-accent px-7 text-sm font-bold text-white shadow-[0_12px_36px_rgba(244,63,105,0.34)] transition group-hover:scale-[1.03]">
+              {busy ? "Initializing…" : "Start pipeline →"}
+            </span>
+          </div>
+          <div className="relative z-10 mt-7 grid grid-cols-5 text-[8px] font-semibold uppercase tracking-[0.08em] text-white/50 sm:text-[9px] sm:tracking-[0.13em]">
+            {["Shot plan", "First frame", "Motion", "Voice + sound", "Approval"].map((label, index) => (
+              <span key={label} className="relative flex min-w-0 flex-col items-center gap-2 px-0.5 text-center">
+                <span className="relative z-10 h-1.5 w-1.5 rounded-full bg-accent-secondary shadow-[0_0_12px_rgba(43,211,190,0.65)]" />
+                {index < 4 && <span className="absolute left-1/2 top-[3px] h-px w-full bg-gradient-to-r from-accent-secondary/70 to-accent/45" />}
+                <span>{label}</span>
+              </span>
+            ))}
+          </div>
+        </button>
+      )}
+      {!run && error && <p className="mt-3 text-xs text-red-300">{error}</p>}
+
+      {run && (
+      <section className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line p-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+            referenceImageUrl ? "bg-emerald-400" : busy ? "animate-pulse bg-accent" : "bg-amber-300"
+          }`} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">
+              {referenceImageUrl
+                ? "First frame created"
+                : busy
+                  ? "Seedream is creating the first frame"
+                  : run
+                    ? "Production plan only · no media yet"
+                    : "Script ready · production not initialized"}
+            </p>
+            <p className="mt-1 text-[10px] leading-4 text-grey">
+              Script: My Studio on this device
+              <span className="px-1.5 text-white/20">·</span>
+              Plan: {run ? `Supabase ${run.id.slice(0, 8)}` : "not created"}
+              <span className="px-1.5 text-white/20">·</span>
+              Media: {referenceImageUrl ? "actor library + this production" : "nothing generated"}
+            </p>
+          </div>
+        </div>
+        {!referenceImageUrl && run.steps.some((step) => step.key === "reference-frame") ? (
+          <button
+            type="button"
+            onClick={() => void generateReferenceFrame()}
+            disabled={busy}
+            className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-white disabled:opacity-40"
+          >
+            {busy ? "Creating…" : "Create first frame"}
+          </button>
+        ) : null}
+      </section>
+      )}
+
+      <div className={`mt-8 grid gap-8 ${run ? "lg:grid-cols-[0.72fr_1.28fr]" : ""}`}>
         <aside>
           <p className="text-[10px] uppercase tracking-[0.2em] text-grey">Locked cast</p>
           <div className="mt-3 flex flex-wrap gap-3">
@@ -187,48 +378,84 @@ export default function ProductionDetailPage() {
           </div>
         </aside>
 
-        <section>
-          <div className="flex items-end justify-between gap-4">
-            <div><p className="text-[10px] uppercase tracking-[0.2em] text-grey">Production state</p><h2 className="reel-title mt-1 text-3xl">From script to approved output</h2></div>
-            {!run && (
-              <button
-                type="button"
-                onClick={initializeProduction}
-                disabled={busy || (contract.scopeId ? loading : false) || !contract.scopeId}
-                className="rounded-full bg-accent px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"
-              >
-                {busy ? "Initializing…" : "Initialize pipeline"}
-              </button>
+        {run && <section>
+          <div className="mb-8 overflow-hidden rounded-2xl border border-line">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${referenceImageUrl ? "bg-emerald-400" : "bg-amber-300"}`} />
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-grey">
+                    {referenceImageUrl ? "First output ready" : "No media generated yet"}
+                  </p>
+                </div>
+                <h2 className="reel-title mt-2 text-2xl">
+                  {referenceImageUrl ? "Your reference frame is here" : "The script created a production plan"}
+                </h2>
+                <p className="mt-1 max-w-xl text-xs leading-5 text-grey">
+                  {referenceImageUrl
+                    ? "Seedream saved this frame to the actor’s media library and attached it to this production run."
+                    : "Nothing is rendering in the background. Start the first frame here when you are ready to call Seedream."}
+                </p>
+              </div>
+              {!referenceImageUrl && run?.steps.some((step) => step.key === "reference-frame") && (
+                <button
+                  type="button"
+                  onClick={() => void generateReferenceFrame()}
+                  disabled={busy}
+                  className="rounded-full bg-accent px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"
+                >
+                  {busy ? "Creating with Seedream…" : "Create first frame"}
+                </button>
+              )}
+            </div>
+
+            <div className="grid gap-px bg-line sm:grid-cols-3">
+              <div className="bg-paper p-3.5">
+                <p className="text-[8px] uppercase tracking-[0.16em] text-grey">Script</p>
+                <p className="mt-1 text-xs font-semibold">My Studio · this device</p>
+              </div>
+              <div className="bg-paper p-3.5">
+                <p className="text-[8px] uppercase tracking-[0.16em] text-grey">Production plan</p>
+                <p className="mt-1 truncate text-xs font-semibold">{run ? `Supabase · ${run.id.slice(0, 8)}` : "Not initialized"}</p>
+              </div>
+              <div className="bg-paper p-3.5">
+                <p className="text-[8px] uppercase tracking-[0.16em] text-grey">Media</p>
+                <p className="mt-1 text-xs font-semibold">{referenceImageUrl ? "1 Seedream frame" : "Nothing generated"}</p>
+              </div>
+            </div>
+
+            {referenceImageUrl && (
+              <div
+                className="aspect-video w-full bg-black bg-cover bg-center"
+                style={{ backgroundImage: `url("${referenceImageUrl.replaceAll('"', "%22")}")` }}
+                role="img"
+                aria-label={`Generated reference frame for ${story.title}`}
+              />
             )}
           </div>
 
-          {!run ? (
-            <div className="mt-5 rounded-lg border border-dashed border-line p-8 text-center">
-              <p className="reel-title text-2xl">The script is ready. Production has not started.</p>
-              <p className="mx-auto mt-2 max-w-xl text-xs leading-5 text-grey">
-                Initializing creates the durable reference-frame, motion, audio, mix, QC, approval, and delivery gates. It does not publish or charge a provider by itself.
-              </p>
-            </div>
-          ) : (
-            <ol className="relative mt-6 border-l border-line pl-7">
-              {run.steps.map((step, index) => (
-                <li key={step.id} className="relative pb-7 last:pb-0">
-                  <span className={`absolute -left-[2.14rem] top-0 flex h-4 w-4 items-center justify-center rounded-full border bg-paper ${stepTone(step.status)}`}>
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[9px] text-grey">{String(index + 1).padStart(2, "0")}</span>
-                    <span className="text-[9px] uppercase tracking-wide text-accent-secondary">{step.executor}</span>
-                    <span className={`rounded-full border px-2 py-0.5 text-[8px] uppercase ${stepTone(step.status)}`}>{step.status}</span>
-                    {step.requiresReview && <span className="text-[8px] uppercase text-amber-200">human approval</span>}
-                  </div>
-                  <h3 className="mt-1 text-sm font-semibold">{step.label}</h3>
-                </li>
-              ))}
-            </ol>
-          )}
+          <div className="flex items-end justify-between gap-4">
+            <div><p className="text-[10px] uppercase tracking-[0.2em] text-grey">Production state</p><h2 className="reel-title mt-1 text-3xl">From script to approved output</h2></div>
+          </div>
+
+          <ol className="relative mt-6 border-l border-line pl-7">
+            {run.steps.map((step, index) => (
+              <li key={step.id} className="relative pb-7 last:pb-0">
+                <span className={`absolute -left-[2.14rem] top-0 flex h-4 w-4 items-center justify-center rounded-full border bg-paper ${stepTone(step.status)}`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[9px] text-grey">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="text-[9px] uppercase tracking-wide text-accent-secondary">{step.executor}</span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[8px] uppercase ${stepTone(step.status)}`}>{step.status}</span>
+                  {step.requiresReview && <span className="text-[8px] uppercase text-amber-200">human approval</span>}
+                </div>
+                <h3 className="mt-1 text-sm font-semibold">{step.label}</h3>
+              </li>
+            ))}
+          </ol>
           {error && <p className="mt-4 text-xs text-red-300">{error}</p>}
-        </section>
+        </section>}
       </div>
 
       <section className="mt-10 border-t border-line pt-8">

@@ -1,6 +1,7 @@
 import { buildProductionBible } from "@/lib/production-prompting";
 import { anthropicImageBlock, type AnthropicImageBlock } from "@/lib/server/anthropic-image";
 import { getCharacterProductionState } from "@/lib/server/supabase-admin";
+import { getPipelineConfig } from "@/lib/server/pipeline-config";
 import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
 import {
   normalizeProductionFormat,
@@ -236,7 +237,9 @@ export async function POST(request: Request) {
       return Response.json({ draft: fallbackDraft(input), provider: "chaplin-local", configured: false });
     }
 
-    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    const writingConfig = (await getPipelineConfig()).stages.writing;
+    if (!writingConfig.enabled) throw new Error("AI writing is paused by Super Admin.");
+    const model = writingConfig.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
     const characterContext = characters.map((character) => ({
       ...character,
       selected: castIds.includes(character.id),
@@ -289,9 +292,10 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 8000,
+        max_tokens: Math.max(4000, writingConfig.maxTokens ?? 8000),
+        temperature: writingConfig.temperature ?? 0.65,
         thinking: { type: "disabled" },
-        system: `You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. Spark is a private five-second audition with one performance choice. Punch is a public fifteen-second personality proof with hook, pressure, and choice. Episode is a sixty-second microdrama ending on a situation-changing cliffhanger. Spot is a managed thirty- or sixty-second brand output that dramatizes one benefit through visible proof and a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
+        system: `${writingConfig.promptPrelude} You are Chaplin's senior screenwriter and advertising creative director. Write concise, production-ready scripts for fictional AI actors using each supplied production bible and canonical reference image as binding character canon. The images are the source of truth for face, apparent age, hair, body, wardrobe, materials, palette, and physical presence; stage action, blocking, framing, and motivated light around what is actually visible instead of redesigning or generically redescribing it. Never restate biography as dialogue. Every scene must have a screenplay slugline, one playable objective, visible blocking, conflict, a situation-changing turn, and dialogue driven by subtext. The first scene needs a visual hook, not an explanation. Each subsequent scene must escalate cost or reverse power. A cliffhanger must introduce new pressure, reveal consequential information, or force an irreversible choice; merely withholding information is not a cliffhanger. Payoffs must answer an earlier image, gesture, object, or moral boundary. Preserve performance tells, movement grammar, recurring motifs, and moral boundaries without mechanically repeating them. Spark is a private five-second audition with one performance choice. Punch is a public fifteen-second personality proof with hook, pressure, and choice. Episode is a sixty-second microdrama ending on a situation-changing cliffhanger. Spot is a managed thirty- or sixty-second brand output that dramatizes one benefit through visible proof and a specific CTA. Keep scenes realistic for the requested duration and use only supplied character IDs.`,
         messages: [{
           role: "user",
           content: messageContent,

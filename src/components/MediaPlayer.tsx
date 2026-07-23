@@ -14,11 +14,13 @@ export default function MediaPlayer({
   label,
   kind = "audio",
   compact = false,
+  playbackLimitSeconds,
 }: {
   src: string;
   label: string;
   kind?: "audio" | "video";
   compact?: boolean;
+  playbackLimitSeconds?: number;
 }) {
   const mediaRef = useRef<HTMLMediaElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -32,11 +34,20 @@ export default function MediaPlayer({
     if (!media) return;
 
     function updateTime() {
-      setCurrentTime(media?.currentTime ?? 0);
+      const nextTime = media?.currentTime ?? 0;
+      if (playbackLimitSeconds && nextTime >= playbackLimitSeconds) {
+        media?.pause();
+        if (media) media.currentTime = playbackLimitSeconds;
+        setCurrentTime(playbackLimitSeconds);
+        setPlaying(false);
+        return;
+      }
+      setCurrentTime(nextTime);
     }
     function updateDuration() {
       const value = media?.duration ?? 0;
-      setDuration(Number.isFinite(value) ? value : 0);
+      const mediaDuration = Number.isFinite(value) ? value : 0;
+      setDuration(playbackLimitSeconds ? Math.min(mediaDuration, playbackLimitSeconds) : mediaDuration);
     }
     function stop() {
       setPlaying(false);
@@ -59,13 +70,17 @@ export default function MediaPlayer({
       media.removeEventListener("ended", stop);
       media.removeEventListener("error", markFailed);
     };
-  }, [src]);
+  }, [playbackLimitSeconds, src]);
 
   async function togglePlayback() {
     const media = mediaRef.current;
     if (!media || failed) return;
     if (media.paused) {
       try {
+        if (duration && media.currentTime >= duration - 0.05) {
+          media.currentTime = 0;
+          setCurrentTime(0);
+        }
         await media.play();
         setPlaying(true);
       } catch {
@@ -92,7 +107,7 @@ export default function MediaPlayer({
   }
 
   const controls = (
-    <div className={`flex items-center gap-3 min-w-0 ${compact ? "px-3 py-2" : "px-4 py-3"}`}>
+    <div className={`flex min-w-0 items-center ${compact ? "gap-2 px-2.5 py-2 sm:gap-3 sm:px-3" : "gap-3 px-4 py-3"}`}>
       <button
         type="button"
         onClick={togglePlayback}
@@ -102,7 +117,7 @@ export default function MediaPlayer({
         {playing ? "Ⅱ" : "▶"}
       </button>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-3 mb-1.5">
+        <div className="mb-1.5 flex items-center justify-between gap-1.5 sm:gap-3">
           <span className="text-xs font-medium truncate">{label}</span>
           <span className="text-[10px] text-grey tabular-nums whitespace-nowrap">
             {formatTime(currentTime)} / {formatTime(duration)}

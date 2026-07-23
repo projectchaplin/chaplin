@@ -18,9 +18,11 @@ import {
 } from "@/lib/server/supabase-admin";
 import { anthropicImageBlock } from "@/lib/server/anthropic-image";
 import type { Character } from "@/lib/types";
+import { dialogueForEditor } from "@/lib/dialogue-performance";
+import { getPipelineConfig } from "@/lib/server/pipeline-config";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function clean(value: unknown, max = 4000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -40,7 +42,7 @@ const SHOT_SCHEMA = {
     hook: { type: "string" },
     setting: { type: "string" },
     subjectStart: { type: "string" },
-    actionTimeline: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
+    actionTimeline: { type: "array", items: { type: "string" } },
     facialBeat: { type: "string" },
     framing: { type: "string" },
     cameraAngle: { type: "string" },
@@ -60,7 +62,7 @@ function renderPackage(character: Character, shot: ShotBlueprint): ScenePackage 
   return {
     sceneName: shot.sceneName,
     hook: shot.hook,
-    dialogue: shot.dialogue,
+    dialogue: dialogueForEditor(shot.dialogue),
     image: composeImagePrompt(character, shot),
     video: composeVideoPrompt(character, shot),
     sfx: composeSfxPrompt(character, shot.soundTexture),
@@ -93,7 +95,9 @@ export async function POST(request: Request) {
       return Response.json({ scene: buildScenePackage(character, variation), provider: "chaplin-local", configured: false });
     }
 
-    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    const writingConfig = (await getPipelineConfig()).stages.writing;
+    if (!writingConfig.enabled) throw new Error("AI writing is paused by Super Admin.");
+    const model = writingConfig.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
     const production = await getCharacterProductionState(character.id);
     const visualReference = production.visualReference;
     const promptPayload = JSON.stringify({
@@ -131,8 +135,9 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2200,
-        system: "You are a film director creating one production-ready five-second beat for an established fictional actor. Return a shot blueprint, not prose about the character. The hook must be visible in the first frame or first second. The dramatic beat must change the situation. Dialogue uses subtext and never explains identity or visible action. Block one readable body action and one micro-expression across exactly three time ranges. Specify precise framing, camera height/angle, lens, one physically plausible camera path, motivated key-light direction, fill/edge, environmental motion, an acoustic soundTexture made only of recordable physical sources, a musicalArc expressed only as musical/emotional development, and a final frame that creates a genuine cliffhanger by introducing new pressure or reversing power. Respect the actor bible. Avoid generic walking, posing, looking at camera, montage, multiple cuts, excessive motion, unmotivated light, or biography. The still is a designed first frame; the video will animate that exact image, so motion instructions must never redesign the frame.",
+        max_tokens: writingConfig.maxTokens ?? 4000,
+        temperature: writingConfig.temperature ?? 0.65,
+        system: `${writingConfig.promptPrelude} You are a film director creating one production-ready five-second beat for an established fictional actor. Return a shot blueprint, not prose about the character. The hook must be visible in the first frame or first second. The dramatic beat must change the situation. Dialogue uses subtext and never explains identity or visible action. Dialogue must contain spoken words only: no speaker labels, parentheses, brackets, stage directions, or written pause cues; use punctuation for cadence. Block one readable body action and one micro-expression across exactly three time ranges. Specify precise framing, camera height/angle, lens, one physically plausible camera path, motivated key-light direction, fill/edge, environmental motion, an acoustic soundTexture made only of recordable physical sources, a musicalArc expressed only as musical/emotional development, and a final frame that creates a genuine cliffhanger by introducing new pressure or reversing power. Respect the actor bible. Avoid generic walking, posing, looking at camera, montage, multiple cuts, excessive motion, unmotivated light, or biography. The still is a designed first frame; the video will animate that exact image, so motion instructions must never redesign the frame.`,
         messages: [{
           role: "user",
           content: messageContent,
@@ -174,7 +179,7 @@ export async function POST(request: Request) {
         scene: buildScenePackage(fallbackCharacter, fallbackVariation),
         provider: "chaplin-local",
         configured: Boolean(process.env.ANTHROPIC_API_KEY),
-        warning: `Claude could not run: ${message} A production-directed local scene was used instead.`,
+        warning: "Chaplin used the local director for this scene. Everything remains editable, and you can try another take.",
       });
     }
     return Response.json({ error: message }, { status: 502 });

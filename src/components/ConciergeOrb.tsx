@@ -1,8 +1,12 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { IconBriefcase, IconFilm, IconLock, IconMask, IconReceipt } from "@/components/Icons";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
+import { IconBriefcase, IconFilm, IconMicrophone, IconReceipt } from "@/components/Icons";
+import { getClientAuthIdentity } from "@/lib/client-auth";
+import type { MediaPipelineRun } from "@/lib/media-pipeline-types";
+import { useChaplinStore } from "@/lib/store";
 
 export type ConciergeQuickOption = {
   kind: "actor" | "video" | "ad" | "reel" | "micro-drama" | "pipeline" | "operations";
@@ -27,7 +31,7 @@ type DraftSummary = {
 };
 
 type ConciergeIntentResponse = {
-  intent: "create_character" | "create_spark" | "create_punch" | "create_episode" | "create_spot" | "create_series" | "browse" | "unclear";
+  intent: "answer" | "create_character" | "create_spark" | "create_punch" | "create_episode" | "create_spot" | "create_series" | "browse" | "unclear";
   name: string | null;
   archetypes: string[];
   characterBrief: string | null;
@@ -112,7 +116,7 @@ type SpeechWindow = Window & {
 function QuickOptionVisual({ kind }: Pick<ConciergeQuickOption, "kind">) {
   if (kind === "video") {
     return (
-      <span className="relative block h-28 overflow-hidden rounded-[1rem] border border-white/12">
+      <span className="relative block h-24 overflow-hidden rounded-xl border border-white/12 sm:h-28 sm:rounded-[1rem]">
         <video
           src="/characters/c-selene-video.mp4"
           autoPlay
@@ -124,11 +128,11 @@ function QuickOptionVisual({ kind }: Pick<ConciergeQuickOption, "kind">) {
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
         <span className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/5" />
-        <span className="absolute bottom-2.5 left-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white text-black shadow-lg">
+        <span className="absolute bottom-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-white text-black shadow-lg sm:bottom-2.5 sm:left-2.5 sm:h-8 sm:w-8">
           <span className="ml-0.5 h-0 w-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-black" />
         </span>
-        <span className="absolute bottom-3 right-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/80">
-          Spark · Punch · Episode
+        <span className="absolute right-2 top-2 rounded-full bg-black/45 px-2 py-1 text-[7px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[8px]">
+          5s · 15s · 60s
         </span>
       </span>
     );
@@ -136,11 +140,16 @@ function QuickOptionVisual({ kind }: Pick<ConciergeQuickOption, "kind">) {
 
   if (kind === "actor") {
     return (
-      <span className="relative flex h-28 items-center justify-center overflow-hidden rounded-[1rem] border border-white/12">
-        <span className="absolute h-24 w-24 rounded-full border border-accent/30 shadow-[0_0_40px_rgba(255,47,109,0.18)]" />
-        <span className="absolute h-16 w-16 rounded-full border border-accent-secondary/25" />
-        <IconMask className="relative h-12 w-12 text-white" />
-        <span className="absolute bottom-3 left-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/60">
+      <span className="relative block h-24 overflow-hidden rounded-xl border border-white/12 sm:h-28 sm:rounded-[1rem]">
+        <Image
+          src="/characters/c-rustam-banner.webp"
+          alt=""
+          fill
+          sizes="(max-width: 640px) 44vw, 240px"
+          className="object-cover object-[50%_30%] transition-transform duration-500 group-hover:scale-[1.04]"
+        />
+        <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/5 to-black/10" />
+        <span className="absolute bottom-2 left-2 rounded-full border border-white/20 bg-black/45 px-2 py-1 text-[7px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-sm sm:bottom-3 sm:left-3 sm:text-[8px]">
           Face · Voice · World
         </span>
       </span>
@@ -200,7 +209,7 @@ function VoiceStatus({ state }: { state: ConciergeOrbState }) {
             ? "Working"
             : state === "speaking"
               ? "Chaplin speaking"
-              : "Voice off · Hold orb"}
+              : "Voice ready · Standby"}
       </span>
     </div>
   );
@@ -219,58 +228,240 @@ const ALLOWED_ARCHETYPES = [
   "outsider",
 ];
 
-function fallbackSpeak(text: string, onDone?: () => void) {
-  if (typeof window === "undefined" || !window.speechSynthesis) {
-    onDone?.();
-    return;
-  }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  const voices = window.speechSynthesis.getVoices();
-  const preferred =
-    voices.find((voice) => /ravi|rishi|prabhat|madhur/i.test(voice.name)) ??
-    voices.find((voice) => /en[-_]IN/i.test(voice.lang)) ??
-    voices.find((voice) => /daniel|george|ryan/i.test(voice.name) && voice.lang.startsWith("en")) ??
-    voices.find((voice) => voice.lang.startsWith("en"));
-  if (preferred) utterance.voice = preferred;
-  utterance.rate = 1.03;
-  utterance.onend = () => onDone?.();
-  utterance.onerror = () => onDone?.();
-  window.speechSynthesis.speak(utterance);
+function asksForOwnedCharacters(value: string) {
+  const text = value.toLowerCase().replace(/[^\w\s-]/g, " ");
+  const mentionsCharacters = /\b(characters?|actors?|personas?)\b/.test(text);
+  const asksToInspect = /\b(what all|which|how many|list|show|check|see|find|have|created|made|built)\b/.test(text);
+  const refersToSelf = /\b(my|mine|i have|i created|i made|i built|account|shelf)\b/.test(text);
+  return mentionsCharacters && asksToInspect && refersToSelf;
+}
+
+function asksForOwnedProductions(value: string) {
+  const text = value.toLowerCase().replace(/[^\w\s-]/g, " ");
+  return /\b(productions?|pipelines?|projects?|drafts?|stories|sparks?|punches|episodes?|spots?)\b/.test(text)
+    && /\b(my|mine|i have|i created|i made|account|in production|working on|status)\b/.test(text);
 }
 
 const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
   role: string;
   quickOptions: ConciergeQuickOption[];
+  assistantOnly?: boolean;
   onClose: () => void;
   onStateChange?: (state: ConciergeOrbState) => void;
 }>(function ConciergeOrb({
   role,
   quickOptions,
+  assistantOnly = false,
   onClose,
   onStateChange,
 }, ref) {
   const router = useRouter();
+  const pathname = usePathname();
+  const characters = useChaplinStore((state) => state.characters);
+  const users = useChaplinStore((state) => state.users);
+  const stories = useChaplinStore((state) => state.stories);
+  const castings = useChaplinStore((state) => state.castings);
+  const currentUserId = useChaplinStore((state) => state.currentUserId);
+  const ownedCharacters = useMemo(
+    () => characters.filter((character) => character.makerId === currentUserId),
+    [characters, currentUserId],
+  );
+  const ownedStories = useMemo(
+    () => stories.filter((story) => story.authorId === currentUserId),
+    [currentUserId, stories],
+  );
+  const currentUser = users.find((user) => user.id === currentUserId);
   const [orbState, setOrbState] = useState<ConciergeOrbState>("idle");
   const [agentLine, setAgentLine] = useState("");
   const [userLine, setUserLine] = useState("");
+  const [characterResultIds, setCharacterResultIds] = useState<string[]>([]);
+  const [productionResultIds, setProductionResultIds] = useState<string[]>([]);
+  const [pipelineRuns, setPipelineRuns] = useState<MediaPipelineRun[]>([]);
+  const [pipelineContextReady, setPipelineContextReady] = useState(false);
   const [draft, setDraft] = useState("");
   const [savedDrafts, setSavedDrafts] = useState<DraftSummary[]>([]);
-  const [draftsLoading, setDraftsLoading] = useState(true);
-  const [draftsNeedLogin, setDraftsNeedLogin] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechAudioRef = useRef<HTMLAudioElement | null>(null);
+  const speechUrlRef = useRef("");
+  const speechRequestRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef("");
   const recognitionFailedRef = useRef(false);
   const closedRef = useRef(false);
   const sessionIdRef = useRef("");
   const stepClockRef = useRef(0);
   const stepsRef = useRef<MissionStep[]>([]);
+  const creatorContext = useMemo(() => {
+    const ownedStoryIds = new Set(ownedStories.map((story) => story.id));
+    const runByProductionId = new Map<string, MediaPipelineRun>();
+    for (const run of pipelineRuns) {
+      const productionId = typeof run.spec.productionId === "string" ? run.spec.productionId : "";
+      if (productionId && ownedStoryIds.has(productionId)) runByProductionId.set(productionId, run);
+    }
+
+    return {
+      creator: {
+        id: currentUserId,
+        name: currentUser?.name ?? "Creator",
+        role,
+      },
+      contextReady: pipelineContextReady,
+      characters: ownedCharacters.slice(0, 30).map((character) => ({
+        id: character.id,
+        name: character.name,
+        archetype: character.archetype,
+        archetypeMix: character.archetypeMix ?? [character.archetype],
+        tagline: character.tagline,
+        personality: character.personality.slice(0, 500),
+        voice: `${character.voiceGender}: ${character.voiceDesc}`.slice(0, 350),
+        signatureSfx: character.sfxDesc.slice(0, 250),
+        theme: character.themeDesc.slice(0, 250),
+        media: {
+          image: Boolean(character.imageUrl),
+          banner: Boolean(character.bannerUrl),
+          video: Boolean(character.videoUrl),
+          voiceLocked: Boolean(character.voiceId),
+          galleryImages: character.galleryUrls?.length ?? 0,
+        },
+        stats: character.stats,
+      })),
+      productions: ownedStories.slice(0, 30).map((story) => {
+        const castNames = castings
+          .filter((casting) => casting.storyId === story.id)
+          .map((casting) => characters.find((character) => character.id === casting.characterId)?.name)
+          .filter((name): name is string => Boolean(name));
+        const run = runByProductionId.get(story.id);
+        return {
+          id: story.id,
+          title: story.title,
+          format: story.format ?? "story",
+          durationSeconds: story.durationSeconds ?? null,
+          status: story.status ?? "published",
+          logline: story.logline,
+          cast: castNames,
+          scenes: story.scenes.length,
+          pipeline: run ? {
+            id: run.id,
+            status: run.status,
+            currentStep: run.currentStep,
+            output: run.outputLabel,
+            steps: run.steps.map((step) => ({ label: step.label, status: step.status })),
+          } : null,
+        };
+      }),
+      drafts: savedDrafts.map((draft) => ({
+        id: draft.id,
+        title: draft.title,
+        format: draft.format,
+        logline: draft.logline,
+        updatedAt: draft.updated_at,
+      })),
+    };
+  }, [
+    castings,
+    characters,
+    currentUser?.name,
+    currentUserId,
+    ownedCharacters,
+    ownedStories,
+    pipelineContextReady,
+    pipelineRuns,
+    role,
+    savedDrafts,
+  ]);
   const mark = useCallback((label: string) => {
     const now = performance.now();
     const ms = stepClockRef.current ? now - stepClockRef.current : 0;
     stepClockRef.current = now;
     stepsRef.current = [...stepsRef.current, { label, ms }];
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const requests = [
+      ...ownedCharacters.map((character) => ({ scopeType: "actor", scopeId: character.id })),
+      ...ownedStories.map((story) => ({
+        scopeType: story.format === "spot" ? "spot" : "episode",
+        scopeId: story.id,
+      })),
+    ];
+    const uniqueRequests = Array.from(
+      new Map(requests.map((request) => [`${request.scopeType}:${request.scopeId}`, request])).values(),
+    );
+
+    void Promise.all(uniqueRequests.map(async ({ scopeType, scopeId }) => {
+      const query = new URLSearchParams({ scopeType, scopeId });
+      const response = await fetch(`/api/pipeline?${query.toString()}`, { cache: "no-store" });
+      if (!response.ok) return [] as MediaPipelineRun[];
+      const payload = await response.json() as { runs?: MediaPipelineRun[] };
+      return payload.runs ?? [];
+    }))
+      .then((groups) => {
+        if (cancelled) return;
+        const uniqueRuns = new Map(groups.flat().map((run) => [run.id, run]));
+        setPipelineRuns(Array.from(uniqueRuns.values()));
+      })
+      .catch(() => {
+        if (!cancelled) setPipelineRuns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPipelineContextReady(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [ownedCharacters, ownedStories]);
+
+  const stopConciergeSpeech = useCallback(() => {
+    speechRequestRef.current?.abort();
+    speechRequestRef.current = null;
+    if (speechAudioRef.current) {
+      speechAudioRef.current.pause();
+      speechAudioRef.current.src = "";
+      speechAudioRef.current = null;
+    }
+    if (speechUrlRef.current) {
+      URL.revokeObjectURL(speechUrlRef.current);
+      speechUrlRef.current = "";
+    }
+  }, []);
+
+  const speakReply = useCallback(async (text: string, onDone: () => void) => {
+    stopConciergeSpeech();
+    const controller = new AbortController();
+    speechRequestRef.current = controller;
+    try {
+      const response = await fetch("/api/agent/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("Natural voice unavailable.");
+      const blob = await response.blob();
+      if (closedRef.current || controller.signal.aborted) return;
+
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      speechUrlRef.current = url;
+      speechAudioRef.current = audio;
+      const finish = () => {
+        if (speechAudioRef.current === audio) {
+          speechAudioRef.current = null;
+          speechRequestRef.current = null;
+          URL.revokeObjectURL(url);
+          speechUrlRef.current = "";
+        }
+        if (!closedRef.current) onDone();
+      };
+      audio.addEventListener("ended", finish, { once: true });
+      audio.addEventListener("error", finish, { once: true });
+      await audio.play();
+    } catch (error) {
+      if (controller.signal.aborted || closedRef.current) return;
+      console.warn("[concierge] natural speech unavailable:", error instanceof Error ? error.message : error);
+      stopConciergeSpeech();
+      onDone();
+    }
+  }, [stopConciergeSpeech]);
 
   const flushTelemetry = useCallback((outcome: string) => {
     if (!sessionIdRef.current) {
@@ -333,6 +524,9 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
     if (text.length < 3) return;
     setUserLine(text);
     setDraft("");
+    setCharacterResultIds([]);
+    setProductionResultIds([]);
+
     setOrbState("thinking");
     setAgentLine("Understanding what you want to make…");
     mark("Understanding");
@@ -340,13 +534,43 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
       const response = await fetch("/api/agent/intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ utterance: text, role }),
+        body: JSON.stringify({ utterance: text, role, creatorContext }),
       });
       const data = await readIntentResponse(response);
       mark(`Intent: ${data.intent}`);
+      if (data.intent === "answer") {
+        if (asksForOwnedCharacters(text)) {
+          setCharacterResultIds(ownedCharacters.map((character) => character.id));
+        }
+        if (asksForOwnedProductions(text)) {
+          setProductionResultIds(ownedStories.map((story) => story.id));
+        }
+      }
+      if (data.intent !== "answer" && assistantOnly && pathname === "/characters/new") {
+        const direction = data.characterBrief ?? data.storyBrief ?? text;
+        window.dispatchEvent(new CustomEvent("chaplin:character-assist", {
+          detail: { name: data.name, brief: direction, archetypes: data.archetypes },
+        }));
+        const reply = "Added that direction to this actor.";
+        setAgentLine(reply);
+        setOrbState("speaking");
+        void speakReply(reply, () => setOrbState("idle"));
+        return;
+      }
+      if (data.intent !== "answer" && assistantOnly && pathname.startsWith("/studio/write")) {
+        const direction = data.storyBrief ?? data.characterBrief ?? text;
+        window.dispatchEvent(new CustomEvent("chaplin:story-assist", {
+          detail: { brief: direction },
+        }));
+        const reply = "Added that direction to this production.";
+        setAgentLine(reply);
+        setOrbState("speaking");
+        void speakReply(reply, () => setOrbState("idle"));
+        return;
+      }
       setAgentLine(data.reply);
       setOrbState("speaking");
-      fallbackSpeak(data.reply, () => {
+      void speakReply(data.reply, () => {
         if (closedRef.current) return;
         if (data.intent === "create_character") {
           openCharacterBuilder({
@@ -382,11 +606,11 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
       setOrbState("idle");
       setAgentLine(error instanceof Error ? error.message : "Something slipped. Try that again.");
     }
-  }, [leaveTo, mark, openCharacterBuilder, openVideoBuilder, role]);
+  }, [assistantOnly, creatorContext, leaveTo, mark, openCharacterBuilder, openVideoBuilder, ownedCharacters, ownedStories, pathname, role, speakReply]);
 
   const startPushToTalk = useCallback(() => {
     if (recognitionRef.current || orbState === "thinking" || orbState === "speaking") return;
-    window.speechSynthesis?.cancel();
+    stopConciergeSpeech();
     const speechWindow = window as SpeechWindow;
     const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
     if (!Recognition) {
@@ -396,7 +620,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
 
     const recognition = new Recognition();
     recognition.lang = "en-IN";
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     transcriptRef.current = "";
     recognitionFailedRef.current = false;
@@ -404,7 +628,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
     recognition.onstart = () => {
       mark("Push-to-talk started");
       setUserLine("");
-      setAgentLine("Listening only while you hold…");
+      setAgentLine("");
       setOrbState("listening");
     };
     recognition.onresult = (event) => {
@@ -443,7 +667,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
       setOrbState("idle");
       setAgentLine("The microphone is already busy. Try once more.");
     }
-  }, [mark, orbState, submitIntent]);
+  }, [mark, orbState, stopConciergeSpeech, submitIntent]);
 
   const stopPushToTalk = useCallback(() => {
     if (!recognitionRef.current) return;
@@ -459,7 +683,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
   function handleClose() {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
-    window.speechSynthesis?.cancel();
+    stopConciergeSpeech();
     flushTelemetry("closed");
     onClose();
   }
@@ -470,9 +694,9 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
     return () => {
       closedRef.current = true;
       recognitionRef.current?.abort();
-      window.speechSynthesis?.cancel();
+      stopConciergeSpeech();
     };
-  }, []);
+  }, [stopConciergeSpeech]);
 
   useEffect(() => {
     onStateChange?.(orbState);
@@ -480,14 +704,29 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/drafts", { cache: "no-store" })
-      .then(async (response) => {
+    void (async () => {
+      try {
+        let identity = await getClientAuthIdentity();
+        if (!identity) return;
+
+        let response = await fetch("/api/drafts", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (response.status === 401) {
+          identity = await getClientAuthIdentity(true);
+          if (identity) {
+            response = await fetch("/api/drafts", {
+              cache: "no-store",
+              credentials: "same-origin",
+            });
+          }
+        }
         const data = await response.json() as { drafts?: DraftSummary[] };
         if (cancelled) return;
-        if (response.status === 401) setDraftsNeedLogin(true);
-        else if (response.ok) setSavedDrafts((data.drafts ?? []).slice(0, 3));
-      })
-      .finally(() => { if (!cancelled) setDraftsLoading(false); });
+        if (identity && response.ok) setSavedDrafts((data.drafts ?? []).slice(0, 3));
+      } catch {}
+    })();
     return () => { cancelled = true; };
   }, []);
 
@@ -501,7 +740,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
       />
 
       <section
-        className="chaplin-scrollbar fixed bottom-[7.25rem] left-1/2 z-[95] max-h-[calc(100dvh-9rem)] w-[calc(100%-1.5rem)] max-w-[34rem] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-[1.75rem] border border-white/15 bg-[#0b0e09]/95 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.72)] backdrop-blur-2xl sm:p-5"
+        className="chaplin-scrollbar fixed bottom-[7.25rem] left-1/2 z-[95] max-h-[calc(100dvh-9rem)] w-[calc(100%-1.5rem)] max-w-[34rem] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-[1.5rem] border border-white/15 bg-[#0b0e09]/95 p-3.5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.72)] backdrop-blur-2xl sm:rounded-[1.75rem] sm:p-5"
         data-concierge
         data-mode="push-to-talk"
       >
@@ -509,8 +748,12 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
 
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent">Create with Chaplin</p>
-            <h2 className="mt-1 text-xl font-semibold">What do you want to make?</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent">
+              {assistantOnly ? "Chaplin assistant" : "Create with Chaplin"}
+            </p>
+            <h2 className="mt-1 text-xl font-semibold">
+              {assistantOnly ? "What should we shape?" : "What do you want to make?"}
+            </h2>
             <VoiceStatus state={orbState} />
           </div>
           <button
@@ -523,37 +766,53 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
           </button>
         </div>
 
-        <div className="mt-4" data-continue-drafts>
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-secondary">Continue from Draft</p>
-            {savedDrafts.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            if (orbState === "listening") stopPushToTalk();
+            else startPushToTalk();
+          }}
+          disabled={orbState === "thinking" || orbState === "speaking"}
+          className={`mt-3.5 flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors disabled:cursor-wait disabled:opacity-60 ${
+            orbState === "listening"
+              ? "border-emerald-400/60 bg-emerald-400/10"
+              : "border-white/15 bg-white/[0.035] hover:border-accent"
+          }`}
+          data-concierge-voice-button
+        >
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+            orbState === "listening"
+              ? "bg-emerald-400 text-black shadow-[0_0_24px_rgba(52,211,153,0.42)]"
+              : "bg-accent text-paper"
+          }`}>
+            <IconMicrophone className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">
+              {orbState === "listening"
+                ? "Listening…"
+                : orbState === "thinking"
+                  ? "Understanding your idea…"
+                  : orbState === "speaking"
+                    ? "Chaplin is replying…"
+                    : "Tap mic to speak"}
+            </span>
+          </span>
+          <span className="text-accent" aria-hidden="true">
+            {orbState === "listening" ? "■" : "→"}
+          </span>
+        </button>
+
+        {!assistantOnly && (
+          <>
+        {savedDrafts.length > 0 && (
+          <div className="mt-3.5" data-continue-drafts>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-secondary">Continue from there</p>
               <button type="button" onClick={() => leaveTo("/studio", "all_drafts")} className="text-[10px] text-white/45 hover:text-accent">
                 View all
               </button>
-            )}
-          </div>
-          {draftsLoading ? (
-            <div className="rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-xs text-white/40">Finding your latest draft…</div>
-          ) : draftsNeedLogin ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-white/12 px-3 py-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/12 text-white/55">
-                <IconLock className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs font-semibold text-white">Your drafts</span>
-                <span className="mt-0.5 block text-[10px] leading-4 text-white/45">Sign in to continue where you left off.</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => leaveTo("/auth?next=/studio", "sign_in_for_drafts")}
-                className="shrink-0 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              >
-                Sign in
-              </button>
             </div>
-          ) : savedDrafts.length === 0 ? (
-            <div className="rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-xs text-white/40">Your first idea will autosave here.</div>
-          ) : (
             <div className="grid gap-2">
               {savedDrafts.map((saved) => (
                 <button
@@ -573,17 +832,17 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="my-4 flex items-center gap-3" aria-hidden="true">
+        <div className="my-3 flex items-center gap-3" aria-hidden="true">
           <span className="h-px flex-1 bg-white/10" />
           <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35">start a new draft</span>
           <span className="h-px flex-1 bg-white/10" />
         </div>
 
         <div
-          className={`grid grid-cols-1 gap-3 ${quickOptions.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+          className={`grid gap-2.5 ${quickOptions.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}
           data-create-choices
         >
           {quickOptions.map((option) => (
@@ -594,35 +853,106 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
                 mark(`Create choice: ${option.kind}`);
                 leaveTo(option.href, `quick:${option.kind}`);
               }}
-              className="group rounded-[1.25rem] border border-white/15 p-2 text-left transition duration-300 hover:-translate-y-0.5 hover:border-accent focus-visible:border-accent focus-visible:outline-none"
+              className="group min-w-0 rounded-[1rem] border border-white/15 p-1.5 text-left transition duration-300 hover:-translate-y-0.5 hover:border-accent focus-visible:border-accent focus-visible:outline-none sm:rounded-[1.25rem] sm:p-2"
               data-create-choice={option.kind}
             >
               <QuickOptionVisual kind={option.kind} />
-              <span className="block px-2 pb-2 pt-3">
-                <span className="flex items-center justify-between gap-3">
-                  <span className="text-base font-semibold">{option.title}</span>
-                  <span className="text-lg text-accent transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+              <span className="block px-1.5 pb-1.5 pt-2.5 sm:px-2 sm:pb-2 sm:pt-3">
+                <span className="flex items-center justify-between gap-1.5">
+                  <span className="truncate text-[13px] font-semibold sm:text-base">{option.title}</span>
+                  <span className="text-base text-accent transition-transform group-hover:translate-x-1 sm:text-lg" aria-hidden="true">→</span>
                 </span>
-                <span className="mt-1 block text-[11px] leading-5 text-white/55">{option.copy}</span>
+                <span className="mt-1 line-clamp-2 block text-[9px] leading-4 text-white/55 sm:text-[11px] sm:leading-5">{option.copy}</span>
               </span>
             </button>
           ))}
         </div>
 
-        <div className="my-4 flex items-center gap-3" aria-hidden="true">
+        <div className="my-3 flex items-center gap-3" aria-hidden="true">
           <span className="h-px flex-1 bg-white/10" />
           <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35">or tell Chaplin once</span>
           <span className="h-px flex-1 bg-white/10" />
         </div>
+          </>
+        )}
 
-        {(userLine || agentLine) && (
+        {orbState !== "listening" && (userLine || agentLine) && (
           <div className="mb-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5" aria-live="polite">
             {userLine && <p className="text-[10px] text-white/40">You: {userLine}</p>}
             {agentLine && <p className="mt-1 text-xs leading-5 text-white/80" data-agent-line>{agentLine}</p>}
+            {characterResultIds.length > 0 && (
+              <div className="chaplin-scrollbar mt-2.5 flex gap-2 overflow-x-auto pb-1" data-character-results>
+                {characterResultIds.map((characterId) => {
+                  const character = ownedCharacters.find((candidate) => candidate.id === characterId);
+                  if (!character) return null;
+                  return (
+                    <button
+                      key={character.id}
+                      type="button"
+                      onClick={() => leaveTo(`/characters/${character.id}`, `open_owned_character:${character.id}`)}
+                      className="group flex w-36 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-1.5 text-left transition hover:border-accent"
+                    >
+                      <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white/5">
+                        {character.imageUrl ? (
+                          <Image
+                            src={character.imageUrl}
+                            alt=""
+                            fill
+                            sizes="40px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span
+                            className="flex h-full w-full items-center justify-center text-sm font-semibold"
+                            style={{ backgroundColor: `hsl(${character.avatarHue} 28% 20%)` }}
+                          >
+                            {character.name.charAt(0)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[11px] font-semibold text-white">{character.name}</span>
+                        <span className="mt-0.5 block truncate text-[8px] uppercase tracking-wide text-accent-secondary">
+                          {character.archetype.replace("-", " ")}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {productionResultIds.length > 0 && (
+              <div className="chaplin-scrollbar mt-2.5 flex gap-2 overflow-x-auto pb-1" data-production-results>
+                {productionResultIds.map((storyId) => {
+                  const story = ownedStories.find((candidate) => candidate.id === storyId);
+                  if (!story) return null;
+                  const run = pipelineRuns.find((candidate) => candidate.spec.productionId === story.id);
+                  return (
+                    <button
+                      key={story.id}
+                      type="button"
+                      onClick={() => leaveTo(`/productions/${story.id}`, `open_owned_production:${story.id}`)}
+                      className="group w-48 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-2.5 text-left transition hover:border-accent"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-accent">
+                          {story.format ?? "story"}
+                        </span>
+                        <span className={`h-1.5 w-1.5 rounded-full ${run ? "bg-accent-secondary" : "bg-white/25"}`} />
+                      </span>
+                      <span className="mt-1.5 block truncate text-[11px] font-semibold text-white">{story.title}</span>
+                      <span className="mt-1 block truncate text-[9px] text-white/45">
+                        {run ? `Pipeline · ${run.currentStep ?? run.status}` : story.status === "production" ? "Ready to initialize" : "Published"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
-        <div>
+        <div className={assistantOnly ? "mt-4" : ""}>
           <form
             className="flex min-w-0 items-center gap-2"
             onSubmit={(event) => {
@@ -643,7 +973,7 @@ const ConciergeOrb = forwardRef<ConciergeOrbHandle, {
             <button
               type="submit"
               disabled={orbState === "thinking" || draft.trim().length < 3}
-              className="mt-4 shrink-0 rounded-full bg-accent px-4 py-2.5 text-xs font-semibold text-paper disabled:opacity-40"
+              className="shrink-0 rounded-full bg-accent px-4 py-2.5 text-xs font-semibold text-paper disabled:opacity-40"
             >
               {orbState === "thinking" ? "…" : "Go"}
             </button>

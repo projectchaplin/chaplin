@@ -17,6 +17,7 @@ import Avatar from "@/components/Avatar";
 import CharacterCard from "@/components/CharacterCard";
 import StoryCard from "@/components/StoryCard";
 import SectionHeading from "@/components/SectionHeading";
+import { getClientAuthIdentity } from "@/lib/client-auth";
 import { money, formatDate, compactNumber } from "@/lib/format";
 
 type Tab = "drafts" | "characters" | "stories" | "earnings";
@@ -36,17 +37,44 @@ export default function StudioPage() {
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [draftsLoading, setDraftsLoading] = useState(true);
   const [draftsNeedLogin, setDraftsNeedLogin] = useState(false);
+  const [draftsError, setDraftsError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/drafts", { cache: "no-store" })
-      .then(async (response) => {
+    void (async () => {
+      try {
+        let identity = await getClientAuthIdentity();
+        if (!identity) {
+          if (!cancelled) setDraftsNeedLogin(true);
+          return;
+        }
+
+        let response = await fetch("/api/drafts", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (response.status === 401) {
+          identity = await getClientAuthIdentity(true);
+          if (identity) {
+            response = await fetch("/api/drafts", {
+              cache: "no-store",
+              credentials: "same-origin",
+            });
+          }
+        }
         const data = await response.json() as { drafts?: DraftSummary[] };
         if (cancelled) return;
-        if (response.status === 401) setDraftsNeedLogin(true);
-        else if (response.ok) setDrafts(data.drafts ?? []);
-      })
-      .finally(() => { if (!cancelled) setDraftsLoading(false); });
+        if (!identity || response.status === 401) setDraftsNeedLogin(true);
+        else if (response.ok) {
+          setDraftsNeedLogin(false);
+          setDrafts(data.drafts ?? []);
+        }
+      } catch {
+        if (!cancelled) setDraftsError("Your drafts could not be loaded. Refresh and try again.");
+      } finally {
+        if (!cancelled) setDraftsLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
   }, []);
 
@@ -104,29 +132,44 @@ export default function StudioPage() {
         <span className="text-accent">→</span>
       </Link>
 
-      <div className="flex gap-2 mb-6 text-sm">
-        {(
-          [
-            ["drafts", `Drafts (${drafts.length})`],
-            ["characters", `My identities (${myCharacters.length})`],
-            ["stories", `My scenes (${myStories.length})`],
-            ["earnings", `Earnings (${myLedger.length})`],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key as Tab)}
-            className={`px-4 py-2 rounded-full border transition-colors ${
-              tab === key
-                ? "border-accent bg-accent/10 text-ink font-semibold"
-                : "border-line text-grey hover:border-accent"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="-mx-6 mb-6 overflow-x-auto px-6 no-scrollbar" role="tablist" aria-label="Studio sections">
+        <div className="flex w-max min-w-full items-end gap-1 border-b border-line">
+          {(
+            [
+              ["drafts", "Drafts", draftsLoading ? "…" : drafts.length],
+              ["characters", "Actors", myCharacters.length],
+              ["stories", "Productions", myStories.length],
+              ["earnings", "Earnings", myLedger.length],
+            ] as const
+          ).map(([key, label, count]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              aria-controls="studio-tab-panel"
+              onClick={(event) => {
+                setTab(key as Tab);
+                event.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+              }}
+              className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-xs font-semibold transition-colors ${
+                tab === key
+                  ? "border-accent text-ink"
+                  : "border-transparent text-grey hover:border-white/20 hover:text-ink"
+              }`}
+            >
+              <span>{label}</span>
+              <span className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[9px] ${
+                tab === key ? "bg-accent text-white" : "bg-white/[0.05] text-grey"
+              }`}>
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
+      <section id="studio-tab-panel" role="tabpanel">
       {tab === "drafts" && (
         <div>
           <div className="mb-4 flex items-center justify-between gap-4">
@@ -145,6 +188,8 @@ export default function StudioPage() {
               <p className="text-sm font-semibold">Sign in to keep drafts private and available on every device.</p>
               <Link href="/auth?next=/studio" className="mt-4 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white">Create creator account</Link>
             </div>
+          ) : draftsError ? (
+            <div className="poster-card rounded-md p-8 text-center text-sm text-red-300">{draftsError}</div>
           ) : drafts.length === 0 ? (
             <Link href="/studio/write" className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-line p-6 text-grey transition-colors hover:border-accent hover:text-accent">
               <span className="text-2xl">+</span>
@@ -266,6 +311,7 @@ export default function StudioPage() {
           )}
         </div>
       )}
+      </section>
     </div>
   );
 }

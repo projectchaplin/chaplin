@@ -8,6 +8,7 @@ import { getCharacter, getUser, resumeForCharacter, ledgerForCharacter } from "@
 import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
 import CharacterSoundProfile from "@/components/CharacterSoundProfile";
+import CharacterPersonalityCard from "@/components/CharacterPersonalityCard";
 import EarningsSparkline from "@/components/EarningsSparkline";
 import CharacterGallery from "@/components/CharacterGallery";
 import DeveloperAccessCard from "@/components/DeveloperAccessCard";
@@ -56,7 +57,7 @@ export default function CharacterProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10 w-full min-w-0 overflow-hidden">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10 w-full min-w-0 overflow-x-clip">
       <Link
         href="/characters"
         className="inline-flex items-center gap-1.5 pl-2.5 pr-4 py-2 rounded-full poster-card text-sm font-semibold hover:text-accent transition-colors mb-3"
@@ -154,12 +155,7 @@ export default function CharacterProfilePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         {/* Left: personality, voice, license terms */}
         <div className="md:col-span-2 flex flex-col gap-6">
-          <section className="poster-card rounded-md p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-grey mb-2">
-              Personality
-            </h2>
-            <p className="text-sm leading-relaxed">{character.personality}</p>
-          </section>
+          <CharacterPersonalityCard character={character} />
 
           {character.galleryUrls && character.galleryUrls.length > 0 && (
             <CharacterGallery name={character.name} images={character.galleryUrls} />
@@ -257,7 +253,7 @@ export default function CharacterProfilePage() {
           id="production-studio"
           open={productionOpen}
           onToggle={(event) => setProductionOpen(event.currentTarget.open)}
-          className="poster-card mt-6 scroll-mt-24 overflow-hidden rounded-md"
+          className="mt-6 scroll-mt-24 rounded-md border border-line bg-paper/30"
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 hover:bg-white/[0.03] sm:px-6">
             <span className="min-w-0">
@@ -271,7 +267,15 @@ export default function CharacterProfilePage() {
             </span>
           </summary>
           <div className="border-t border-line">
-            <CharacterProductionStudio character={character} />
+            <CharacterProductionStudio
+              character={character}
+              onExit={() => {
+                setProductionOpen(false);
+                window.requestAnimationFrame(() => {
+                  document.getElementById("production-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
+              }}
+            />
           </div>
         </details>
       )}

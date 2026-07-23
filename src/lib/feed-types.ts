@@ -1,4 +1,4 @@
-export type FeedMediaKind = "image" | "video";
+export type FeedMediaKind = "image" | "video" | "audio";
 
 export interface FeedAuthor {
   id: string;
@@ -38,4 +38,3 @@ export interface FeedPost extends SharedFeedPost {
   replies: FeedReply[];
   sharedPost: SharedFeedPost | null;
 }
-

@@ -8,7 +8,8 @@ import Avatar from "@/components/Avatar";
 import Chip from "@/components/Chip";
 import { ARCHETYPES } from "@/data/seed";
 import type { Archetype, CharacterProductionBible, LicenseType, VoiceGender } from "@/lib/types";
-import { ARCHETYPE_HUE, ARCHETYPE_LABEL, LICENSE_HUE, LICENSE_LABEL } from "@/lib/format";
+import { ARCHETYPE_HUE, ARCHETYPE_LABEL } from "@/lib/format";
+import { alignVoiceDescription, explicitVoiceGender } from "@/lib/character-coherence";
 
 const VOICE_PRESETS = [
   "Warm, steady, a little old-fashioned",
@@ -39,6 +40,12 @@ const SCORE_PRESETS = [
   "Driving nagada drums under a defiant string line",
   "Custom, describe it myself",
 ];
+
+const LICENSE_OPTIONS: Record<LicenseType, { label: string; icon: string; detail: string }> = {
+  open: { label: "Open", icon: "∞", detail: "Free to cast." },
+  paid: { label: "Paid", icon: "₹", detail: "Royalty on every casting." },
+  approval: { label: "Approval", icon: "✓", detail: "You approve each story." },
+};
 
 const HUE_SWATCHES = [340, 30, 205, 45, 150, 265, 18, 300, 220, 95];
 
@@ -77,11 +84,36 @@ type CharacterBuilderDraft = {
 };
 
 const IDENTITY_BUILD_STAGES = [
-  { label: "Read canon", startsAt: 0 },
-  { label: "Shape identity", startsAt: 8 },
-  { label: "Direct voice", startsAt: 18 },
-  { label: "Build bible", startsAt: 30 },
-  { label: "Continuity pass", startsAt: 42 },
+  {
+    shortLabel: "Idea",
+    label: "Understanding your idea",
+    detail: "Finding the actor’s role, tension, and point of view.",
+    startsAt: 0,
+  },
+  {
+    shortLabel: "Personality",
+    label: "Building the personality",
+    detail: "Writing desires, contradictions, and pressure behavior.",
+    startsAt: 8,
+  },
+  {
+    shortLabel: "Look",
+    label: "Designing the look",
+    detail: "Shaping face, age, wardrobe, palette, and world.",
+    startsAt: 18,
+  },
+  {
+    shortLabel: "Voice",
+    label: "Shaping voice and sound",
+    detail: "Directing delivery, signature sound, and musical identity.",
+    startsAt: 30,
+  },
+  {
+    shortLabel: "Bible",
+    label: "Locking the actor bible",
+    detail: "Checking continuity across every generated field.",
+    startsAt: 42,
+  },
 ] as const;
 
 function estimatedBuildProgress(target: SuggestionTarget, elapsedSeconds: number) {
@@ -96,6 +128,24 @@ function activeBuildStage(elapsedSeconds: number) {
     (active, stage, index) => elapsedSeconds >= stage.startsAt ? index : active,
     0,
   );
+}
+
+function appearanceDirectionFromBible(bible: CharacterProductionBible) {
+  return [
+    bible.visual.perceivedAge,
+    bible.visual.faceAnchors.join("; "),
+    bible.visual.hair,
+    bible.visual.wardrobe,
+    bible.visual.silhouette,
+  ].filter(Boolean).join(". ");
+}
+
+function worldDirectionFromBible(bible: CharacterProductionBible) {
+  return [
+    bible.cinematography.worldTexture,
+    `Palette: ${bible.visual.palette.join(", ")}`,
+    `Lighting: ${bible.cinematography.keyLight}; ${bible.cinematography.fillLight}; ${bible.cinematography.edgeLight}`,
+  ].filter(Boolean).join(". ");
 }
 
 function SuggestButton({
@@ -133,7 +183,7 @@ export default function NewCharacterPage() {
   const [personality, setPersonality] = useState("");
   const [appearanceBrief, setAppearanceBrief] = useState("");
   const [worldBrief, setWorldBrief] = useState("");
-  const [voiceGender, setVoiceGender] = useState<VoiceGender>("feminine");
+  const [voiceGender, setVoiceGender] = useState<VoiceGender>("androgynous");
   const [voicePreset, setVoicePreset] = useState(VOICE_PRESETS[0]);
   const [customVoice, setCustomVoice] = useState("");
   const [sfxPreset, setSfxPreset] = useState(SFX_PRESETS[0]);
@@ -179,6 +229,13 @@ export default function NewCharacterPage() {
       const draft = JSON.parse(stored) as Partial<CharacterBuilderDraft>;
       if (draft.version !== 1) return;
       const timer = window.setTimeout(() => {
+        const restoredVoiceGender = explicitVoiceGender(
+          `${draft.characterBrief ?? ""} ${draft.personality ?? ""}`,
+        ) ?? draft.voiceGender ?? "androgynous";
+        const restoredAppearanceBrief = draft.appearanceBrief?.trim() ||
+          (draft.productionBible ? appearanceDirectionFromBible(draft.productionBible) : "");
+        const restoredWorldBrief = draft.worldBrief?.trim() ||
+          (draft.productionBible ? worldDirectionFromBible(draft.productionBible) : "");
         setName(draft.name ?? "");
         setArchetypes(
           Array.isArray(draft.archetypes) && draft.archetypes.length
@@ -188,11 +245,11 @@ export default function NewCharacterPage() {
         setCharacterBrief(draft.characterBrief ?? "");
         setTagline(draft.tagline ?? "");
         setPersonality(draft.personality ?? "");
-        setAppearanceBrief(draft.appearanceBrief ?? "");
-        setWorldBrief(draft.worldBrief ?? "");
-        setVoiceGender(draft.voiceGender ?? "feminine");
+        setAppearanceBrief(restoredAppearanceBrief);
+        setWorldBrief(restoredWorldBrief);
+        setVoiceGender(restoredVoiceGender);
         setVoicePreset(draft.voicePreset ?? VOICE_PRESETS[0]);
-        setCustomVoice(draft.customVoice ?? "");
+        setCustomVoice(alignVoiceDescription(draft.customVoice ?? "", restoredVoiceGender));
         setSfxPreset(draft.sfxPreset ?? SFX_PRESETS[0]);
         setCustomSfx(draft.customSfx ?? "");
         setScorePreset(draft.scorePreset ?? SCORE_PRESETS[0]);
@@ -283,6 +340,35 @@ export default function NewCharacterPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const applyVoiceDirection = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        name?: string | null;
+        brief?: string | null;
+        archetypes?: string[];
+      }>).detail;
+      const direction = detail?.brief?.trim();
+      if (detail?.name?.trim()) {
+        setName((current) => current.trim() ? current : detail.name!.trim());
+      }
+      if (direction) {
+        setCharacterBrief((current) => {
+          if (!current.trim()) return direction;
+          if (current.toLowerCase().includes(direction.toLowerCase())) return current;
+          return `${current.trim()}\n${direction}`;
+        });
+      }
+      const incomingArchetypes = (detail?.archetypes ?? [])
+        .filter((value): value is Archetype => (ARCHETYPES as readonly string[]).includes(value));
+      if (incomingArchetypes.length) {
+        setArchetypes((current) => [...new Set([...current, ...incomingArchetypes])]);
+      }
+      setSuggestionMessage("Voice direction added. Review it, then run Magic build.");
+    };
+    window.addEventListener("chaplin:character-assist", applyVoiceDirection);
+    return () => window.removeEventListener("chaplin:character-assist", applyVoiceDirection);
+  }, []);
+
   const archetype = archetypes[0] ?? "hero";
 
   function toggleArchetype(a: Archetype) {
@@ -349,6 +435,17 @@ export default function NewCharacterPage() {
       };
       if (!response.ok || !data.suggestion) throw new Error(data.error || "Character suggestions failed.");
       const suggestion = data.suggestion;
+      const generatedAppearanceBrief = appearanceBrief.trim() ||
+        appearanceDirectionFromBible(suggestion.productionBible);
+      const generatedWorldBrief = worldBrief.trim() ||
+        worldDirectionFromBible(suggestion.productionBible);
+      const coherentVoiceGender = explicitVoiceGender(
+        `${effectiveBrief} ${suggestion.personality}`,
+      ) ?? suggestion.voiceGender;
+      const coherentVoiceDescription = alignVoiceDescription(
+        suggestion.voiceDescription,
+        coherentVoiceGender,
+      );
       if (target === "all") {
         // Save the complete response before the staged reveal begins. A dev
         // refresh during the animation can therefore restore every generated
@@ -361,11 +458,11 @@ export default function NewCharacterPage() {
           characterBrief: effectiveBrief,
           tagline: suggestion.tagline,
           personality: suggestion.personality,
-          appearanceBrief,
-          worldBrief,
-          voiceGender: suggestion.voiceGender,
+          appearanceBrief: generatedAppearanceBrief,
+          worldBrief: generatedWorldBrief,
+          voiceGender: coherentVoiceGender,
           voicePreset: VOICE_PRESETS[VOICE_PRESETS.length - 1],
-          customVoice: suggestion.voiceDescription,
+          customVoice: coherentVoiceDescription,
           sfxPreset: SFX_PRESETS[SFX_PRESETS.length - 1],
           customSfx: suggestion.signatureSfx,
           scorePreset: SCORE_PRESETS[SCORE_PRESETS.length - 1],
@@ -382,10 +479,14 @@ export default function NewCharacterPage() {
         const reveal: Array<[string, () => void]> = [
           ["tagline", () => setTagline(suggestion.tagline)],
           ["personality", () => setPersonality(suggestion.personality)],
+          ["look", () => {
+            setAppearanceBrief(generatedAppearanceBrief);
+            setWorldBrief(generatedWorldBrief);
+          }],
           ["voice", () => {
-            setVoiceGender(suggestion.voiceGender);
+            setVoiceGender(coherentVoiceGender);
             setVoicePreset(VOICE_PRESETS[VOICE_PRESETS.length - 1]);
-            setCustomVoice(suggestion.voiceDescription);
+            setCustomVoice(coherentVoiceDescription);
           }],
           ["sfx", () => {
             setSfxPreset(SFX_PRESETS[SFX_PRESETS.length - 1]);
@@ -419,9 +520,9 @@ export default function NewCharacterPage() {
         if (target === "tagline") setTagline(suggestion.tagline);
         if (target === "personality") setPersonality(suggestion.personality);
         if (target === "voice") {
-          setVoiceGender(suggestion.voiceGender);
+          setVoiceGender(coherentVoiceGender);
           setVoicePreset(VOICE_PRESETS[VOICE_PRESETS.length - 1]);
-          setCustomVoice(suggestion.voiceDescription);
+          setCustomVoice(coherentVoiceDescription);
         }
         if (target === "sfx") {
           setSfxPreset(SFX_PRESETS[SFX_PRESETS.length - 1]);
@@ -507,7 +608,10 @@ export default function NewCharacterPage() {
         <p className="mt-1 text-sm text-grey">Name them. Describe the vibe. Chaplin builds the rest.</p>
       </div>
 
-      <section className="mb-6" aria-label="Actor production pipeline">
+      <section
+        className="sticky top-12 z-[55] -mx-4 mb-6 border-y border-line/70 bg-paper/95 px-4 py-3 shadow-[0_10px_24px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:-mx-6 sm:px-6"
+        aria-label="Actor production pipeline"
+      >
         <div className="grid grid-cols-5 gap-1.5">
           {[
             ["01", "Identity"],
@@ -575,38 +679,31 @@ export default function NewCharacterPage() {
         <details className="overflow-hidden rounded-md border border-accent/50 bg-accent/5" data-magic-character-assist>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-accent/[0.05]">
             <span>
-              <span className="block text-sm font-semibold">✦ Magic character assist</span>
-              <span className="mt-0.5 block text-[11px] text-grey">Describe them once. Chaplin fills the identity.</span>
+              <span className="block text-sm font-semibold">✦ Magic build</span>
+              <span className="mt-0.5 block text-[11px] text-grey">One sentence → full identity</span>
             </span>
             <span className="shrink-0 rounded-full border border-accent/50 px-3 py-1 text-[10px] font-semibold text-accent">Open</span>
           </summary>
           <div className="border-t border-line p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div>
-              <p className="text-sm font-semibold">One brief, editable results</p>
-              <p className="mt-1 text-xs text-grey">
-                Name the actor, pick the archetype mix, then let AI prefill every field. Nothing is generated or charged until you choose it.
-              </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-grey">Describe the actor in one or two lines.</p>
+              <div className="shrink-0">
+                <SuggestButton
+                  target="all"
+                  activeTarget={suggestingTarget}
+                  onClick={() => void suggestCharacter("all")}
+                />
+              </div>
             </div>
-            <div className="shrink-0">
-              <SuggestButton
-                target="all"
-                activeTarget={suggestingTarget}
-                onClick={() => void suggestCharacter("all")}
-              />
-            </div>
-          </div>
-          <textarea
-            data-character-field="brief"
-            value={characterBrief}
-            onChange={(event) => setCharacterBrief(event.target.value)}
-            rows={2}
-            placeholder="Required: e.g. A retired railway detective who solves crimes she caused in a past life. Kind in public, ruthless at chess."
-            className="mt-3 w-full border border-line rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none bg-paper"
-          />
-          <p className="mt-1 text-[11px] text-grey">
-            Minimum a line or two. This brief is treated as canon for every generated field.
-          </p>
+            <textarea
+              data-character-field="brief"
+              value={characterBrief}
+              onChange={(event) => setCharacterBrief(event.target.value)}
+              rows={2}
+              placeholder="e.g. A retired railway detective—kind in public, ruthless at chess."
+              className="mt-3 w-full resize-none rounded-sm border border-line bg-paper px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            />
+            <p className="mt-1 text-[10px] text-grey">Autosaved · Everything stays editable</p>
           {suggestingTarget && (
             <div
               className="mt-3 overflow-hidden rounded-xl border border-accent/35 bg-[linear-gradient(135deg,rgba(244,67,108,0.10),rgba(26,52,38,0.28))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
@@ -617,17 +714,17 @@ export default function NewCharacterPage() {
               aria-valuemax={100}
               aria-valuenow={progress}
             >
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/40 bg-accent/10">
+                  <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-accent/40 bg-accent/10">
                     <span className="absolute inset-1 animate-ping rounded-full bg-accent/15" />
-                    <span className="relative h-2 w-2 rounded-full bg-accent shadow-[0_0_12px_var(--accent)]" />
+                    <span className="relative h-2.5 w-2.5 rounded-full bg-accent shadow-[0_0_14px_var(--accent)]" />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-[9px] font-semibold uppercase tracking-[0.2em] text-grey">
-                      Magic identity build
+                      Building now
                     </span>
-                    <span className="mt-0.5 block truncate text-xs font-semibold text-ink">
+                    <span className="mt-0.5 block text-sm font-semibold leading-5 text-ink">
                       {suggestingTarget === "all"
                         ? IDENTITY_BUILD_STAGES[buildStage].label
                         : `Writing ${suggestingTarget}`}
@@ -638,6 +735,12 @@ export default function NewCharacterPage() {
                   {progress}%
                 </span>
               </div>
+
+              {suggestingTarget === "all" && (
+                <p className="mt-2.5 rounded-lg border border-white/[0.06] bg-black/15 px-3 py-2 text-[10px] leading-4 text-grey">
+                  {IDENTITY_BUILD_STAGES[buildStage].detail}
+                </p>
+              )}
 
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/25">
                 <div
@@ -654,7 +757,11 @@ export default function NewCharacterPage() {
                     <div key={stage.label} className="min-w-0">
                       <span
                         className={`block h-0.5 rounded-full transition-colors ${
-                          index <= buildStage ? "bg-accent" : "bg-white/10"
+                          index < buildStage
+                            ? "bg-accent-secondary"
+                            : index === buildStage
+                              ? "bg-accent"
+                              : "bg-white/10"
                         }`}
                       />
                       <span
@@ -662,7 +769,7 @@ export default function NewCharacterPage() {
                           index === buildStage ? "font-semibold text-ink" : "text-grey/70"
                         }`}
                       >
-                        {stage.label}
+                        {stage.shortLabel}
                       </span>
                     </div>
                   ))}
@@ -670,7 +777,11 @@ export default function NewCharacterPage() {
               )}
 
               <div className="mt-2.5 flex items-center justify-between gap-3 text-[9px] text-grey">
-                <span>Usually ready in 30–55 seconds</span>
+                <span>
+                  {suggestingTarget === "all" && buildStage < IDENTITY_BUILD_STAGES.length - 1
+                    ? `Next: ${IDENTITY_BUILD_STAGES[buildStage + 1].shortLabel}`
+                    : "Usually ready in 30–55 seconds"}
+                </span>
                 <span className="shrink-0 tabular-nums">{elapsedSeconds}s elapsed</span>
               </div>
             </div>
@@ -839,38 +950,48 @@ export default function NewCharacterPage() {
           </span>
         </div>
 
-        <div className="flex flex-col gap-2 text-sm">
-          <span className="font-medium">License</span>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {(["open", "paid", "approval"] as LicenseType[]).map((l) => (
+        <div className="flex flex-col gap-2.5 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium">License</span>
+            <span className="text-[10px] text-grey">{LICENSE_OPTIONS[licenseType].detail}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Actor license">
+            {(["open", "paid", "approval"] as LicenseType[]).map((option) => (
               <button
                 type="button"
-                key={l}
-                onClick={() => setLicenseType(l)}
-                className={`text-left border rounded-md p-3 transition-colors ${
-                  licenseType === l ? "border-accent bg-accent/10" : "border-line hover:border-accent"
+                key={option}
+                onClick={() => setLicenseType(option)}
+                aria-pressed={licenseType === option}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold transition ${
+                  licenseType === option
+                    ? "bg-accent text-paper shadow-[0_8px_24px_rgba(244,63,105,0.2)]"
+                    : "bg-white/[0.04] text-grey hover:bg-white/[0.08] hover:text-ink"
                 }`}
               >
-                <Chip label={LICENSE_LABEL[l]} hue={LICENSE_HUE[l]} filled={licenseType === l} />
-                <p className="text-[11px] text-grey mt-2">
-                  {l === "open" && "Free to cast. Fans can still tip."}
-                  {l === "paid" && "Charges a fee every casting."}
-                  {l === "approval" && "You sign off on each story first."}
-                </p>
+                <span
+                  aria-hidden="true"
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-sm ${
+                    licenseType === option ? "bg-paper/15" : "bg-white/[0.06] text-ink"
+                  }`}
+                >
+                  {LICENSE_OPTIONS[option].icon}
+                </span>
+                {LICENSE_OPTIONS[option].label}
               </button>
             ))}
           </div>
           {licenseType !== "open" && (
-            <label className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-grey">Fee per casting (reels)</span>
+            <label className="mt-0.5 flex items-center gap-2">
+              <span className="text-xs text-grey">Casting fee</span>
               <input
                 type="number"
                 min={5}
                 max={200}
                 value={royaltyRate}
                 onChange={(e) => setRoyaltyRate(Number(e.target.value))}
-                className="w-24 border border-line rounded-sm px-2 py-1 focus:outline-none focus:border-accent"
+                className="w-20 rounded-full border border-line bg-transparent px-3 py-1.5 focus:border-accent focus:outline-none"
               />
+              <span className="text-[10px] text-grey">reels</span>
             </label>
           )}
         </div>

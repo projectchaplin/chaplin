@@ -3,7 +3,7 @@ import { getMediaPipelineRun, transitionMediaPipelineStep } from "@/lib/server/m
 
 export const runtime = "nodejs";
 
-const actions: PipelineStepAction[] = ["queue", "start", "complete", "approve", "reject", "retry", "skip", "cancel"];
+const actions: PipelineStepAction[] = ["queue", "start", "complete", "approve", "reject", "retry", "fail", "skip", "cancel"];
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

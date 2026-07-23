@@ -16,6 +16,9 @@ import {
   composeVoiceDesignPrompt,
 } from "@/lib/production-prompting";
 import type { Character } from "@/lib/types";
+import { compactVoicePreview } from "@/lib/voice-preview";
+import { dialogueForEditor } from "@/lib/dialogue-performance";
+import { getPipelineConfig } from "@/lib/server/pipeline-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -35,8 +38,8 @@ const VISUAL_FIELDS = new Set<QuickField>(["identity-image", "image", "video"]);
 
 const FIELD_RULES: Record<QuickField, string> = {
   "voice-description": "Write only an ElevenLabs Voice Design prompt using this order: native language and dialect; gender presentation and age range; quality; 2-5 word persona; 2-3 emotions; timbre, pitch, resonance, pacing, intonation, and pressure behavior. Do not include biography, camera language, SFX, reverb, echo, phone, tape, or celebrity imitation. 65-105 words.",
-  "voice-preview": "Write one or two short spoken lines that reveal the actor's distinctive personality and test pacing, emotion, pronunciation, and vocal range. It must sound natural when performed in 6-12 seconds. Output dialogue only.",
-  dialogue: "Write a concise, performable line in this actor's established personality and locked voice. Preserve the user's intent, use subtext rather than exposition, and make it memorable without catchphrase clichés. Output dialogue only.",
+  "voice-preview": "Write one natural spoken sentence of 5-8 words. It must reveal the actor's personality without pause-heavy punctuation and perform in 4-5 seconds, never more than 7 seconds. Output dialogue only.",
+  dialogue: "Write a concise, performable line in this actor's established personality and locked voice. Preserve the user's intent, use subtext rather than exposition, and make it memorable without catchphrase clichés. Output spoken words only: no speaker label, parentheses, brackets, stage directions, or written pause cues. Use punctuation for cadence. Output dialogue only.",
   sfx: "Write only an ElevenLabs 1-2 second non-musical signature-sound prompt. Translate the actor's personality into one physical source, a precise material texture, a close acoustic distance, one unusual identifying detail, and a clean stop. It must work as a short repeatable sonic logo, not a sequence, biography, ambience bed, or score. No speech, voice, melody, riser, or trailer braam. 30-55 words.",
   theme: "Write only an Eleven Music prompt for a 12-second instrumental ident. Include BPM, key, a three-note motif, exact instruments, 0-3s / 3-8s / 8-12s development, mix priority, and final cadence. No biography, sound-effect sequence, vocals, choir, lyrics, or copyrighted imitation. 55-95 words.",
   "identity-image": "Write only a Seedream 16:9 Identity Hero prompt for the actor's definitive casting image. Use coherent natural-language blocks in this order: PURPOSE; ACTOR with specific repeatable face anchors; VISIBLE PERSONALITY translating want, contradiction, vulnerability, and pressure behavior into expression, hands, posture, weight, and eyeline; SIGNATURE LOOK with exact wardrobe materials and silhouette; one restrained WORLD detail; COMPOSITION with framing, camera height, angle, lens and negative space; physically motivated LIGHT with direction and temperature; LOCKS AND EXCLUSIONS. One person. The image must instantly explain why this actor is castable, not summarize biography or depict a generic archetype. No plot montage, fashion pose, generic hero stance, dialogue, text, logo, UI, or watermark. 220-360 words and under 600 words.",
@@ -52,8 +55,8 @@ function localRewrite(field: QuickField, character: Character, currentText: stri
   const base = currentText || character.tagline;
   const scene = buildScenePackage(character, Math.abs(base.length) % 4);
   if (field === "voice-description") return composeVoiceDesignPrompt(character);
-  if (field === "voice-preview") return character.brollLine || scene.dialogue;
-  if (field === "dialogue") return scene.dialogue;
+  if (field === "voice-preview") return compactVoicePreview(character.brollLine || scene.dialogue);
+  if (field === "dialogue") return dialogueForEditor(scene.dialogue);
   if (field === "sfx") return composeSfxPrompt(character);
   if (field === "theme") return composeThemePrompt(character);
   if (field === "identity-image") return composeIdentityImagePrompt(character);
@@ -96,7 +99,9 @@ export async function POST(request: Request) {
       });
     }
 
-    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    const writingConfig = (await getPipelineConfig()).stages.writing;
+    if (!writingConfig.enabled) throw new Error("AI writing is paused by Super Admin.");
+    const model = writingConfig.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
     const production = VISUAL_FIELDS.has(field) ? await getCharacterProductionState(character.id) : null;
     const visualReference = production?.visualReference ?? null;
     const promptPayload = JSON.stringify({
@@ -141,8 +146,9 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 700,
-        system: `You are Chaplin's production copywriter. Rewrite exactly one field for an original fictional AI actor. Preserve useful user intent, character continuity, and provider constraints. Return only the requested field in structured JSON. ${FIELD_RULES[field]}`,
+        max_tokens: Math.min(2000, writingConfig.maxTokens ?? 700),
+        temperature: writingConfig.temperature ?? 0.65,
+        system: `${writingConfig.promptPrelude} You are Chaplin's production copywriter. Rewrite exactly one field for an original fictional AI actor. Preserve useful user intent, character continuity, and provider constraints. Return only the requested field in structured JSON. ${FIELD_RULES[field]}`,
         messages: [{
           role: "user",
           content: messageContent,
@@ -169,7 +175,11 @@ export async function POST(request: Request) {
     const output = data.content?.find((block) => block.type === "text")?.text;
     if (!output) throw new Error("Claude returned no Quick Write result.");
     const result = JSON.parse(output) as { text?: unknown };
-    const text = clean(result.text);
+    const text = field === "voice-preview"
+      ? compactVoicePreview(clean(result.text))
+      : field === "dialogue"
+        ? dialogueForEditor(clean(result.text))
+      : clean(result.text);
     if (!text) throw new Error("Claude returned an empty Quick Write result.");
     const usage = {
       inputTokens: Number(data.usage?.input_tokens ?? 0),

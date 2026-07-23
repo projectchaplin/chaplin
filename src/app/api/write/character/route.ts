@@ -5,6 +5,8 @@ import {
   composeVoiceDesignPrompt,
 } from "@/lib/production-prompting";
 import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
+import { alignVoiceDescription, explicitVoiceGender } from "@/lib/character-coherence";
+import { getPipelineConfig } from "@/lib/server/pipeline-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // json_schema output on this bible runs 35-55s; give real headroom over the wall clock
@@ -26,6 +28,16 @@ function clean(value: unknown, max = 2000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function enforceVoiceCoherence(suggestion: CharacterSuggestion, characterBrief: string) {
+  const voiceGender = explicitVoiceGender(`${characterBrief} ${suggestion.personality}`) ?? suggestion.voiceGender;
+  if (voiceGender === suggestion.voiceGender) return suggestion;
+  return {
+    ...suggestion,
+    voiceGender,
+    voiceDescription: alignVoiceDescription(suggestion.voiceDescription, voiceGender),
+  };
+}
+
 function localSuggestion(input: {
   name: string;
   archetype: Archetype;
@@ -38,6 +50,7 @@ function localSuggestion(input: {
   worldBrief?: string;
 }): CharacterSuggestion {
   const name = input.name || "This actor";
+  const resolvedVoiceGender = explicitVoiceGender(`${input.characterBrief ?? ""} ${input.personality}`) ?? input.voiceGender;
   const identity: Record<string, { hook: string; want: string; edge: string; sound: string; score: string }> = {
     villain: { hook: "makes every threat sound like an invitation", want: "control the room before anyone notices the trap", edge: "polite until resistance becomes interesting", sound: "a signet ring tapping once against cut glass", score: "low sarangi tension over a restrained ticking pulse" },
     mentor: { hook: "has already survived the mistake you are about to make", want: "prepare others without stealing their choice", edge: "patient, observant, and unexpectedly severe when truth is avoided", sound: "prayer beads clicking around one measured breath", score: "warm santoor phrases over a deep, steady drone" },
@@ -62,8 +75,8 @@ function localSuggestion(input: {
   const suggestion = {
     tagline: input.tagline || `${name} ${profile.hook}.`,
     personality: input.personality || `${briefLine ? briefLine.trim() + " " : ""}${name} wants to ${profile.want}. ${name} is ${profile.edge}.${blendEdge} In conversation, ${name} listens for the detail everyone skips, answers with concise wit, and becomes completely still before making a difficult decision. The contradiction is the engine: confidence in action, vulnerability around the people who matter.`,
-    voiceGender: input.voiceGender,
-    voiceDescription: `An original adult ${input.voiceGender} voice: grounded Indian English, clear Hindi and Urdu pronunciation, confident mid-register resonance, conversational pacing, dry comic timing, and controlled authority that intensifies without shouting. Distinctive and repeatable; never an imitation of a real person.`,
+    voiceGender: resolvedVoiceGender,
+    voiceDescription: `An original adult ${resolvedVoiceGender} voice: grounded Indian English, clear Hindi and Urdu pronunciation, confident mid-register resonance, conversational pacing, dry comic timing, and controlled authority that intensifies without shouting. Distinctive and repeatable; never an imitation of a real person.`,
     signatureSfx: `${profile.sound}; a distinctive five-second identity sting with clean foreground detail, subtle cinematic room tone, and no speech or music.`,
     themeScore: `${profile.score}; a memorable 12-second instrumental identity theme with a clear opening motif, controlled lift, and clean ending. No vocals.`,
   };
@@ -72,7 +85,7 @@ function localSuggestion(input: {
       archetype: input.archetype,
       tagline: suggestion.tagline,
       personality: suggestion.personality,
-      voiceGender: input.voiceGender,
+      voiceGender: resolvedVoiceGender,
       voiceDesc: suggestion.voiceDescription,
       sfxDesc: suggestion.signatureSfx,
       themeDesc: suggestion.themeScore,
@@ -160,12 +173,15 @@ export async function POST(request: Request) {
           .map((a) => clean(a, 40) as Archetype)
           .slice(0, 5)
       : [];
+    const characterBrief = clean(body.characterBrief, 1500);
+    const requestedVoiceGender = clean(body.voiceGender, 30) as VoiceGender;
     const input = {
       name,
       archetype: (clean(body.archetype, 40) as Archetype) || archetypeMix[0],
       archetypeMix,
-      characterBrief: clean(body.characterBrief, 1500),
-      voiceGender: clean(body.voiceGender, 30) as VoiceGender,
+      characterBrief,
+      voiceGender: explicitVoiceGender(characterBrief) ??
+        (["feminine", "masculine", "androgynous"].includes(requestedVoiceGender) ? requestedVoiceGender : "androgynous"),
       tagline: clean(body.tagline, 500),
       personality: clean(body.personality, 2000),
       appearanceBrief: clean(body.appearanceBrief, 1200),
@@ -177,7 +193,9 @@ export async function POST(request: Request) {
       return Response.json({ suggestion: localSuggestion(input), provider: "chaplin-local", configured: false });
     }
 
-    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    const writingConfig = (await getPipelineConfig()).stages.writing;
+    if (!writingConfig.enabled) throw new Error("AI writing is paused by Super Admin.");
+    const model = writingConfig.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -187,9 +205,10 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 8000,
+        max_tokens: Math.max(4000, writingConfig.maxTokens ?? 8000),
+        temperature: writingConfig.temperature ?? 0.65,
         thinking: { type: "disabled" },
-        system: "You are Chaplin's casting director, performance director, cinematographer, and story editor. Build an original production-ready fictional actor, not a biography. Every value must be playable, visible, recordable, or usable as a continuity rule. The visual identity is the highest-priority output: infer a face, hair, body presence, signature wardrobe, material texture, palette, setting, camera, and motivated light that express the personality without reducing the actor to an archetype costume. perceivedAge must be an actual narrow visible age range. Each of the three faceAnchors must name concrete repeatable anatomy or surface detail—brow shape or spacing, eye shape or set, nose structure, mouth, jaw, skin texture, scar, mole, or asymmetry—not generic phrases such as 'distinct face' or 'preserve exactly.' Hair must specify length, texture, part or hairline, finish, and grooming. Wardrobe must specify exact garments, cut, materials, colors, wear, and no logos. Silhouette must describe visible proportions, stance, and one recognizable shape. Camera and lighting must be chosen to reveal those anchors and the central personality contradiction. If appearance or world direction is supplied, preserve it exactly; otherwise invent one coherent, culturally grounded, non-celebrity identity. Also create a dramatic want/need contradiction, precise pressure behavior and micro-expression, motivated story engine, visual hook, situation-changing cliffhanger, payoff, motifs, and explicit cliches to avoid. Never imitate a celebrity or copyrighted character. The voice prompt must follow ElevenLabs Voice Design order and contain no FX language. SFX must be a concise physical five-second one-shot. Theme must be a 12-second instrumental identity cue. Do not repeat biography across fields and do not use generic adjectives without observable evidence.",
+        system: `${writingConfig.promptPrelude} You are Chaplin's casting director, performance director, cinematographer, and story editor. Build an original production-ready fictional actor, not a biography. Every value must be playable, visible, recordable, or usable as a continuity rule. The visual identity is the highest-priority output: infer a face, hair, body presence, signature wardrobe, material texture, palette, setting, camera, and motivated light that express the personality without reducing the actor to an archetype costume. perceivedAge must be an actual narrow visible age range. Each of the three faceAnchors must name concrete repeatable anatomy or surface detail—brow shape or spacing, eye shape or set, nose structure, mouth, jaw, skin texture, scar, mole, or asymmetry—not generic phrases such as 'distinct face' or 'preserve exactly.' Hair must specify length, texture, part or hairline, finish, and grooming. Wardrobe must specify exact garments, cut, materials, colors, wear, and no logos. Silhouette must describe visible proportions, stance, and one recognizable shape. Camera and lighting must be chosen to reveal those anchors and the central personality contradiction. If appearance or world direction is supplied, preserve it exactly; otherwise invent one coherent, culturally grounded, non-celebrity identity. Also create a dramatic want/need contradiction, precise pressure behavior and micro-expression, motivated story engine, visual hook, situation-changing cliffhanger, payoff, motifs, and explicit cliches to avoid. Never imitate a celebrity or copyrighted character. Voice coherence is mandatory: explicit pronouns and gender words in characterBrief override an unlocked UI default, and voiceGender plus voiceDescription must agree with each other. The voice prompt must follow ElevenLabs Voice Design order and contain no FX language. SFX must be a concise physical five-second one-shot. Theme must be a 12-second instrumental identity cue. Do not repeat biography across fields and do not use generic adjectives without observable evidence.`,
         messages: [{
           role: "user",
           content: JSON.stringify({
@@ -224,7 +243,7 @@ export async function POST(request: Request) {
       throw new Error("Claude's output was cut off mid-write. Try again.");
     }
     return Response.json({
-      suggestion: parsed,
+      suggestion: enforceVoiceCoherence(parsed, input.characterBrief),
       provider: "anthropic",
       model,
       usage: data.usage,

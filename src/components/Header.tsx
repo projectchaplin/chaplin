@@ -7,8 +7,11 @@ import { useChaplinStore } from "@/lib/store";
 import type { AppRole } from "@/lib/types";
 import Avatar from "@/components/Avatar";
 import HydrateStore from "@/components/HydrateStore";
-
-type AuthIdentity = { id: string; email: string; name: string; role: "creator" | "brand" | "admin" };
+import {
+  clearClientAuthIdentity,
+  getClientAuthIdentity,
+  type ClientAuthIdentity,
+} from "@/lib/client-auth";
 
 const ROLE_META: Record<AppRole, { label: string; short: string; description: string }> = {
   maker: {
@@ -43,7 +46,8 @@ export default function Header() {
   const syncAuthenticatedUser = useChaplinStore((state) => state.syncAuthenticatedUser);
   const [open, setOpen] = useState(false);
   const [compact, setCompact] = useState(false);
-  const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
+  const [authIdentity, setAuthIdentity] = useState<ClientAuthIdentity | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     const updateHeader = () => setCompact(window.scrollY > 48);
@@ -55,22 +59,35 @@ export default function Header() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/auth", { cache: "no-store" })
-      .then(async (response) => response.ok ? response.json() as Promise<{ identity: AuthIdentity | null }> : { identity: null })
-      .then(({ identity }) => {
-        if (cancelled || !identity) return;
+    void getClientAuthIdentity()
+      .then((identity) => {
+        if (cancelled) return;
         setAuthIdentity(identity);
-        syncAuthenticatedUser(identity);
+        setAuthReady(true);
+        if (identity) syncAuthenticatedUser(identity);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuthIdentity(null);
+          setAuthReady(true);
+        }
       });
     return () => { cancelled = true; };
   }, [syncAuthenticatedUser]);
 
   async function signOut() {
     await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
+    clearClientAuthIdentity();
     window.location.assign("/");
   }
 
   const currentUser = users.find((user) => user.id === currentUserId) ?? users[0];
+  const headerName = authIdentity?.name ?? (authReady ? "Preview mode" : currentUser?.name);
+  const headerStatus = authIdentity
+    ? ROLE_META[activeRole].label
+    : authReady
+      ? "Not signed in"
+      : "Checking account";
   const contextLink = activeRole === "admin"
     ? { href: "/admin", label: "Admin" }
     : activeRole === "brand"
@@ -78,10 +95,11 @@ export default function Header() {
     : { href: "/feed", label: "Creator feed" };
 
   return (
-    <header
-      data-header-compact={compact ? "true" : "false"}
-      className={`sticky top-0 z-[70] border-b backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-300 ${compact ? "border-line/70 bg-paper/95 shadow-lg shadow-black/10" : "border-line bg-paper/90"}`}
-    >
+    <>
+      <header
+        data-header-compact={compact ? "true" : "false"}
+        className={`fixed inset-x-0 top-0 z-[70] border-b backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-300 ${compact ? "border-line/70 bg-paper/95 shadow-lg shadow-black/10" : "border-line bg-paper/90"}`}
+      >
       <HydrateStore />
       <div className={`max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3 transition-[height] duration-300 ${compact ? "h-12" : "h-16"}`}>
         <Link
@@ -132,13 +150,18 @@ export default function Header() {
             >
               {currentUser && (
                 <span className="accent-ring">
-                  <Avatar hue={currentUser.avatarHue} label={currentUser.avatarInitial} src={currentUser.imageUrl} size={32} />
+                  <Avatar
+                    hue={authIdentity ? currentUser.avatarHue : 205}
+                    label={authIdentity ? currentUser.avatarInitial : "P"}
+                    src={authIdentity ? currentUser.imageUrl : undefined}
+                    size={32}
+                  />
                 </span>
               )}
               <span className={`text-left overflow-hidden transition-all duration-300 ${compact ? "max-w-0 pr-0 opacity-0" : "max-w-32 pr-2 opacity-100 sm:max-w-44"}`}>
-                <span className="block text-xs sm:text-sm leading-tight font-medium truncate">{currentUser?.name}</span>
+                <span className="block text-xs sm:text-sm leading-tight font-medium truncate">{headerName}</span>
                 <span className="block leading-tight text-[9px] sm:text-[10px] text-accent uppercase tracking-wide truncate">
-                  {ROLE_META[activeRole].label}
+                  {headerStatus}
                 </span>
               </span>
             </button>
@@ -201,6 +224,11 @@ export default function Header() {
           </div>
         </div>
       </div>
-    </header>
+      </header>
+      <div
+        aria-hidden="true"
+        className={`shrink-0 transition-[height] duration-300 ${compact ? "h-12" : "h-16"}`}
+      />
+    </>
   );
 }

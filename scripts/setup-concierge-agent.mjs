@@ -88,8 +88,13 @@ const agentBody = {
       },
     },
     tts: {
-      model_id: "eleven_turbo_v2",
+      // ElevenLabs requires the English-only Agent path to use Flash v2.
+      // The popup's direct TTS reply path uses multilingual Flash v2.5.
+      model_id: "eleven_flash_v2",
       voice_id: "xMagNCpMgZ83QOEsHNre",
+      stability: 0.42,
+      similarity_boost: 0.82,
+      speed: 0.98,
     },
   },
 };

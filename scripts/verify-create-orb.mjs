@@ -218,7 +218,7 @@ async function main() {
       setTimeout(() => button?.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true })), 80);
       return true;
     })()`);
-    await sleep(500);
+    await sleep(1500);
     const pushToTalk = await cdp.evaluate(`(() => ({
       intentCalls: window.__intentCalls,
       conversation: document.querySelector("[data-agent-line]")?.parentElement?.textContent,

@@ -55,6 +55,27 @@ export function IconHome({ className }: IconProps) {
   );
 }
 
+export function IconFeed({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <circle cx="8" cy="9" r="1.4" />
+      <path d="M11.5 8.2H17M11.5 11H16M7 15h10" />
+    </svg>
+  );
+}
+
+export function IconActors({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="9" cy="8" r="3" />
+      <circle cx="16.5" cy="9.5" r="2.2" />
+      <path d="M3.8 20c.8-4.1 2.5-6.2 5.2-6.2s4.5 2.1 5.2 6.2" />
+      <path d="M14.1 14.3c3.3-.8 5.4 1.1 6.1 4.6" />
+    </svg>
+  );
+}
+
 export function IconMask({ className }: IconProps) {
   return (
     <svg {...base} className={className}>
@@ -128,6 +149,18 @@ export function IconWaveform({ className }: IconProps) {
   return (
     <svg {...base} className={className}>
       <path d="M3 12h2l1.5-5 3 10 3-13 3 16 2.5-8H21" />
+    </svg>
+  );
+}
+
+export function IconShuffle({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M3 7h3.2c4.8 0 5.8 10 10.6 10H21" />
+      <path d="m18 14 3 3-3 3" />
+      <path d="M3 17h3.2c2.2 0 3.6-2.1 4.9-4.4" />
+      <path d="M13.2 8.8C14.2 7.7 15.3 7 16.8 7H21" />
+      <path d="m18 4 3 3-3 3" />
     </svg>
   );
 }

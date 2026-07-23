@@ -3,13 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ConciergeOrb, {
   type ConciergeOrbHandle,
   type ConciergeOrbState,
   type ConciergeQuickOption,
 } from "@/components/ConciergeOrb";
-import { IconFilm, IconHome, IconMask } from "@/components/Icons";
+import { IconActors, IconFeed, IconFilm } from "@/components/Icons";
 import { useChaplinStore } from "@/lib/store";
 
 const CREATE_OPTIONS: Record<"brand" | "creator" | "admin", ConciergeQuickOption[]> = {
@@ -67,16 +67,30 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function isCreationWorkspace(pathname: string) {
+  return (
+    pathname === "/create" ||
+    pathname === "/characters/new" ||
+    pathname.startsWith("/studio/write") ||
+    pathname.startsWith("/series/new") ||
+    pathname.startsWith("/productions/")
+  );
+}
+
 export default function BottomNav() {
   const pathname = usePathname();
   const activeRole = useChaplinStore((state) => state.activeRole);
   const [createOpenAt, setCreateOpenAt] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<ConciergeOrbState>("idle");
-  const conciergeRef = useRef<ConciergeOrbHandle>(null);
+  const conciergeRef = useRef<ConciergeOrbHandle | null>(null);
+  const holdRequestedRef = useRef(false);
+  const holdTimerRef = useRef<number | null>(null);
   const pointerHeldRef = useRef(false);
-  const startWhenReadyRef = useRef(false);
-  const openedFromPointerRef = useRef(false);
+  const holdTriggeredRef = useRef(false);
+  const suppressClickRef = useRef(false);
   const createOpen = createOpenAt === pathname;
+  const assistantMode = isCreationWorkspace(pathname);
+  const centerLabel = assistantMode ? "Assist" : "Create";
   const createOptions = activeRole === "brand"
     ? CREATE_OPTIONS.brand
     : activeRole === "admin"
@@ -89,15 +103,55 @@ export default function BottomNav() {
     setCreateOpenAt((openAt) => openAt === pathname ? null : pathname);
   }
 
-  useEffect(() => {
-    if (!createOpen || !startWhenReadyRef.current || !pointerHeldRef.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      if (!pointerHeldRef.current) return;
-      startWhenReadyRef.current = false;
-      conciergeRef.current?.startPushToTalk();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [createOpen]);
+  const connectConcierge = useCallback((node: ConciergeOrbHandle | null) => {
+    conciergeRef.current = node;
+    if (!node || !holdRequestedRef.current) return;
+    holdRequestedRef.current = false;
+    if (pointerHeldRef.current) node.startPushToTalk();
+  }, []);
+
+  useEffect(() => () => {
+    if (holdTimerRef.current !== null) window.clearTimeout(holdTimerRef.current);
+  }, []);
+
+  function startOrbHold(event: React.PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0 || orbState === "thinking" || orbState === "speaking") return;
+    pointerHeldRef.current = true;
+    holdTriggeredRef.current = false;
+    suppressClickRef.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTriggeredRef.current = true;
+      suppressClickRef.current = true;
+      if (createOpen) conciergeRef.current?.startPushToTalk();
+      else {
+        holdRequestedRef.current = true;
+        setCreateOpenAt(pathname);
+      }
+    }, 260);
+  }
+
+  function finishOrbHold() {
+    pointerHeldRef.current = false;
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (holdTriggeredRef.current) conciergeRef.current?.stopPushToTalk();
+  }
+
+  function handleOrbClick() {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    if (!createOpen) {
+      setCreateOpenAt(pathname);
+      return;
+    }
+    if (orbState === "listening") conciergeRef.current?.stopPushToTalk();
+    else if (orbState === "idle") conciergeRef.current?.startPushToTalk();
+  }
 
   return (
     <nav
@@ -107,9 +161,10 @@ export default function BottomNav() {
       {createOpen && (
         <div className="pointer-events-auto">
           <ConciergeOrb
-            ref={conciergeRef}
+            ref={connectConcierge}
             role={activeRole}
             quickOptions={createOptions}
+            assistantOnly={assistantMode}
             onStateChange={setOrbState}
             onClose={() => {
               setOrbState("idle");
@@ -122,55 +177,40 @@ export default function BottomNav() {
       <div className="pointer-events-auto relative mx-auto w-full max-w-[34rem]">
         <button
           type="button"
-          aria-label={createOpen ? "Hold to talk to Chaplin" : "Create"}
+          aria-label={
+            createOpen
+              ? orbState === "listening"
+                ? "Release to send your idea"
+                : "Hold to speak to Chaplin"
+              : assistantMode
+                ? "Open Chaplin assistant"
+                : "Open Create"
+          }
           aria-expanded={createOpen}
-          onClick={() => {
-            if (openedFromPointerRef.current) {
-              openedFromPointerRef.current = false;
-              return;
-            }
-            if (!createOpen) toggleCreate();
-          }}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            pointerHeldRef.current = true;
-            if (createOpen) {
-              conciergeRef.current?.startPushToTalk();
-            } else {
-              openedFromPointerRef.current = true;
-              startWhenReadyRef.current = true;
-              setCreateOpenAt(pathname);
-            }
-          }}
-          onPointerUp={() => {
-            pointerHeldRef.current = false;
-            startWhenReadyRef.current = false;
-            conciergeRef.current?.stopPushToTalk();
-          }}
-          onPointerCancel={() => {
-            pointerHeldRef.current = false;
-            startWhenReadyRef.current = false;
-            conciergeRef.current?.stopPushToTalk();
-          }}
+          onClick={handleOrbClick}
+          onPointerDown={startOrbHold}
+          onPointerUp={finishOrbHold}
+          onPointerCancel={finishOrbHold}
           onKeyDown={(event) => {
             if (event.repeat || (event.key !== " " && event.key !== "Enter")) return;
+            event.preventDefault();
             pointerHeldRef.current = true;
-            if (createOpen) {
-              conciergeRef.current?.startPushToTalk();
-            } else {
-              startWhenReadyRef.current = true;
+            if (createOpen) conciergeRef.current?.startPushToTalk();
+            else {
+              holdRequestedRef.current = true;
               setCreateOpenAt(pathname);
             }
           }}
           onKeyUp={(event) => {
             if (event.key !== " " && event.key !== "Enter") return;
+            event.preventDefault();
             pointerHeldRef.current = false;
-            startWhenReadyRef.current = false;
             conciergeRef.current?.stopPushToTalk();
           }}
-          className="absolute left-1/2 top-0 z-10 flex h-[4.25rem] w-[4.25rem] -translate-x-1/2 -translate-y-[52%] items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff2f6d_8%,#d57eaf_48%,#20d9d2_88%)] p-[2px] shadow-[0_0_28px_rgba(32,217,210,0.25),0_0_24px_rgba(255,47,109,0.2)] transition-transform duration-200 hover:-translate-y-[58%] sm:h-[4.75rem] sm:w-[4.75rem]"
+          onContextMenu={(event) => event.preventDefault()}
+          className="absolute left-1/2 top-0 z-10 flex h-[4.25rem] w-[4.25rem] touch-none select-none -translate-x-1/2 -translate-y-[52%] items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff2f6d_8%,#d57eaf_48%,#20d9d2_88%)] p-[2px] shadow-[0_0_12px_rgba(32,217,210,0.14),0_0_10px_rgba(255,47,109,0.12)] transition-transform duration-200 hover:-translate-y-[58%] sm:h-[4.75rem] sm:w-[4.75rem]"
           data-create-toggle
-          data-create-orb={createOpen ? "active" : "idle"}
+          data-create-orb={assistantMode ? "assistant" : createOpen ? "active" : "idle"}
           data-push-to-talk={createOpen ? "true" : undefined}
           data-orb-state={createOpen ? orbState : "closed"}
         >
@@ -182,9 +222,15 @@ export default function BottomNav() {
           )}
           <span className="flex h-full w-full items-center justify-center rounded-full bg-[#090b08] shadow-[inset_0_0_22px_rgba(255,255,255,0.05)]">
             <span aria-hidden="true" className="relative h-[82%] w-[82%]">
-              <span className={`absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,#ff5c8a,transparent_52%),radial-gradient(circle_at_70%_72%,#20d9d2,transparent_54%),radial-gradient(circle_at_50%_48%,#776dff,transparent_70%),#241020] shadow-[inset_0_0_16px_rgba(255,255,255,0.09),0_0_20px_rgba(32,217,210,0.38)] ${orbState === "listening" ? "animate-pulse" : ""}`} />
-              <span className={`absolute inset-0 flex items-center justify-center font-light text-white drop-shadow-md ${createOpen ? "text-[8px] font-bold uppercase tracking-wide" : "-mt-0.5 text-[2rem]"}`}>
-                {createOpen ? (orbState === "listening" ? "Talk" : orbState === "thinking" ? "…" : "Hold") : "+"}
+              <span className="chaplin-orb-alive absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,92,138,0.72),transparent_54%),radial-gradient(circle_at_70%_72%,rgba(32,217,210,0.66),transparent_56%),#160f18] shadow-[inset_0_0_12px_rgba(255,255,255,0.06),0_0_7px_rgba(32,217,210,0.2)]" />
+              <span className="chaplin-orb-life-ring pointer-events-none absolute -inset-1 rounded-full border border-accent-secondary/35" />
+              <span
+                aria-hidden="true"
+                className={`absolute inset-0 flex items-center justify-center pb-0.5 text-[2.25rem] font-extralight leading-none text-white transition sm:text-[2.6rem] ${
+                  orbState === "listening" ? "scale-110" : orbState === "thinking" ? "scale-95 opacity-70" : "scale-100"
+                }`}
+              >
+                +
               </span>
             </span>
           </span>
@@ -197,7 +243,7 @@ export default function BottomNav() {
             className={`${navItemClass} ${isActive(pathname, "/feed") ? "text-white" : "text-white/55 hover:text-white"}`}
           >
             <span className="relative">
-              <IconHome className="h-6 w-6 sm:h-7 sm:w-7" />
+              <IconFeed className="h-6 w-6 sm:h-7 sm:w-7" />
               {isActive(pathname, "/feed") && (
                 <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-[#f34b72] shadow-[0_0_10px_#f34b72]" />
               )}
@@ -210,7 +256,7 @@ export default function BottomNav() {
             aria-current={isActive(pathname, "/characters") ? "page" : undefined}
             className={`${navItemClass} ${isActive(pathname, "/characters") ? "text-white" : "text-white/55 hover:text-white"}`}
           >
-            <IconMask className="h-6 w-6 sm:h-7 sm:w-7" />
+            <IconActors className="h-6 w-6 sm:h-7 sm:w-7" />
             <span>Actors</span>
           </Link>
 
@@ -221,7 +267,7 @@ export default function BottomNav() {
             onClick={toggleCreate}
             className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1.5 pb-2 pt-3 text-[10px] font-semibold tracking-[0.04em] text-white sm:text-[11px]"
           >
-            <span>Create</span>
+            <span>{centerLabel}</span>
           </button>
 
           <Link
@@ -241,9 +287,9 @@ export default function BottomNav() {
             <Image
               src="/brand/chaplin-mark.png"
               alt=""
-              width={32}
-              height={32}
-              className="h-7 w-7 object-contain sm:h-8 sm:w-8"
+              width={36}
+              height={36}
+              className={`h-8 w-8 object-contain transition-transform ${isActive(pathname, "/studio") ? "scale-110" : ""}`}
             />
             <span>Studio</span>
           </Link>

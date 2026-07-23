@@ -33,7 +33,7 @@ export type PipelineStepStatus =
   | "skipped"
   | "cancelled";
 
-export type PipelineStepAction = "queue" | "start" | "complete" | "approve" | "reject" | "retry" | "skip" | "cancel";
+export type PipelineStepAction = "queue" | "start" | "complete" | "approve" | "reject" | "retry" | "fail" | "skip" | "cancel";
 
 export interface PipelineStepDefinition {
   key: string;
@@ -64,6 +64,7 @@ export interface MediaPipelineStep {
   attempt: number;
   maxAttempts: number;
   outputAssetId: string | null;
+  output: Record<string, unknown>;
   errorMessage: string | null;
 }
 

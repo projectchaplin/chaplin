@@ -670,6 +670,66 @@ export async function beginGeneration(input: {
   return data.id as string;
 }
 
+function generationFeedCopy(kind: string, characterName: string, prompt: string | null) {
+  const cleanPrompt = prompt?.replace(/\s+/g, " ").trim().slice(0, 320);
+  if (kind === "dialogue") return `New dialogue take for ${characterName}.${cleanPrompt ? `\n“${cleanPrompt}”` : ""}`;
+  if (kind === "sfx") return `New sound effect for ${characterName}.${cleanPrompt ? ` ${cleanPrompt}` : ""}`;
+  if (kind === "theme") return `New theme for ${characterName}.${cleanPrompt ? ` ${cleanPrompt}` : ""}`;
+  if (kind === "video") return `${characterName} has a new scene in motion.`;
+  if (kind === "gallery") return `New scene frame for ${characterName}.`;
+  if (kind === "avatar") return `${characterName} has a new identity portrait.`;
+  if (kind === "banner") return `${characterName} has a new hero cover.`;
+  return `New production output for ${characterName}.`;
+}
+
+async function publishGenerationToFeed(jobId: string, assetId: string) {
+  const supabase = adminClient();
+  const [jobResult, assetResult] = await Promise.all([
+    supabase.from("generation_jobs").select("character_id,kind").eq("id", jobId).maybeSingle(),
+    supabase.from("media_assets").select("id,kind,url,prompt,created_at").eq("id", assetId).maybeSingle(),
+  ]);
+  assert(jobResult.error, "Load feed generation");
+  assert(assetResult.error, "Load feed asset");
+  const job = jobResult.data;
+  const asset = assetResult.data;
+  if (!job?.character_id || !asset?.url) return;
+
+  const characterResult = await supabase
+    .from("characters")
+    .select("name,maker_id")
+    .eq("id", job.character_id)
+    .maybeSingle();
+  assert(characterResult.error, "Load feed actor");
+  const character = characterResult.data;
+  if (!character?.maker_id) return;
+
+  const existing = await supabase
+    .from("feed_posts")
+    .select("id")
+    .eq("source_asset_id", assetId)
+    .maybeSingle();
+  assert(existing.error, "Check feed generation");
+  if (existing.data) return;
+
+  const kind = String(asset.kind ?? job.kind);
+  const mediaKind = ["dialogue", "sfx", "theme"].includes(kind)
+    ? "audio"
+    : kind === "video"
+      ? "video"
+      : "image";
+  const insert = await supabase.from("feed_posts").insert({
+    author_id: character.maker_id,
+    body: generationFeedCopy(kind, character.name, asset.prompt),
+    media_kind: mediaKind,
+    media_url: asset.url,
+    source_asset_id: assetId,
+    created_at: asset.created_at,
+  });
+  if (insert.error && insert.error.code !== "23505") {
+    throw new Error(`Publish generation to feed: ${insert.error.message}`);
+  }
+}
+
 export async function completeGeneration(
   jobId: string,
   assetId?: string,
@@ -701,6 +761,15 @@ export async function completeGeneration(
     ).error,
     "Complete generation job"
   );
+  if (assetId) {
+    try {
+      await publishGenerationToFeed(jobId, assetId);
+    } catch (feedError) {
+      // The paid provider output is already safely persisted. A social-feed
+      // side effect must never make a successful generation look failed.
+      console.error("Publish generation to feed:", feedError);
+    }
+  }
 }
 
 export async function failGeneration(jobId: string, message: string) {

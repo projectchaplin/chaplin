@@ -6,6 +6,7 @@ import Avatar from "@/components/Avatar";
 import MediaPlayer from "@/components/MediaPlayer";
 import { useChaplinStore } from "@/lib/store";
 import type { FeedMediaKind, FeedPost, FeedReply, SharedFeedPost } from "@/lib/feed-types";
+import { getClientAuthIdentity } from "@/lib/client-auth";
 
 type FeedView = "for-you" | "following";
 const FOLLOWING_STORAGE_KEY = "chaplin-feed-following";
@@ -20,6 +21,7 @@ function relativeTime(value: string) {
 
 function FeedMedia({ kind, url, compact = false }: { kind: FeedMediaKind; url: string; compact?: boolean }) {
   if (kind === "video") return <MediaPlayer src={url} label="Creator video" kind="video" compact />;
+  if (kind === "audio") return <MediaPlayer src={url} label="Creator audio" kind="audio" compact />;
   return (
     // User-posted media can come from any HTTPS host, so it cannot use a static Next Image allowlist.
     // eslint-disable-next-line @next/next/no-img-element
@@ -139,12 +141,12 @@ export default function CreatorFeed({ postId }: { postId?: string }) {
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [feedLive, setFeedLive] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/auth", { cache: "no-store" })
-      .then(async (response) => response.ok ? response.json() as Promise<{ identity: { id: string } | null }> : { identity: null })
-      .then(({ identity }) => {
+    void getClientAuthIdentity()
+      .then((identity) => {
         if (!cancelled) {
           setAuthIdentity(identity);
           setAuthReady(true);
@@ -161,6 +163,7 @@ export default function CreatorFeed({ postId }: { postId?: string }) {
     const data = await response.json() as { posts?: FeedPost[]; error?: string };
     if (!response.ok) throw new Error(data.error || "Could not load the feed.");
     setPosts(data.posts ?? []);
+    setFeedLive(true);
   }, [currentUserId, postId]);
 
   useEffect(() => {
@@ -192,21 +195,25 @@ export default function CreatorFeed({ postId }: { postId?: string }) {
   }
 
   useEffect(() => {
-    let cancelled = false;
-    const query = new URLSearchParams({ viewerId: currentUserId });
-    if (postId) query.set("postId", postId);
-    void fetch(`/api/feed?${query}`, { cache: "no-store" })
-      .then(async (response) => {
-        const data = await response.json() as { posts?: FeedPost[]; error?: string };
-        if (!response.ok) throw new Error(data.error || "Could not load the feed.");
-        return data.posts ?? [];
-      })
-      .then((nextPosts) => { if (!cancelled) setPosts(nextPosts); })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load the feed.");
+    let active = true;
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      void load().catch((loadError: unknown) => {
+        if (active) {
+          setFeedLive(false);
+          setError(loadError instanceof Error ? loadError.message : "Could not load the feed.");
+        }
       });
-    return () => { cancelled = true; };
-  }, [currentUserId, postId]);
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 8000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [load]);
 
   async function publish() {
     if (!body.trim() && !mediaUrl.trim()) return;
@@ -233,7 +240,21 @@ export default function CreatorFeed({ postId }: { postId?: string }) {
     <div className="min-w-0">
       <header className="border-b border-line px-4 pt-5 sm:px-0 sm:pt-0">
         {postId && <Link href="/feed" className="text-xs text-grey hover:text-accent">← Feed</Link>}
-        <div className="mt-1 flex items-end justify-between gap-3 pb-4"><div><p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">Chaplin creators</p><h1 className="reel-title text-3xl">{title}</h1></div>{!postId && <Link href="/create" className="rounded-full border border-line px-4 py-2 text-xs hover:border-accent">Write</Link>}</div>
+        <div className="mt-1 flex items-end justify-between gap-3 pb-4">
+          <div>
+            <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">
+              Chaplin creators
+              {!postId && (
+                <span className={`flex items-center gap-1 text-[8px] tracking-[0.12em] ${feedLive ? "text-emerald-400" : "text-grey"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${feedLive ? "animate-pulse bg-emerald-400" : "bg-grey"}`} />
+                  Live
+                </span>
+              )}
+            </p>
+            <h1 className="reel-title text-3xl">{title}</h1>
+          </div>
+          {!postId && <Link href="/create" className="hidden rounded-full border border-line px-4 py-2 text-xs hover:border-accent sm:inline-flex">Write</Link>}
+        </div>
         {!postId && <div className="flex gap-6" aria-label="Feed views">
           {(["for-you", "following"] as FeedView[]).map((option) => <button key={option} type="button" onClick={() => setView(option)} className={`border-b-2 pb-3 text-sm font-semibold transition-colors ${view === option ? "border-accent text-ink" : "border-transparent text-grey hover:text-ink"}`}>{option === "for-you" ? "For you" : "Following"}</button>)}
         </div>}
@@ -244,8 +265,8 @@ export default function CreatorFeed({ postId }: { postId?: string }) {
           {currentUser && <Avatar hue={currentUser.avatarHue} label={currentUser.name} src={currentUser.imageUrl} size={42} />}
           <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={3} maxLength={2000} placeholder="Share a scene, a question, a first cut, or what you learned…" className="min-w-0 flex-1 resize-none bg-transparent text-base leading-6 outline-none placeholder:text-grey" />
         </div>
-        {showMedia && <div className="ml-12 mt-3 flex gap-2"><select value={mediaKind} onChange={(event) => setMediaKind(event.target.value as FeedMediaKind)} className="rounded-md border border-line bg-paper-dim px-2 text-xs"><option value="image">Image</option><option value="video">Video</option></select><input value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="Paste one image or video URL" className="min-w-0 flex-1 rounded-md border border-line bg-paper-dim px-3 py-2 text-xs focus:border-accent focus:outline-none" /></div>}
-        <div className="ml-12 mt-3 flex items-center justify-between gap-3 border-t border-line pt-3"><button type="button" onClick={() => setShowMedia((value) => !value)} className="text-xs text-accent">{showMedia ? "Remove attachment" : "+ One image or video"}</button><button type="button" disabled={busy || (!body.trim() && !mediaUrl.trim())} onClick={publish} className="rounded-full bg-accent px-5 py-2 text-xs font-semibold text-white disabled:opacity-40">{busy ? "Posting…" : "Post"}</button></div>
+        {showMedia && <div className="ml-12 mt-3 flex gap-2"><select value={mediaKind} onChange={(event) => setMediaKind(event.target.value as FeedMediaKind)} className="rounded-md border border-line bg-paper-dim px-2 text-xs"><option value="image">Image</option><option value="video">Video</option><option value="audio">Audio</option></select><input value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="Paste one media URL" className="min-w-0 flex-1 rounded-md border border-line bg-paper-dim px-3 py-2 text-xs focus:border-accent focus:outline-none" /></div>}
+        <div className="ml-12 mt-3 flex items-center justify-between gap-3 border-t border-line pt-3"><button type="button" onClick={() => setShowMedia((value) => !value)} className="text-xs text-accent">{showMedia ? "Remove attachment" : "+ Add media"}</button><button type="button" disabled={busy || (!body.trim() && !mediaUrl.trim())} onClick={publish} className="rounded-full bg-accent px-5 py-2 text-xs font-semibold text-white disabled:opacity-40">{busy ? "Posting…" : "Post"}</button></div>
       </section>}
       {!postId && authReady && !authIdentity && <section className="border-b border-line px-4 py-6 sm:px-0">
         <p className="reel-title text-xl">Join the conversation.</p>

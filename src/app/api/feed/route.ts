@@ -32,10 +32,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as Record<string, unknown>;
     const postBody = clean(body.body, 2000);
     const url = mediaUrl(body.mediaUrl);
-    const kind = body.mediaKind === "image" || body.mediaKind === "video" ? body.mediaKind as FeedMediaKind : undefined;
+    const kind = body.mediaKind === "image" || body.mediaKind === "video" || body.mediaKind === "audio"
+      ? body.mediaKind as FeedMediaKind
+      : undefined;
     const sharedPostId = clean(body.sharedPostId, 80) || undefined;
     if (!postBody && !url && !sharedPostId) throw new Error("Write something or attach one image or video.");
-    if (Boolean(url) !== Boolean(kind)) throw new Error("Choose whether the attachment is an image or video.");
+    if (Boolean(url) !== Boolean(kind)) throw new Error("Choose whether the attachment is an image, video, or audio file.");
     const id = await createFeedPost({ authorId: identity.id, body: postBody, mediaKind: kind, mediaUrl: url || undefined, sharedPostId });
     return Response.json({ id }, { status: 201 });
   } catch (error) {

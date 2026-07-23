@@ -14,14 +14,21 @@ import {
 } from "@/lib/server/supabase-admin";
 import { calculateGenerationBilling } from "@/lib/server/billing";
 import type { Character } from "@/lib/types";
+import { compactVoicePreview } from "@/lib/voice-preview";
+import { dialogueForSpeech } from "@/lib/dialogue-performance";
+import {
+  settingBoolean,
+  settingNumber,
+  settingString,
+  type PipelineStageConfig,
+} from "@/lib/pipeline-config";
+import { getPipelineConfig } from "@/lib/server/pipeline-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const ELEVEN_API = "https://api.elevenlabs.io/v1";
 const MODEL_ARK_API = "https://ark.ap-southeast.bytepluses.com/api/v3";
-const SEEDREAM_MODEL = "seedream-4-5-251128";
-const SEEDANCE_MODEL = "seedance-1-5-pro-251215";
 const DIALOGUE_MODEL = "eleven_multilingual_v2";
 const DIALOGUE_VOICE_SETTINGS = {
   stability: 0.78,
@@ -50,6 +57,24 @@ function modelArkKey() {
     throw new Error("SEEDANCE_API_KEY (or SEEDREAM_API_KEY) is not configured.");
   }
   return key;
+}
+
+function requireStage(stage: PipelineStageConfig, label: string) {
+  if (!stage.enabled) throw new Error(`${label} generation is paused by Super Admin.`);
+}
+
+function directedPrompt(stage: PipelineStageConfig, prompt: string) {
+  return [stage.promptPrelude.trim(), prompt.trim()].filter(Boolean).join("\n\n");
+}
+
+function voiceDesignAuditionText(previewText: string) {
+  const clean = compactVoicePreview(previewText);
+  if (clean.length >= 100) return clean;
+  return [
+    clean,
+    "I know what this moment costs, and I am choosing it anyway.",
+    "Listen carefully; we only get one clean chance to do this right.",
+  ].join(" ");
 }
 
 async function modelArk(pathname: string, body?: object) {
@@ -98,13 +123,21 @@ function recordNumber(record: Record<string, unknown> | undefined, ...keys: stri
   return undefined;
 }
 
-async function eleven(pathname: string, body: object) {
+async function eleven(pathname: string, body: Record<string, unknown>) {
   const key = elevenKey();
   if (!key) throw new Error("ELEVEN_LABS_API_KEY is not configured.");
+  const effectiveBody = { ...body };
+  if (pathname.startsWith("/text-to-voice/design")) {
+    const auditionText = typeof effectiveBody.text === "string" ? effectiveBody.text.trim() : "";
+    effectiveBody.text = voiceDesignAuditionText(auditionText);
+    if (String(effectiveBody.text).length < 100) {
+      throw new Error("Voice audition preparation failed to meet ElevenLabs' 100-character minimum.");
+    }
+  }
   const response = await fetch(`${ELEVEN_API}${pathname}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "xi-api-key": key },
-    body: JSON.stringify(body),
+    body: JSON.stringify(effectiveBody),
   });
   if (!response.ok) {
     const detail = await response.text();
@@ -132,18 +165,20 @@ function lockVisualIdentity(prompt: string, hasReference: boolean) {
 
 export async function GET(request: Request) {
   const characterId = new URL(request.url).searchParams.get("characterId");
-  const [production, providers] = characterId
+  const [production, providers, pipeline] = characterId
     ? await Promise.all([
         getCharacterProductionState(characterId),
         getCharacterProviderHealth(characterId),
+        getPipelineConfig(),
       ])
-    : [null, null];
+    : [null, null, await getPipelineConfig()];
   return Response.json({
     elevenLabs: Boolean(elevenKey()),
     seedModels: Boolean(process.env.SEEDANCE_API_KEY ?? process.env.SEEDREAM_API_KEY),
     database: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
     production,
     providers,
+    pipeline,
   });
 }
 
@@ -164,15 +199,19 @@ export async function POST(request: Request) {
       return Response.json(await selectCharacterSfxAsset({ characterId, assetId }));
     }
 
+    const pipeline = await getPipelineConfig();
+
     if (action === "voice-design") {
-      const description = text(input, "description", 20, 1000);
-      const previewText = text(input, "previewText", 100, 1000);
-      jobId = await beginGeneration({ characterId, kind: "voice-design", provider: "elevenlabs", model: "eleven_ttv_v3", prompt: description });
+      const voiceConfig = pipeline.stages.voice;
+      requireStage(voiceConfig, "Voice");
+      const description = directedPrompt(voiceConfig, text(input, "description", 20, 1000));
+      const previewText = voiceDesignAuditionText(text(input, "previewText", 12, 1000));
+      jobId = await beginGeneration({ characterId, kind: "voice-design", provider: voiceConfig.provider, model: voiceConfig.model, prompt: description });
       const response = await eleven("/text-to-voice/design?output_format=mp3_44100_128", {
         voice_description: description,
         text: previewText,
-        model_id: "eleven_ttv_v3",
-        guidance_scale: 4,
+        model_id: voiceConfig.model,
+        guidance_scale: settingNumber(voiceConfig, "guidanceScale", 4),
       });
       const data = await response.json();
       const previews = Array.isArray(data.previews) ? data.previews : [];
@@ -190,7 +229,9 @@ export async function POST(request: Request) {
     }
 
     if (action === "voice-save") {
-      const description = text(input, "description", 20, 1000);
+      const voiceConfig = pipeline.stages.voice;
+      requireStage(voiceConfig, "Voice");
+      const description = directedPrompt(voiceConfig, text(input, "description", 20, 1000));
       const generatedVoiceId = text(input, "generatedVoiceId", 1, 200);
       const currentProduction = await getCharacterProductionState(characterId);
       if (currentProduction.voiceId === generatedVoiceId) {
@@ -216,24 +257,36 @@ export async function POST(request: Request) {
     }
 
     if (action === "speech") {
+      const voiceConfig = pipeline.stages.voice;
+      requireStage(voiceConfig, "Voice");
       const speechText = text(input, "speechText", 1, 5000);
+      const performanceText = dialogueForSpeech(speechText);
+      if (!performanceText) throw new Error("Dialogue must include words for the actor to perform.");
       const production = await getCharacterProductionState(characterId);
       const voiceId = production.voiceId;
       if (!voiceId) throw new Error("This character has no active locked voice. Lock a voice before generating dialogue.");
       const seed = stableVoiceSeed(characterId);
-      jobId = await beginGeneration({ characterId, kind: "dialogue", provider: "elevenlabs", model: DIALOGUE_MODEL, prompt: speechText });
+      const dialogueModel = settingString(voiceConfig, "dialogueModel", DIALOGUE_MODEL);
+      const voiceSettings = {
+        stability: settingNumber(voiceConfig, "stability", DIALOGUE_VOICE_SETTINGS.stability),
+        similarity_boost: settingNumber(voiceConfig, "similarityBoost", DIALOGUE_VOICE_SETTINGS.similarity_boost),
+        style: settingNumber(voiceConfig, "style", DIALOGUE_VOICE_SETTINGS.style),
+        use_speaker_boost: settingBoolean(voiceConfig, "speakerBoost", DIALOGUE_VOICE_SETTINGS.use_speaker_boost),
+      };
+      jobId = await beginGeneration({ characterId, kind: "dialogue", provider: voiceConfig.provider, model: dialogueModel, prompt: speechText });
       const response = await eleven(`/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
-        text: speechText,
-        model_id: DIALOGUE_MODEL,
-        voice_settings: DIALOGUE_VOICE_SETTINGS,
+        text: performanceText,
+        model_id: dialogueModel,
+        voice_settings: voiceSettings,
         seed,
       });
       const bytes = await response.arrayBuffer();
       const voiceMetadata = {
         voiceId,
-        model: DIALOGUE_MODEL,
+        model: dialogueModel,
         seed,
-        voiceSettings: DIALOGUE_VOICE_SETTINGS,
+        voiceSettings,
+        performanceText,
       };
       const asset = await saveMediaAsset({
         characterId,
@@ -251,7 +304,7 @@ export async function POST(request: Request) {
         await calculateGenerationBilling({
           kind: "dialogue",
           usage: {
-            inputCharacters: speechText.length,
+            inputCharacters: performanceText.length,
             providerCredits: headerNumber(response, "character-cost"),
           },
         }),
@@ -263,23 +316,27 @@ export async function POST(request: Request) {
           "Cache-Control": "no-store",
           "X-Asset-Url": asset.url,
           "X-Voice-Id": voiceId,
-          "X-Voice-Model": DIALOGUE_MODEL,
+          "X-Voice-Model": dialogueModel,
         },
       });
     }
 
     if (action === "sfx") {
-      const prompt = text(input, "prompt", 1, 1000);
+      const sfxConfig = pipeline.stages.sfx;
+      requireStage(sfxConfig, "SFX");
+      const prompt = directedPrompt(sfxConfig, text(input, "prompt", 1, 1000));
       const requestedDuration = Number(input.durationSeconds);
+      const minimumDuration = settingNumber(sfxConfig, "minimumDurationSeconds", 0.5);
+      const maximumDuration = Math.max(minimumDuration, settingNumber(sfxConfig, "maximumDurationSeconds", 2));
       const durationSeconds = Number.isFinite(requestedDuration)
-        ? Math.min(2, Math.max(0.5, requestedDuration))
-        : 1.5;
-      jobId = await beginGeneration({ characterId, kind: "sfx", provider: "elevenlabs", model: "eleven_text_to_sound_v2", prompt });
+        ? Math.min(maximumDuration, Math.max(minimumDuration, requestedDuration))
+        : settingNumber(sfxConfig, "durationSeconds", 1.5);
+      jobId = await beginGeneration({ characterId, kind: "sfx", provider: sfxConfig.provider, model: sfxConfig.model, prompt });
       const response = await eleven("/sound-generation?output_format=mp3_44100_128", {
         text: prompt,
         duration_seconds: durationSeconds,
-        prompt_influence: 0.35,
-        model_id: "eleven_text_to_sound_v2",
+        prompt_influence: settingNumber(sfxConfig, "promptInfluence", 0.35),
+        model_id: sfxConfig.model,
       });
       const bytes = await response.arrayBuffer();
       const asset = await saveMediaAsset({ characterId, kind: "sfx", provider: "elevenlabs", bytes, contentType: "audio/mpeg", prompt, durationSeconds });
@@ -301,15 +358,17 @@ export async function POST(request: Request) {
     }
 
     if (action === "theme") {
-      const prompt = text(input, "prompt", 10, 1000);
-      const durationSeconds = 12;
-      jobId = await beginGeneration({ characterId, kind: "theme", provider: "elevenlabs", model: "music_v1", prompt });
+      const themeConfig = pipeline.stages.theme;
+      requireStage(themeConfig, "Theme");
+      const prompt = directedPrompt(themeConfig, text(input, "prompt", 10, 1000));
+      const durationSeconds = settingNumber(themeConfig, "durationSeconds", 12);
+      jobId = await beginGeneration({ characterId, kind: "theme", provider: themeConfig.provider, model: themeConfig.model, prompt });
       const response = await eleven("/music?output_format=mp3_44100_128", {
         prompt,
         music_length_ms: durationSeconds * 1000,
-        model_id: "music_v1",
-        force_instrumental: true,
-        sign_with_c2pa: false,
+        model_id: themeConfig.model,
+        force_instrumental: settingBoolean(themeConfig, "forceInstrumental", true),
+        sign_with_c2pa: settingBoolean(themeConfig, "signWithC2pa", false),
       });
       const bytes = await response.arrayBuffer();
       const asset = await saveMediaAsset({
@@ -340,28 +399,30 @@ export async function POST(request: Request) {
     }
 
     if (action === "image") {
+      const imageConfig = pipeline.stages.image;
+      requireStage(imageConfig, "Image");
       const requestedPrompt = text(input, "prompt", 10, 6000);
       const imagePurpose = input.imagePurpose === "scene" ? "scene" : "identity";
       const requestedReference = typeof input.referenceImage === "string" ? input.referenceImage : "";
       const production = await getCharacterProductionState(characterId);
       const canonicalReference = production.visualReference;
       const reference = canonicalReference?.url ?? requestedReference;
-      const prompt = lockVisualIdentity(requestedPrompt, Boolean(reference));
+      const prompt = lockVisualIdentity(directedPrompt(imageConfig, requestedPrompt), Boolean(reference));
       const referenceMetadata = {
         imagePurpose,
         referenceImage: reference || null,
         referenceAssetId: canonicalReference?.assetId ?? null,
         referenceSource: canonicalReference?.source ?? (requestedReference ? "request-fallback" : null),
       };
-      jobId = await beginGeneration({ characterId, kind: "gallery", provider: "byteplus", model: SEEDREAM_MODEL, prompt });
+      jobId = await beginGeneration({ characterId, kind: "gallery", provider: imageConfig.provider, model: imageConfig.model, prompt });
       const generationRequest: Record<string, unknown> = {
-        model: SEEDREAM_MODEL,
+        model: imageConfig.model,
         prompt,
-        negative_prompt: "multiple people, duplicate face, celebrity likeness, generic stock-photo pose, generic superhero stance, fashion editorial pose, plastic skin, beauty filter, distorted anatomy, extra fingers, fused hands, floating objects, clutter, excessive visual effects, text, title, caption, logo, interface, border, poster layout, watermark",
-        size: "2560x1440",
+        negative_prompt: settingString(imageConfig, "negativePrompt", "multiple people, duplicate face, celebrity likeness, generic pose, plastic skin, distorted anatomy, extra fingers, text, logo, UI, border, watermark"),
+        size: settingString(imageConfig, "size", "2560x1440"),
         response_format: "url",
-        sequential_image_generation: "disabled",
-        watermark: false,
+        sequential_image_generation: settingString(imageConfig, "sequentialImageGeneration", "disabled"),
+        watermark: settingBoolean(imageConfig, "watermark", false),
       };
       if (reference) {
         generationRequest.image = await imageInput(reference);
@@ -391,10 +452,12 @@ export async function POST(request: Request) {
         }),
         generated.requestId
       );
-      return Response.json({ url: asset.url });
+      return Response.json({ url: asset.url, assetId: asset.id });
     }
 
     if (action === "video") {
+      const videoConfig = pipeline.stages.video;
+      requireStage(videoConfig, "Video");
       const requestedPrompt = text(input, "prompt", 10, 3000);
       const silentPrompt = /silent visual plate|audio is produced separately/i.test(requestedPrompt)
         ? requestedPrompt
@@ -403,33 +466,36 @@ export async function POST(request: Request) {
       const production = await getCharacterProductionState(characterId);
       const canonicalReference = production.visualReference;
       const reference = canonicalReference?.url ?? requestedReference;
-      const prompt = lockVisualIdentity(silentPrompt, Boolean(reference));
+      const prompt = lockVisualIdentity(directedPrompt(videoConfig, silentPrompt), Boolean(reference));
       const referenceMetadata = {
         referenceImage: reference || null,
         referenceAssetId: canonicalReference?.assetId ?? null,
         referenceSource: canonicalReference?.source ?? (requestedReference ? "request-fallback" : null),
       };
-      jobId = await beginGeneration({ characterId, kind: "video", provider: "byteplus", model: SEEDANCE_MODEL, prompt });
+      const durationSeconds = settingNumber(videoConfig, "durationSeconds", 5);
+      jobId = await beginGeneration({ characterId, kind: "video", provider: videoConfig.provider, model: videoConfig.model, prompt });
       const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
       if (reference) {
         content.push({ type: "image_url", image_url: { url: await imageInput(reference) } });
       }
       const createdResponse = await modelArk("/contents/generations/tasks", {
-        model: SEEDANCE_MODEL,
+        model: videoConfig.model,
         content,
-        resolution: "720p",
-        duration: 5,
-        ratio: "16:9",
-        generate_audio: false,
-        watermark: false,
+        resolution: settingString(videoConfig, "resolution", "720p"),
+        duration: durationSeconds,
+        ratio: settingString(videoConfig, "ratio", "16:9"),
+        generate_audio: settingBoolean(videoConfig, "generateAudio", false),
+        watermark: settingBoolean(videoConfig, "watermark", false),
       });
       const created = createdResponse.data;
       const taskId = created.id;
       if (typeof taskId !== "string") throw new Error("Seedance did not return a task ID.");
 
       let task: Record<string, unknown> = {};
-      for (let attempt = 0; attempt < 55; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+      const pollIntervalMs = settingNumber(videoConfig, "pollIntervalSeconds", 5) * 1000;
+      const maximumPolls = settingNumber(videoConfig, "maximumPolls", 55);
+      for (let attempt = 0; attempt < maximumPolls; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
         task = (await modelArk(`/contents/generations/tasks/${encodeURIComponent(taskId)}`)).data;
         if (task.status === "succeeded") break;
         if (["failed", "cancelled", "expired"].includes(String(task.status))) {
@@ -447,7 +513,7 @@ export async function POST(request: Request) {
         provider: "byteplus",
         remoteUrl: videoUrl,
         prompt,
-        durationSeconds: 5,
+        durationSeconds,
         metadata: { taskId, ...referenceMetadata },
       });
       const providerUsage = task.usage as Record<string, unknown> | undefined;
@@ -457,12 +523,12 @@ export async function POST(request: Request) {
         { taskId, ...referenceMetadata },
         await calculateGenerationBilling({
           kind: "video",
-          usage: { durationSeconds: 5, providerUsage, providerTokens: recordNumber(providerUsage, "total_tokens", "output_tokens") },
+          usage: { durationSeconds, providerUsage, providerTokens: recordNumber(providerUsage, "total_tokens", "output_tokens") },
           providerCostUsd: recordNumber(providerUsage, "cost_usd", "cost"),
         }),
         createdResponse.requestId ?? taskId
       );
-      return Response.json({ url: asset.url, taskId });
+      return Response.json({ url: asset.url, assetId: asset.id, taskId });
     }
 
     return Response.json({ error: "Unknown generation action." }, { status: 400 });

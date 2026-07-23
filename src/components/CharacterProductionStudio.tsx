@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character } from "@/lib/types";
 import { useChaplinStore } from "@/lib/store";
 import MediaPlayer from "@/components/MediaPlayer";
@@ -12,6 +12,7 @@ import {
   type ScenePackage,
   type ShotBlueprint,
 } from "@/lib/production-prompting";
+import { dialogueForEditor } from "@/lib/dialogue-performance";
 
 type ProductionAsset = {
   id: string;
@@ -55,6 +56,13 @@ type ProviderStatus = {
     elevenLabs: ProviderCheck | null;
     seedModels: ProviderCheck | null;
   } | null;
+  pipeline?: {
+    stages?: {
+      sfx?: {
+        settings?: Record<string, string | number | boolean>;
+      };
+    };
+  };
 };
 type ProviderCheck = {
   status: string;
@@ -86,13 +94,87 @@ type QuickWriteField =
   | "video";
 
 const WORKFLOW_STEPS = [
-  { id: 1, label: "Voice", title: "Define the voice" },
-  { id: 2, label: "Dialogue", title: "Build the dialogue" },
-  { id: 3, label: "SFX", title: "Add signature SFX" },
-  { id: 4, label: "Theme", title: "Create the music score" },
-  { id: 5, label: "Still", title: "Finalize the scene still" },
-  { id: 6, label: "Video", title: "Assemble the scene" },
+  { id: 1, stage: "voice", label: "Voice", title: "Define the voice" },
+  { id: 2, stage: "dialogue", label: "Dialogue", title: "Build the dialogue" },
+  { id: 3, stage: "sfx", label: "SFX", title: "Add signature SFX" },
+  { id: 4, stage: "theme", label: "Theme", title: "Create the music score" },
+  { id: 5, stage: "image", label: "Still", title: "Finalize the scene still" },
+  { id: 6, stage: "video", label: "Video", title: "Assemble the scene" },
 ] as const;
+
+const VOICE_BUILD_STAGES = [
+  {
+    label: "Reading the actor",
+    detail: "Connecting identity, age, language, and personality.",
+    progress: 14,
+  },
+  {
+    label: "Directing the performance",
+    detail: "Shaping tone, rhythm, texture, and emotional range.",
+    progress: 38,
+  },
+  {
+    label: "Writing the audition",
+    detail: "Creating one line that reveals how this actor really sounds.",
+    progress: 58,
+  },
+  {
+    label: "Creating three voices",
+    detail: "ElevenLabs is performing three original interpretations.",
+    progress: 84,
+  },
+  {
+    label: "Voice takes ready",
+    detail: "Listen to the takes and choose the one that becomes canon.",
+    progress: 100,
+  },
+] as const;
+
+const GENERATION_TIMELINES = {
+  "magic-scene": {
+    title: "Directing the complete scene",
+    expectedSeconds: 35,
+    stages: ["Read canon", "Shape the beat", "Direct each medium", "Sync prompts"],
+  },
+  speech: {
+    title: "Performing the dialogue",
+    expectedSeconds: 18,
+    stages: ["Lock voice", "Direct delivery", "Render line", "Save take"],
+  },
+  sfx: {
+    title: "Building signature sound",
+    expectedSeconds: 32,
+    stages: ["Read sound identity", "Direct four takes", "Render variations", "Attach takes"],
+  },
+  theme: {
+    title: "Composing the character theme",
+    expectedSeconds: 30,
+    stages: ["Shape motif", "Build the cue", "Mix the ending", "Save theme"],
+  },
+  image: {
+    title: "Creating the visual",
+    expectedSeconds: 40,
+    stages: ["Lock identity", "Build composition", "Render frame", "Save asset"],
+  },
+  upload: {
+    title: "Locking the visual reference",
+    expectedSeconds: 16,
+    stages: ["Check image", "Upload source", "Set as canon", "Sync profile"],
+  },
+  video: {
+    title: "Rendering the five-second scene",
+    expectedSeconds: 75,
+    stages: ["Lock first frame", "Direct motion", "Render scene", "Attach video"],
+  },
+} as const;
+
+type GenerationKey = keyof typeof GENERATION_TIMELINES;
+type GenerationRun = {
+  key: GenerationKey;
+  status: "running" | "complete" | "failed";
+  elapsedSeconds: number;
+  error?: string;
+};
 
 const SFX_VARIATIONS = [
   { label: "Dry mark", direction: "Interpret it as an ultra-dry, close-mic tactile mark with almost no tail." },
@@ -132,7 +214,113 @@ function QuickWriteButton({
   );
 }
 
-export default function CharacterProductionStudio({ character }: { character: Character }) {
+function GenerationTimeline({
+  generationKey,
+  run,
+}: {
+  generationKey: GenerationKey;
+  run: GenerationRun | null;
+}) {
+  if (!run || run.key !== generationKey) return null;
+
+  const timeline = GENERATION_TIMELINES[generationKey];
+  const runningProgress = Math.min(92, 8 + (run.elapsedSeconds / timeline.expectedSeconds) * 84);
+  const progress = run.status === "complete" ? 100 : Math.round(runningProgress);
+  const stageIndex = run.status === "complete"
+    ? timeline.stages.length - 1
+    : Math.min(timeline.stages.length - 1, Math.floor((progress / 100) * timeline.stages.length));
+  const statusLabel = run.status === "complete"
+    ? "Ready"
+    : run.status === "failed"
+      ? "Needs attention"
+      : timeline.stages[stageIndex];
+
+  return (
+    <div
+      className={`generation-timeline rounded-md border p-4 ${
+        run.status === "failed"
+          ? "border-red-500/55 bg-red-500/[0.07]"
+          : run.status === "complete"
+            ? "border-accent-secondary/45 bg-accent-secondary/[0.06]"
+            : "border-accent/40 bg-paper/75"
+      }`}
+      aria-live="polite"
+      data-generation-timeline={generationKey}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-grey">
+            {run.status === "running" ? "Generation in progress" : run.status === "complete" ? "Generation complete" : "Generation stopped"}
+          </p>
+          <p className="mt-1 truncate text-sm font-semibold">{timeline.title}</p>
+          <p className="mt-0.5 text-[11px] text-grey">
+            {statusLabel}
+            <span aria-hidden="true"> · </span>
+            {run.elapsedSeconds}s elapsed
+          </p>
+        </div>
+        <span className={`shrink-0 text-lg font-semibold ${
+          run.status === "failed" ? "text-red-500" : run.status === "complete" ? "text-accent-secondary" : "text-accent"
+        }`}>
+          {run.status === "failed" ? "!" : `${progress}%`}
+        </span>
+      </div>
+
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line">
+        <span
+          className={`block h-full rounded-full transition-[width] duration-500 ${
+            run.status === "failed" ? "bg-red-500" : "generation-progress-flow"
+          }`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-4 gap-1.5">
+        {timeline.stages.map((stage, index) => {
+          const reached = index <= stageIndex;
+          return (
+            <div key={stage} className="min-w-0">
+              <span
+                className={`block h-1 rounded-full transition-colors ${
+                  reached
+                    ? run.status === "failed" && index === stageIndex
+                      ? "bg-red-500"
+                      : run.status === "complete"
+                        ? "bg-accent-secondary"
+                        : "bg-accent"
+                    : "bg-line"
+                }`}
+                aria-hidden="true"
+              />
+              <span className={`mt-1.5 block truncate text-[8px] font-semibold ${
+                reached ? "text-ink" : "text-grey"
+              }`}>
+                {stage}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {run.status === "running" && (
+        <p className="mt-3 text-[9px] text-grey">
+          Usually around {timeline.expectedSeconds}s. You can stay on this step while Chaplin finishes.
+        </p>
+      )}
+      {run.status === "failed" && run.error && (
+        <p className="mt-3 text-[10px] leading-relaxed text-red-400">{run.error}</p>
+      )}
+    </div>
+  );
+}
+
+export default function CharacterProductionStudio({
+  character,
+  onExit,
+}: {
+  character: Character;
+  onExit?: () => void;
+}) {
   const setCharacterVoice = useChaplinStore((s) => s.setCharacterVoice);
   const addCharacterImage = useChaplinStore((s) => s.addCharacterImage);
   const setCharacterVideo = useChaplinStore((s) => s.setCharacterVideo);
@@ -147,7 +335,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   );
   const [previewText, setPreviewText] = useState(brollLine);
   const [previews, setPreviews] = useState<VoicePreview[]>([]);
-  const [speechText, setSpeechText] = useState(brollLine);
+  const [speechText, setSpeechText] = useState(dialogueForEditor(brollLine));
   const [speechUrl, setSpeechUrl] = useState("");
   const [sfxPrompt, setSfxPrompt] = useState(
     initialScene.sfx
@@ -171,10 +359,33 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   const [activeStep, setActiveStep] = useState<number>(1);
   const [sceneBlueprint, setSceneBlueprint] = useState<ShotBlueprint>(initialScene.blueprint);
   const [busy, setBusy] = useState("");
+  const [generationRun, setGenerationRun] = useState<GenerationRun | null>(null);
+  const [voiceBuildStage, setVoiceBuildStage] = useState<number | null>(null);
   const [quickWriting, setQuickWriting] = useState<QuickWriteField | null>(null);
   const [selectingAsset, setSelectingAsset] = useState("");
   const [message, setMessage] = useState("");
+  const workflowContentRef = useRef<HTMLDivElement | null>(null);
   const referenceImage = canonicalReferenceImage || character.imageUrl || character.galleryUrls?.[0] || character.bannerUrl || "";
+
+  function jumpToStep(stepId: number) {
+    setActiveStep(stepId);
+    window.requestAnimationFrame(() => {
+      workflowContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  useEffect(() => {
+    if (generationRun?.status !== "running") return;
+    const timer = window.setInterval(() => {
+      setGenerationRun((current) => current?.status === "running"
+        ? {
+            ...current,
+            elapsedSeconds: current.elapsedSeconds + 1,
+          }
+        : current);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [generationRun?.status, generationRun?.key]);
 
   useEffect(() => {
     fetch(`/api/generate?characterId=${encodeURIComponent(character.id)}`)
@@ -304,6 +515,31 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     }
   }
 
+  async function writeField(field: QuickWriteField, currentText: string) {
+    const response = await fetch("/api/write/quick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        field,
+        currentText,
+        character,
+        context: {
+          voiceDescription,
+          voicePreview: previewText,
+          dialogue: speechText,
+          sfx: sfxPrompt,
+          theme: themePrompt,
+          image: imagePrompt,
+          video: scenePrompt,
+        },
+      }),
+    });
+    if (!response.ok) throw new Error(await errorFrom(response));
+    const data = await response.json() as { text?: string; warning?: string };
+    if (!data.text) throw new Error("Chaplin returned no writing.");
+    return data;
+  }
+
   async function jsonAction(action: string, payload: Record<string, unknown>) {
     await ensureCharacterIsSaved();
     const response = await fetch("/api/generate", {
@@ -342,25 +578,68 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   }
 
   async function run(label: string, task: () => Promise<void>) {
+    const hasTimeline = label in GENERATION_TIMELINES;
     setBusy(label);
     setMessage("");
+    if (hasTimeline) {
+      setGenerationRun({
+        key: label as GenerationKey,
+        status: "running",
+        elapsedSeconds: 0,
+      });
+    }
     try {
       await task();
+      if (hasTimeline) {
+        setGenerationRun((current) => current?.key === label
+          ? { ...current, status: "complete", elapsedSeconds: Math.max(1, current.elapsedSeconds) }
+          : current);
+      }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Generation failed.");
+      const rawError = error instanceof Error ? error.message : "Generation failed.";
+      const errorMessage = /string_too_short[\s\S]*100 characters/i.test(rawError)
+        ? "The voice audition was shorter than ElevenLabs allows. Chaplin has expanded it safely; tap Build the complete voice to retry."
+        : rawError;
+      if (label === "voice-build") setVoiceBuildStage(null);
+      setMessage(errorMessage);
+      if (hasTimeline) {
+        setGenerationRun((current) => current?.key === label
+          ? {
+              ...current,
+              status: "failed",
+              elapsedSeconds: Math.max(1, current.elapsedSeconds),
+              error: errorMessage,
+            }
+          : current);
+      }
     } finally {
       setBusy("");
     }
   }
 
-  function designVoice() {
-    void run("voice-design", async () => {
+  function buildVoice() {
+    setVoiceBuildStage(0);
+    void run("voice-build", async () => {
+      setVoiceBuildStage(1);
+      const [descriptionResult, auditionResult] = await Promise.all([
+        writeField("voice-description", voiceDescription),
+        writeField("voice-preview", previewText),
+      ]);
+      const directedVoice = descriptionResult.text ?? voiceDescription;
+      const auditionLine = auditionResult.text ?? previewText;
+      setVoiceDescription(directedVoice);
+      setVoiceBuildStage(2);
+      setPreviewText(auditionLine);
+      setVoiceBuildStage(3);
       const data = (await jsonAction("voice-design", {
-        description: voiceDescription,
-        previewText,
+        description: directedVoice,
+        previewText: auditionLine,
       })) as { previews: VoicePreview[] };
-      setPreviews(data.previews ?? []);
-      setMessage("Three original voice candidates are ready. Listen, then lock one to the actor.");
+      const nextPreviews = data.previews ?? [];
+      if (!nextPreviews.length) throw new Error("No voice takes were returned.");
+      setPreviews(nextPreviews);
+      setVoiceBuildStage(4);
+      setMessage(`Three voices for ${character.name} are ready. Play each take, then choose the one that feels true.`);
     });
   }
 
@@ -398,8 +677,11 @@ export default function CharacterProductionStudio({ character }: { character: Ch
     void run("sfx", async () => {
       setSfxCandidates([]);
       const candidates: SfxCandidate[] = [];
-      for (const variation of SFX_VARIATIONS) {
-        const candidatePrompt = `${sfxPrompt} ${variation.direction} Total duration 1.5 seconds.`;
+      const requestedCount = Number(status?.pipeline?.stages?.sfx?.settings?.candidateCount ?? 4);
+      const candidateCount = Math.min(SFX_VARIATIONS.length, Math.max(1, Math.round(requestedCount)));
+      const durationSeconds = Number(status?.pipeline?.stages?.sfx?.settings?.durationSeconds ?? 1.5);
+      for (const variation of SFX_VARIATIONS.slice(0, candidateCount)) {
+        const candidatePrompt = `${sfxPrompt} ${variation.direction} Total duration ${durationSeconds} seconds.`;
         const generated = await generateSfxTake(candidatePrompt);
         candidates.push({ ...variation, ...generated });
         setSfxCandidates([...candidates]);
@@ -409,7 +691,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
         setSfxUrl(candidates[0].url);
       }
       await refreshHistory();
-      setMessage("Four short character-specific SFX takes are ready. Preview them and choose the strongest signature.");
+      setMessage(`${candidateCount} short character-specific SFX ${candidateCount === 1 ? "take is" : "takes are"} ready. Preview and choose the strongest signature.`);
     });
   }
 
@@ -483,7 +765,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   }
 
   function applyScenePackage(scene: ScenePackage) {
-    setSpeechText(scene.dialogue);
+    setSpeechText(dialogueForEditor(scene.dialogue));
     setSfxPrompt(scene.sfx);
     setThemePrompt(scene.theme);
     setImagePrompt(scene.image);
@@ -524,6 +806,11 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   const seedModelsFailed = status?.providers?.seedModels?.status === "failed";
   const seedModelsNeedActivation =
     seedModelsFailed && /not activated|activate the model/i.test(status?.providers?.seedModels?.error ?? "");
+  const configuredSfxCount = Math.min(
+    SFX_VARIATIONS.length,
+    Math.max(1, Math.round(Number(status?.pipeline?.stages?.sfx?.settings?.candidateCount ?? 4)))
+  );
+  const configuredSfxDuration = Number(status?.pipeline?.stages?.sfx?.settings?.durationSeconds ?? 1.5);
   const activeStepMeta = WORKFLOW_STEPS.find((step) => step.id === activeStep) ?? WORKFLOW_STEPS[0];
   const completedSteps = new Set<number>([
     ...(character.voiceId ? [1] : []),
@@ -535,7 +822,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
   ]);
 
   return (
-    <section className="overflow-hidden" data-production-workflow>
+    <section data-production-workflow>
       <div className="p-5 sm:p-6 border-b border-line bg-accent/5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -559,7 +846,36 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             </span>
           </div>
         </div>
-        <div className="mt-5 flex gap-1 overflow-x-auto pb-1 no-scrollbar" aria-label="Production workflow steps">
+      </div>
+
+      <div
+        className="sticky top-12 z-[60] border-y border-line/80 bg-paper/95 px-3 py-3 shadow-[0_12px_26px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:px-5"
+        data-production-task-rail
+      >
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-accent">
+              Stage {activeStepMeta.id} of {WORKFLOW_STEPS.length}
+            </p>
+            <p className="mt-0.5 truncate text-sm font-semibold">{activeStepMeta.title}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-[9px] uppercase tracking-wide text-grey">
+              {completedSteps.size}/{WORKFLOW_STEPS.length} complete
+            </span>
+            {onExit && (
+              <button
+                type="button"
+                onClick={onExit}
+                className="rounded-full border border-line px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-grey hover:border-accent hover:text-accent"
+                aria-label="Exit production studio"
+              >
+                Exit
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-6 gap-1.5" aria-label="Production workflow steps">
           {WORKFLOW_STEPS.map((step) => {
             const isActive = step.id === activeStep;
             const isComplete = completedSteps.has(step.id);
@@ -567,19 +883,27 @@ export default function CharacterProductionStudio({ character }: { character: Ch
               <button
                 key={step.id}
                 type="button"
-                onClick={() => setActiveStep(step.id)}
-                className={`flex min-w-24 shrink-0 items-center gap-2 border-b-2 px-2.5 py-2 text-left transition-colors sm:min-w-28 ${isActive ? "border-accent text-ink" : "border-transparent text-grey hover:text-ink"}`}
+                onClick={() => jumpToStep(step.id)}
+                className="group min-w-0 text-left"
                 aria-current={isActive ? "step" : undefined}
+                aria-label={`${step.id}. ${step.title}${isComplete ? ", complete" : ""}`}
+                data-production-step-jump={step.stage}
               >
-                <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${isComplete ? "border-accent-secondary bg-accent-secondary text-paper" : isActive ? "border-accent text-accent" : "border-line"}`}>{isComplete ? "✓" : step.id}</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">{step.label}</span>
+                <span className={`block h-1.5 rounded-full transition-colors ${
+                  isActive ? "bg-accent" : isComplete ? "bg-accent-secondary" : "bg-line"
+                }`} />
+                <span className={`mt-1.5 block truncate text-[8px] font-semibold uppercase tracking-[0.04em] sm:text-[9px] ${
+                  isActive ? "text-ink" : isComplete ? "text-accent-secondary" : "text-grey"
+                }`}>
+                  {isComplete && !isActive ? "✓ " : ""}{step.label}
+                </span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="p-5 sm:p-6 flex flex-col gap-6">
+      <div ref={workflowContentRef} className="scroll-mt-40 p-5 sm:p-6 flex flex-col gap-6">
         {seedModelsNeedActivation && (
           <div className="rounded-md border border-amber-500/60 bg-amber-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -642,6 +966,9 @@ export default function CharacterProductionStudio({ character }: { character: Ch
               {busy === "magic-scene" ? "Directing scene..." : "✦ Build scene prompts"}
             </button>
           </div>
+          <div className="mt-3">
+            <GenerationTimeline generationKey="magic-scene" run={generationRun} />
+          </div>
         </details>
         <div className="flex items-end justify-between gap-4 border-b border-line pb-4">
           <div>
@@ -662,53 +989,154 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           </div>
         </details>
         <div className="grid gap-5">
-          <div data-production-stage="voice" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 1 ? "" : "hidden"}`}>
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-semibold text-sm">1. Unique voice identity</h3>
-              {character.voiceId && <span className="text-[10px] text-emerald-600 uppercase">Voice locked</span>}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] uppercase tracking-wide text-grey">Voice design prompt</span>
-                <QuickWriteButton
-                  field="voice-description"
-                  busy={Boolean(busy) || Boolean(quickWriting)}
-                  writing={quickWriting === "voice-description"}
-                  onClick={() => void quickWrite("voice-description", voiceDescription, setVoiceDescription)}
-                />
+          <div data-production-stage="voice" className={`overflow-hidden rounded-md border border-line ${activeStep === 1 ? "" : "hidden"}`}>
+            <div className="relative border-b border-line bg-[radial-gradient(circle_at_top_right,rgba(53,210,190,0.12),transparent_42%),linear-gradient(145deg,rgba(244,72,112,0.08),transparent_55%)] p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Voice identity</p>
+                  <h3 className="reel-title mt-1 text-2xl">Build {character.name}&apos;s voice</h3>
+                  <p className="mt-1 max-w-md text-xs leading-relaxed text-grey">
+                    Chaplin reads the complete actor, writes the direction and audition, then creates three voices in one go.
+                  </p>
+                </div>
+                {character.voiceId && (
+                  <span className="shrink-0 rounded-full border border-emerald-600/50 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
+                    Voice locked
+                  </span>
+                )}
               </div>
-              <textarea value={voiceDescription} onChange={(event) => setVoiceDescription(event.target.value)} rows={4} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
+
+              {voiceBuildStage === null && previews.length === 0 && (
+                <button
+                  type="button"
+                  onClick={buildVoice}
+                  disabled={!elevenReady || Boolean(busy)}
+                  className="mt-5 flex w-full items-center justify-between rounded-md bg-accent px-4 py-3 text-left text-paper shadow-[0_12px_28px_rgba(244,72,112,0.2)] transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-40"
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">✦ Build the complete voice</span>
+                    <span className="mt-0.5 block text-[10px] opacity-75">One tap · three original takes</span>
+                  </span>
+                  <span className="text-lg" aria-hidden="true">→</span>
+                </button>
+              )}
+
+              {voiceBuildStage !== null && (
+                <div className="mt-5 rounded-md border border-accent/35 bg-paper/75 p-4 backdrop-blur-sm" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{VOICE_BUILD_STAGES[voiceBuildStage].label}</p>
+                      <p className="mt-0.5 text-[11px] text-grey">{VOICE_BUILD_STAGES[voiceBuildStage].detail}</p>
+                    </div>
+                    <span className="text-lg font-semibold text-accent">{VOICE_BUILD_STAGES[voiceBuildStage].progress}%</span>
+                  </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line">
+                    <span
+                      className="block h-full rounded-full bg-gradient-to-r from-accent to-accent-secondary transition-[width] duration-500"
+                      style={{ width: `${VOICE_BUILD_STAGES[voiceBuildStage].progress}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 grid grid-cols-5 gap-1">
+                    {VOICE_BUILD_STAGES.map((stage, index) => (
+                      <span
+                        key={stage.label}
+                        className={`h-1 rounded-full transition-colors ${
+                          index <= voiceBuildStage ? "bg-accent" : "bg-line"
+                        }`}
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] uppercase tracking-wide text-grey">Voice performance sample</span>
-                <QuickWriteButton
-                  field="voice-preview"
-                  busy={Boolean(busy) || Boolean(quickWriting)}
-                  writing={quickWriting === "voice-preview"}
-                  onClick={() => void quickWrite("voice-preview", previewText, setPreviewText)}
-                />
-              </div>
-              <textarea value={previewText} onChange={(event) => setPreviewText(event.target.value)} rows={3} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
-            </div>
-            <button onClick={designVoice} disabled={!elevenReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
-              {busy === "voice-design" ? "Designing three voices..." : "Design voice candidates"}
-            </button>
+
+            <div className="flex flex-col gap-3 p-3 sm:p-4">
+              <details className="rounded-sm border border-line bg-paper/35 px-3 py-2.5">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-grey hover:text-ink">
+                  Fine-tune the voice direction
+                </summary>
+                <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wide text-grey">Performance direction</span>
+                    <textarea value={voiceDescription} onChange={(event) => setVoiceDescription(event.target.value)} rows={4} className="resize-none rounded-sm border border-line bg-paper p-3 text-xs focus:border-accent focus:outline-none" />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wide text-grey">Audition line</span>
+                    <textarea value={previewText} onChange={(event) => setPreviewText(event.target.value)} rows={3} className="resize-none rounded-sm border border-line bg-paper p-3 text-xs focus:border-accent focus:outline-none" />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={buildVoice}
+                    disabled={!elevenReady || Boolean(busy)}
+                    className="rounded-sm border border-accent px-3 py-2 text-xs font-semibold text-accent disabled:opacity-40"
+                  >
+                    Rebuild all three takes
+                  </button>
+                </div>
+              </details>
+
+              {previews.length > 0 && (
+                <div className="flex items-start justify-between gap-2 pt-1">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">Choose the voice that feels true</p>
+                    <p className="text-[11px] text-grey">This is the only decision—everything else is already built.</p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-line px-2 py-1 text-[9px] uppercase tracking-wide text-grey">≤7s each</span>
+                </div>
+              )}
             {previews.map((preview, index) => (
-              <div key={preview.generated_voice_id} className="border border-line rounded-sm p-2 flex items-center gap-2">
-                <span className="text-[10px] text-grey w-12">Take {index + 1}</span>
-                <div className="flex-1 min-w-0">
+              <div
+                key={preview.generated_voice_id}
+                data-voice-preview-card
+                className="flex flex-col gap-2.5 rounded-sm border border-line bg-black/10 p-3 sm:flex-row sm:items-center sm:gap-2 sm:p-2"
+              >
+                <div className="flex items-center justify-between gap-3 sm:contents">
+                  <span className="text-[10px] font-semibold text-grey sm:w-12">Take {index + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => lockVoice(preview)}
+                    disabled={Boolean(busy)}
+                    className="rounded-full border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent disabled:opacity-40 sm:hidden"
+                  >
+                    {busy === "voice-save" ? "Choosing..." : "Choose"}
+                  </button>
+                </div>
+                <div className="min-w-0 w-full sm:flex-1">
                   <MediaPlayer
                     src={`data:${preview.media_type ?? "audio/mpeg"};base64,${preview.audio_base_64}`}
                     label={`Voice candidate ${index + 1}`}
                     compact
+                    playbackLimitSeconds={7}
                   />
                 </div>
-                <button onClick={() => lockVoice(preview)} disabled={Boolean(busy)} className="text-xs text-accent font-semibold disabled:opacity-40">
-                  {busy === "voice-save" ? "Locking..." : "Lock"}
+                <button type="button" onClick={() => lockVoice(preview)} disabled={Boolean(busy)} className="hidden rounded-full border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent disabled:opacity-40 sm:block">
+                  {busy === "voice-save" ? "Choosing..." : "Choose"}
                 </button>
               </div>
             ))}
+              {character.voiceId && (
+                <div className="mt-1 rounded-md border border-accent/50 bg-accent/10 p-4" data-voice-ready>
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-secondary text-sm font-bold text-paper" aria-hidden="true">✓</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">Voice is ready</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-grey">
+                        {character.name}&apos;s voice is locked and will stay consistent in every line.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => jumpToStep(2)}
+                    className="mt-4 flex w-full items-center justify-between rounded-md bg-accent px-4 py-3 text-left text-sm font-semibold text-paper shadow-[0_10px_24px_rgba(244,72,112,0.18)] hover:opacity-90"
+                  >
+                    <span>Continue to dialogue</span>
+                    <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div data-production-stage="dialogue" className={`border border-line rounded-md p-4 flex flex-col gap-3 ${activeStep === 2 ? "" : "hidden"}`}>
@@ -725,6 +1153,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <button onClick={generateSpeech} disabled={!elevenReady || Boolean(busy) || !character.voiceId} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "speech" ? "Performing line..." : "Generate dialogue"}
             </button>
+            <GenerationTimeline generationKey="speech" run={generationRun} />
             {character.voiceId && (
               <p className="text-[10px] uppercase tracking-[0.12em] text-emerald-600">
                 Locked voice · {character.voiceId.slice(-6)} · continuity mode
@@ -747,10 +1176,13 @@ export default function CharacterProductionStudio({ character }: { character: Ch
           <input data-scene-field="sfx" value={sfxPrompt} onChange={(event) => setSfxPrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button onClick={generateSfx} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
-              {busy === "sfx" ? `Creating take ${Math.min(sfxCandidates.length + 1, 4)} of 4...` : "Generate 4 short SFX takes"}
+              {busy === "sfx"
+                ? `Creating take ${Math.min(sfxCandidates.length + 1, configuredSfxCount)} of ${configuredSfxCount}...`
+                : `Generate ${configuredSfxCount} short SFX ${configuredSfxCount === 1 ? "take" : "takes"}`}
             </button>
-            <span className="text-[10px] uppercase tracking-[0.14em] text-grey">1.5 seconds each</span>
+            <span className="text-[10px] uppercase tracking-[0.14em] text-grey">{configuredSfxDuration}s each</span>
           </div>
+          <GenerationTimeline generationKey="sfx" run={generationRun} />
           {sfxCandidates.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2" data-sfx-candidates>
               {sfxCandidates.map((candidate, index) => {
@@ -797,6 +1229,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             </button>
             {themeUrl && <div className="flex-1 min-w-64"><MediaPlayer src={themeUrl} label={`${character.name} theme`} compact /></div>}
           </div>
+          <GenerationTimeline generationKey="theme" run={generationRun} />
         </div>
 
         <div className="grid gap-5">
@@ -849,6 +1282,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <button onClick={generateImage} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "image" ? "Seedream is creating..." : imagePurpose === "identity" ? "Generate identity hero" : "Generate scene frame"}
             </button>
+            <GenerationTimeline generationKey="image" run={generationRun} />
             <div className="flex items-center gap-2">
               <span className="h-px bg-line flex-1" />
               <span className="text-[10px] uppercase tracking-wide text-grey">or use your own</span>
@@ -867,6 +1301,7 @@ export default function CharacterProductionStudio({ character }: { character: Ch
                 }}
               />
             </label>
+            <GenerationTimeline generationKey="upload" run={generationRun} />
             {generatedImage && (
               // eslint-disable-next-line @next/next/no-img-element -- provider URLs are dynamic and short-lived
               <img src={generatedImage} alt={`Generated ${character.name} scene`} className="w-full rounded-sm aspect-video object-cover" />
@@ -894,22 +1329,25 @@ export default function CharacterProductionStudio({ character }: { character: Ch
             <button onClick={generateVideo} disabled={!seedModelsReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
               {busy === "video" ? "Seedance is rendering..." : "Generate 5-second video"}
             </button>
+            <GenerationTimeline generationKey="video" run={generationRun} />
             <p className="text-[11px] text-grey">Seedance uses the selected still as the exact first frame. This prompt controls only performance, camera, light continuity, environmental motion, and the final frame; locked voice, SFX, and music stay separate.</p>
             {(generatedVideo || character.videoUrl) && <MediaPlayer src={generatedVideo || character.videoUrl || ""} label={`${character.name} scene`} kind="video" />}
           </div>
         </div>
 
+        {activeStep > 1 && (
         <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-          <button type="button" onClick={() => setActiveStep((current) => Math.max(1, current - 1))} disabled={activeStep === 1} className="rounded-full border border-line px-4 py-2 text-xs font-semibold text-grey hover:border-accent hover:text-ink disabled:cursor-not-allowed disabled:opacity-30">← Back</button>
+          <button type="button" onClick={() => jumpToStep(Math.max(1, activeStep - 1))} disabled={activeStep === 1} className="rounded-full border border-line px-4 py-2 text-xs font-semibold text-grey hover:border-accent hover:text-ink disabled:cursor-not-allowed disabled:opacity-30">← Back</button>
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-[0.16em] text-grey">{completedSteps.has(activeStep) ? "Stage complete" : "Keep shaping the take"}</p>
             {activeStep < WORKFLOW_STEPS.length ? (
-              <button type="button" onClick={() => setActiveStep((current) => Math.min(WORKFLOW_STEPS.length, current + 1))} className="mt-1 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:opacity-90">Continue to {WORKFLOW_STEPS[activeStep].label} →</button>
+              <button type="button" onClick={() => jumpToStep(Math.min(WORKFLOW_STEPS.length, activeStep + 1))} className="mt-1 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:opacity-90">Continue to {WORKFLOW_STEPS[activeStep].label} →</button>
             ) : (
               <a href="#generated-scene-log" className="mt-1 inline-block rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:opacity-90">Review outputs ↓</a>
             )}
           </div>
         </div>
+        )}
 
         <details id="generated-scene-log" data-generation-history className="border border-line rounded-md overflow-hidden">
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold hover:bg-white/[0.03]">Generated Scene Log · {assetHistory.length} saved assets</summary>

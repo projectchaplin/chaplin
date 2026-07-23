@@ -12,27 +12,31 @@ import type { Archetype, LicenseType } from "@/lib/types";
 
 type SortKey = "castings" | "newest" | "fans";
 
+function newestFirst(a: { createdAt: string }, b: { createdAt: string }) {
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+}
+
 export default function ShelfPage() {
   const world = useChaplinStore((s) => s);
   const [query, setQuery] = useState("");
   const [archetypes, setArchetypes] = useState<Set<Archetype>>(new Set());
   const [licenses, setLicenses] = useState<Set<LicenseType>>(new Set());
-  const [sort, setSort] = useState<SortKey>("castings");
+  const [sort, setSort] = useState<SortKey>("newest");
 
-  function toggleArchetype(a: Archetype) {
-    setArchetypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(a)) next.delete(a);
-      else next.add(a);
+  function toggleArchetype(archetype: Archetype) {
+    setArchetypes((previous) => {
+      const next = new Set(previous);
+      if (next.has(archetype)) next.delete(archetype);
+      else next.add(archetype);
       return next;
     });
   }
 
-  function toggleLicense(l: LicenseType) {
-    setLicenses((prev) => {
-      const next = new Set(prev);
-      if (next.has(l)) next.delete(l);
-      else next.add(l);
+  function toggleLicense(license: LicenseType) {
+    setLicenses((previous) => {
+      const next = new Set(previous);
+      if (next.has(license)) next.delete(license);
+      else next.add(license);
       return next;
     });
   }
@@ -40,89 +44,121 @@ export default function ShelfPage() {
   const results = useMemo(() => {
     let list = world.characters;
     if (query.trim()) {
-      const q = query.trim().toLowerCase();
+      const normalizedQuery = query.trim().toLowerCase();
       list = list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.tagline.toLowerCase().includes(q) ||
-          c.personality.toLowerCase().includes(q)
+        (character) =>
+          character.name.toLowerCase().includes(normalizedQuery) ||
+          character.tagline.toLowerCase().includes(normalizedQuery) ||
+          character.personality.toLowerCase().includes(normalizedQuery),
       );
     }
     if (archetypes.size > 0) {
-      list = list.filter((c) => archetypes.has(c.archetype));
+      list = list.filter((character) => archetypes.has(character.archetype));
     }
     if (licenses.size > 0) {
-      list = list.filter((c) => licenses.has(c.licenseType));
+      list = list.filter((character) => licenses.has(character.licenseType));
     }
     list = [...list];
-    if (sort === "castings") list.sort((a, b) => b.stats.castings - a.stats.castings);
-    if (sort === "fans") list.sort((a, b) => b.stats.fans - a.stats.fans);
-    if (sort === "newest") list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    if (sort === "castings") list.sort((a, b) => b.stats.castings - a.stats.castings || newestFirst(a, b));
+    if (sort === "fans") list.sort((a, b) => b.stats.fans - a.stats.fans || newestFirst(a, b));
+    if (sort === "newest") list.sort(newestFirst);
     return list;
   }, [world.characters, query, archetypes, licenses, sort]);
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 w-full">
-      <SectionHeading
-        eyebrow="The Shelf"
-        title="Every AI actor, ready to be cast"
-      />
+    <div className="shelf-stage relative mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <div aria-hidden="true" className="shelf-aurora shelf-aurora-pink" />
+      <div aria-hidden="true" className="shelf-aurora shelf-aurora-mint" />
 
-      {/* Compact filter bar: search + sort on one line, filters as single scroll rows */}
-      <div className="mb-6 flex flex-col gap-3">
+      <div className="relative z-10">
+        <SectionHeading eyebrow="The Shelf" title="Every AI actor, ready to be cast" />
+      </div>
+
+      <div className="shelf-filter-glass relative z-10 mb-6 flex flex-col gap-3 rounded-[24px] p-3 sm:p-4">
         <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-grey">⌕</span>
+          <div className="relative min-w-0 flex-1">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search: “sarcastic detective”, “warm grandmother”…"
-              className="w-full rounded-full border border-line bg-paper/60 py-2.5 pl-9 pr-4 text-sm backdrop-blur-sm transition-colors focus:border-accent focus:outline-none"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search actors, voices, worlds…"
+              className="shelf-search w-full rounded-full py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:outline-none"
             />
           </div>
           <select
             id="sort"
-            aria-label="Sort"
+            aria-label="Sort actors"
             value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            className="shrink-0 rounded-full border border-line bg-paper/60 px-3 py-2.5 text-xs backdrop-blur-sm focus:border-accent focus:outline-none"
+            onChange={(event) => setSort(event.target.value as SortKey)}
+            className="shelf-sort max-w-[7.5rem] shrink-0 rounded-full px-3 py-3 text-xs text-white focus:outline-none sm:max-w-none"
           >
+            <option value="newest">Newest</option>
             <option value="castings">Most cast</option>
             <option value="fans">Most fans</option>
-            <option value="newest">Newest</option>
           </select>
         </div>
 
         <div className="no-scrollbar -mx-1 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-1 py-0.5">
-          {ARCHETYPES.map((a) => (
-            <button key={a} onClick={() => toggleArchetype(a)} className="shrink-0">
-              <Chip label={ARCHETYPE_LABEL[a]} hue={ARCHETYPE_HUE[a]} filled={archetypes.has(a)} />
+          {ARCHETYPES.map((archetype) => (
+            <button
+              key={archetype}
+              type="button"
+              aria-pressed={archetypes.has(archetype)}
+              onClick={() => toggleArchetype(archetype)}
+              className="shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <Chip
+                label={ARCHETYPE_LABEL[archetype]}
+                hue={ARCHETYPE_HUE[archetype]}
+                filled={archetypes.has(archetype)}
+                glass
+              />
             </button>
           ))}
-          <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
-          {LICENSE_TYPES.map((l) => (
-            <button key={l} onClick={() => toggleLicense(l)} className="shrink-0">
-              <Chip label={LICENSE_LABEL[l]} hue={LICENSE_HUE[l]} filled={licenses.has(l)} />
+          <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-white/15" />
+          {LICENSE_TYPES.map((license) => (
+            <button
+              key={license}
+              type="button"
+              aria-pressed={licenses.has(license)}
+              onClick={() => toggleLicense(license)}
+              className="shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <Chip
+                label={LICENSE_LABEL[license]}
+                hue={LICENSE_HUE[license]}
+                filled={licenses.has(license)}
+                glass
+              />
             </button>
           ))}
         </div>
       </div>
 
-      <p className="text-xs text-grey mb-3">
-        {results.length} AI actor{results.length === 1 ? "" : "s"} on the shelf
+      <p className="relative z-10 mb-3 text-xs font-medium tracking-wide text-white/55">
+        <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-accent-secondary shadow-[0_0_10px_rgba(7,210,190,0.85)]" />
+        {results.length} AI actor{results.length === 1 ? "" : "s"} ready to cast
       </p>
 
       {results.length === 0 ? (
-        <div className="poster-card rounded-md p-10 text-center text-grey">
+        <div className="shelf-filter-glass relative z-10 rounded-[24px] p-10 text-center text-grey">
           No one matches that search yet. Maybe it&apos;s time to build them.
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="relative z-10 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
           {results.map((character) => {
             const maker = getUser(world, character.makerId);
-            return (
-              <CharacterCard key={character.id} character={character} makerName={maker?.name} />
-            );
+            return <CharacterCard key={character.id} character={character} makerName={maker?.name} />;
           })}
         </div>
       )}

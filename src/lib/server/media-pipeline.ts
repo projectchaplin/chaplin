@@ -36,6 +36,7 @@ function mapStep(row: Record<string, unknown>, label: string): MediaPipelineStep
     attempt: Number(row.attempt),
     maxAttempts: Number(row.max_attempts),
     outputAssetId: typeof row.output_asset_id === "string" ? row.output_asset_id : null,
+    output: record(row.output),
     errorMessage: typeof row.error_message === "string" ? row.error_message : null,
   };
 }
@@ -46,7 +47,7 @@ async function hydrateRun(runRow: Record<string, unknown>): Promise<MediaPipelin
   const supabase = getSupabaseAdminClient();
   const stepsResult = await supabase
     .from("media_pipeline_steps")
-    .select("id,step_key,position,executor,status,requires_review,attempt,max_attempts,output_asset_id,error_message")
+    .select("id,step_key,position,executor,status,requires_review,attempt,max_attempts,output_asset_id,output,error_message")
     .eq("run_id", runRow.id)
     .order("position");
   fail(stepsResult.error, "Load pipeline steps");
@@ -208,6 +209,7 @@ function nextStatusForAction(
   if (action === "complete" && current === "running") return requiresReview ? "needs_review" : "succeeded";
   if (action === "approve" && current === "needs_review") return "approved";
   if (action === "reject" && current === "needs_review") return "failed";
+  if (action === "fail" && ["queued", "running"].includes(current)) return "failed";
   if (action === "retry" && current === "failed" && attempt < maxAttempts) return "queued";
   if (action === "skip" && ["ready", "queued", "failed"].includes(current)) return "skipped";
   if (action === "cancel" && !finishedStepStates.includes(current)) return "cancelled";
@@ -279,6 +281,7 @@ export async function transitionMediaPipelineStep(input: {
     patch.completed_at = null;
   }
   if (input.action === "reject") patch.error_message = input.errorMessage || "Creative review rejected this attempt.";
+  if (input.action === "fail") patch.error_message = input.errorMessage || "The provider could not complete this step.";
   if (input.output) patch.output = input.output;
   if (input.outputAssetId !== undefined) patch.output_asset_id = input.outputAssetId;
   if (input.errorMessage && input.action !== "retry") patch.error_message = input.errorMessage;
