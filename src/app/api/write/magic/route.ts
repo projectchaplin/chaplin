@@ -342,7 +342,9 @@ export async function POST(request: Request) {
     draft.scenes = draft.scenes.slice(0, 10).map((scene) => ({
       ...scene,
       lines: scene.lines.filter((line) => allowedIds.has(line.characterId)).slice(0, 12),
-    })).filter((scene) => scene.lines.length > 0);
+    })).filter((scene) =>
+      Boolean(scene.setting.trim() || scene.objective.trim() || scene.action.trim() || scene.lines.length)
+    );
     const speakingCastIds = draft.scenes.flatMap((scene) => scene.lines.map((line) => line.characterId));
     draft.castIds = [...new Set([...draft.castIds, ...speakingCastIds])]
       .filter((id) => allowedIds.has(id));

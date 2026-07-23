@@ -85,7 +85,9 @@ const IDEA_STARTERS: Record<ProductionFormat, string[]> = {
   ],
 };
 
-const EMPTY_SCENE: DraftScene = { setting: "", objective: "", action: "", lines: [] };
+function emptyScene(): DraftScene {
+  return { setting: "", objective: "", action: "", lines: [] };
+}
 
 export default function StoryBuilderForm() {
   const router = useRouter();
@@ -116,7 +118,7 @@ export default function StoryBuilderForm() {
     const preset = searchParams.getAll("cast");
     return preset.filter((id) => world.characters.some((c) => c.id === id));
   });
-  const [scenes, setScenes] = useState<DraftScene[]>([{ ...EMPTY_SCENE }]);
+  const [scenes, setScenes] = useState<DraftScene[]>([emptyScene()]);
   const [error, setError] = useState("");
   const [magicBusy, setMagicBusy] = useState(false);
   const [magicMessage, setMagicMessage] = useState("");
@@ -131,6 +133,7 @@ export default function StoryBuilderForm() {
   const [draftSaveState, setDraftSaveState] = useState<DraftSaveState>(
     searchParams.get("draft") ? "loading" : "idle",
   );
+  const pendingSceneFocusRef = useRef<number | null>(null);
   const formatOptions = formatsForRole(activeRole);
   const formatDefinition = PRODUCTION_FORMATS[format];
   const expectedShotCount = productionShotCount(format, durationSeconds);
@@ -191,12 +194,12 @@ export default function StoryBuilderForm() {
         setTitle(stored.title);
         setLogline(stored.logline);
         setBrief(body.brief ?? "");
-        setDurationSeconds(body.durationSeconds ?? productionDuration(stored.format));
+        setDurationSeconds(productionDuration(stored.format, body.durationSeconds));
         setCreativeDirection(body.creativeDirection ?? "");
         setProductImageUrl(body.productImageUrl ?? "");
         setProductImageName(body.productImageName ?? "");
         setCastIds(Array.isArray(body.castIds) ? body.castIds : []);
-        setScenes(Array.isArray(body.scenes) && body.scenes.length ? body.scenes : [{ ...EMPTY_SCENE }]);
+        setScenes(Array.isArray(body.scenes) && body.scenes.length ? body.scenes : [emptyScene()]);
         setStep(body.step === 2 || body.step === 3 ? body.step : 1);
         setDraftId(stored.id);
         setDraftReady(true);
@@ -279,6 +282,16 @@ export default function StoryBuilderForm() {
   }, []);
 
   useEffect(() => {
+    const sceneIndex = pendingSceneFocusRef.current;
+    if (sceneIndex === null) return;
+    pendingSceneFocusRef.current = null;
+    const sceneCard = document.querySelector<HTMLElement>(`[data-scene-card="${sceneIndex}"]`);
+    const settingInput = document.querySelector<HTMLInputElement>(`[data-scene-setting="${sceneIndex}"]`);
+    sceneCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => settingInput?.focus(), 320);
+  }, [scenes.length]);
+
+  useEffect(() => {
     const applyVoiceDirection = (event: Event) => {
       const direction = (event as CustomEvent<{ brief?: string | null }>).detail?.brief?.trim();
       if (!direction) return;
@@ -345,7 +358,10 @@ export default function StoryBuilderForm() {
   }
 
   function addScene() {
-    setScenes((prev) => [...prev, { ...EMPTY_SCENE }]);
+    setScenes((prev) => {
+      pendingSceneFocusRef.current = prev.length;
+      return [...prev, emptyScene()];
+    });
   }
   function removeScene(i: number) {
     setScenes((prev) => prev.filter((_, idx) => idx !== i));
@@ -388,6 +404,7 @@ export default function StoryBuilderForm() {
   async function createMagicDraft({ conceptOnly = false }: { conceptOnly?: boolean } = {}) {
     if (format === "spot" && !productImageUrl) {
       setError("Upload the product image first. It is the visual source of truth for this ad.");
+      setStep(1);
       document.querySelector("[data-product-reference]")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -433,7 +450,7 @@ export default function StoryBuilderForm() {
       setCreativeDirection(draft.creativeDirection);
       if (!conceptOnly) {
         setCastIds(draft.castIds.filter((id) => world.characters.some((character) => character.id === id)));
-        setScenes(draft.scenes.length ? draft.scenes : [{ ...EMPTY_SCENE }]);
+        setScenes(draft.scenes.length ? draft.scenes : [emptyScene()]);
         setStep(3);
       }
       setClaudeConfigured(Boolean(data.configured));
@@ -450,6 +467,16 @@ export default function StoryBuilderForm() {
       setError(magicError instanceof Error ? magicError.message : "Magic Writer failed.");
     } finally {
       setMagicBusy(false);
+    }
+  }
+
+  function continueToScenes() {
+    setStep(3);
+    const hasScenePlan = scenes.some((scene) =>
+      Boolean(scene.setting.trim() || scene.objective.trim() || scene.action.trim() || scene.lines.some((line) => line.text.trim()))
+    );
+    if (!hasScenePlan && castCharacters.length > 0) {
+      void createMagicDraft();
     }
   }
 
@@ -483,6 +510,8 @@ export default function StoryBuilderForm() {
           brief: sceneBrief,
           title,
           logline,
+          productImageUrl,
+          productImageName,
           castIds,
           characters: world.characters.map((character) => ({
             id: character.id,
@@ -1128,16 +1157,19 @@ export default function StoryBuilderForm() {
 
           <div className="flex justify-between">
             <button
+              type="button"
               onClick={() => setStep(1)}
               className="text-sm text-grey hover:text-accent px-4 py-2"
             >
               ← Back
             </button>
             <button
-              onClick={() => setStep(3)}
-              className="bg-accent text-paper font-semibold px-4 py-2 rounded-sm hover:bg-accent-light transition-colors"
+              type="button"
+              onClick={continueToScenes}
+              disabled={magicBusy || castCharacters.length === 0}
+              className="bg-accent text-paper font-semibold px-4 py-2 rounded-sm hover:bg-accent-light transition-colors disabled:cursor-not-allowed disabled:opacity-45"
             >
-              Next: write scenes →
+              {magicBusy ? "Building scenes…" : "Next: generate scenes →"}
             </button>
           </div>
         </div>
@@ -1220,8 +1252,28 @@ export default function StoryBuilderForm() {
             </p>
           </div>
 
+          <div className="poster-card flex flex-col gap-3 rounded-md border-accent/35 bg-accent/[0.035] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold">
+                {magicBusy ? "Chaplin is building the scene beats…" : "Build the scenes from this concept"}
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-grey">
+                Generate the complete editable scene plan from the concept, cast, and locked product reference.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void createMagicDraft()}
+              disabled={magicBusy || castCharacters.length === 0}
+              className="shrink-0 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:bg-accent-light disabled:cursor-not-allowed disabled:opacity-45"
+              data-action="generate-scenes"
+            >
+              {magicBusy ? "Building scenes…" : scenes.some((scene) => scene.setting || scene.objective || scene.action) ? "Regenerate all scenes" : "✦ Generate scenes"}
+            </button>
+          </div>
+
           {scenes.map((scene, si) => (
-            <div key={si} className="poster-card rounded-md p-5">
+            <div key={si} className="poster-card scroll-mt-24 rounded-md p-5" data-scene-card={si}>
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="accent-rule w-6" />
                 <input
@@ -1243,6 +1295,7 @@ export default function StoryBuilderForm() {
                 </button>
                 {scenes.length > 1 && (
                   <button
+                    type="button"
                     onClick={() => removeScene(si)}
                     className="text-xs text-grey hover:text-red-600"
                   >
@@ -1302,6 +1355,7 @@ export default function StoryBuilderForm() {
                       className="w-full min-w-0 flex-1 border border-line rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-accent"
                     />
                     <button
+                      type="button"
                       onClick={() => removeLine(si, li)}
                       className="self-end text-grey hover:text-red-600 px-2 py-2 sm:self-auto"
                     >
@@ -1311,6 +1365,7 @@ export default function StoryBuilderForm() {
                 ))}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <button
+                    type="button"
                     onClick={() => addLine(si)}
                     disabled={castCharacters.length === 0}
                     className="self-start text-xs text-accent hover:underline disabled:text-grey disabled:no-underline"
@@ -1326,6 +1381,7 @@ export default function StoryBuilderForm() {
           ))}
 
           <button
+            type="button"
             onClick={addScene}
             className="border border-dashed border-line rounded-md py-3 text-sm text-grey hover:border-accent hover:text-accent transition-colors"
           >
