@@ -272,9 +272,11 @@ export default function CharacterProfilePage() {
             <CharacterProductionStudio
               character={character}
               onExit={() => {
+                const studio = document.getElementById("production-studio") as HTMLDetailsElement | null;
+                if (studio) studio.open = false;
                 setProductionOpen(false);
                 window.requestAnimationFrame(() => {
-                  document.getElementById("production-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  studio?.scrollIntoView({ behavior: "smooth", block: "start" });
                 });
               }}
             />

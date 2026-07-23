@@ -71,7 +71,7 @@ const REALISM_DIRECTION = "OUTPUT MEDIUM: A visually striking live-action cinema
 const REALISM_NEGATIVE = "cartoon, anime, illustration, digital painting, concept art, 3D render, CGI character, game art, doll-like face, wax figure, airbrushed skin, synthetic skin, over-smoothed face";
 
 function requestsStylizedImage(prompt: string) {
-  const style = /\b(?:cartoon|anime|illustration|illustrated|digital painting|3d render|cgi|game art|comic(?:-book)?|claymation)\b/i;
+  const style = /\b(?:cartoon|anime|manga|animation|animated|illustration|illustrated|digital painting|3d render|cgi|game art|comic(?:-book)?|claymation)\b/i;
   return prompt.split(/[\n.!?;]/).some((clause) => {
     const match = style.exec(clause);
     if (!match) return false;
@@ -81,9 +81,81 @@ function requestsStylizedImage(prompt: string) {
   });
 }
 
+const VISUAL_LABEL_PRIORITY = [
+  "STYLE",
+  "ACTOR",
+  "SUBJECT AND IDENTITY",
+  "SUBJECT",
+  "VISIBLE PERSONALITY",
+  "VISIBLE PERFORMANCE",
+  "PERFORMANCE LOGIC",
+  "DRAMATIC MOMENT",
+  "PLAYABLE MOMENT",
+  "INTENT",
+  "SIGNATURE LOOK",
+  "WORLD",
+  "SET",
+  "CAMERA AND COMPOSITION",
+  "CAMERA",
+  "LIGHTING",
+  "LIGHT",
+  "MOVEMENT",
+  "SECONDARY MOTION",
+  "FINAL FRAME",
+  "CONTINUITY",
+  "LOCKS AND EXCLUSIONS",
+  "LOCKS",
+  "EXCLUSIONS",
+  "AUDIO",
+];
+
+function compactVisualDirection(prompt: string, kind: "image" | "video") {
+  const cleaned = prompt
+    .replace(/\r/g, "")
+    .replace(/[ \t]+/g, " ")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const labeled = new Map<string, string>();
+  const unlabeled: string[] = [];
+  for (const line of cleaned) {
+    const match = /^([A-Z][A-Z /&+_-]{2,32}):\s*(.+)$/.exec(line);
+    if (!match) {
+      unlabeled.push(line);
+      continue;
+    }
+    const label = match[1].trim();
+    if (!labeled.has(label)) labeled.set(label, match[2].trim());
+  }
+
+  const maximumLine = kind === "image" ? 190 : 170;
+  const selected = VISUAL_LABEL_PRIORITY
+    .flatMap((label) => {
+      const value = labeled.get(label);
+      return value ? [`${label}: ${value.slice(0, maximumLine).trim()}`] : [];
+    });
+  const essentials = selected.length >= 3
+    ? selected
+    : [...selected, ...unlabeled.slice(0, kind === "image" ? 5 : 7).map((line) => line.slice(0, maximumLine).trim())];
+  const maximumCharacters = kind === "image" ? 1800 : 1450;
+  return essentials.join("\n").slice(0, maximumCharacters).trim();
+}
+
+function visualGenerationPrompt(stage: PipelineStageConfig, prompt: string, kind: "image" | "video") {
+  const stylized = requestsStylizedImage(prompt);
+  const explicitStyle = stylized
+    ? prompt.split(/[\n.!?;]/).map((clause) => clause.trim()).find((clause) => requestsStylizedImage(clause))
+    : "";
+  const medium = stylized
+    ? `OUTPUT MEDIUM: Preserve this explicit style consistently: ${explicitStyle?.slice(0, 180) || "the requested stylized medium"}. Do not drift into photorealism or an unrelated visual language.`
+    : REALISM_DIRECTION;
+  const brief = compactVisualDirection(prompt, kind);
+  const adminDirection = stage.promptPrelude.replace(/\s+/g, " ").trim().slice(0, 400);
+  return [medium, brief, adminDirection].filter(Boolean).join("\n\n");
+}
+
 function imageGenerationPrompt(stage: PipelineStageConfig, prompt: string) {
-  const directed = directedPrompt(stage, prompt);
-  return requestsStylizedImage(prompt) ? directed : [REALISM_DIRECTION, directed].join("\n\n");
+  return visualGenerationPrompt(stage, prompt, "image");
 }
 
 function providerPrompt(stage: PipelineStageConfig, prompt: string, maximumCharacters: number) {
@@ -519,7 +591,7 @@ export async function POST(request: Request) {
       const production = await getCharacterProductionState(characterId);
       const canonicalReference = production.visualReference;
       const reference = canonicalReference?.url ?? requestedReference;
-      const prompt = lockVisualIdentity(directedPrompt(videoConfig, silentPrompt), Boolean(reference));
+      const prompt = lockVisualIdentity(visualGenerationPrompt(videoConfig, silentPrompt, "video"), Boolean(reference));
       const referenceMetadata = {
         referenceImage: reference || null,
         referenceAssetId: canonicalReference?.assetId ?? null,

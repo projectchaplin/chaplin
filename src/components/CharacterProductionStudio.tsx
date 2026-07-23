@@ -367,6 +367,7 @@ export default function CharacterProductionStudio({
   const [selectingAsset, setSelectingAsset] = useState("");
   const [message, setMessage] = useState("");
   const workflowContentRef = useRef<HTMLDivElement | null>(null);
+  const quickWriteRevisionRef = useRef(0);
   const referenceImage = canonicalReferenceImage || character.imageUrl || character.galleryUrls?.[0] || character.bannerUrl || "";
   const lockedVoiceId = character.voiceId || status?.production?.voiceId || "";
 
@@ -499,6 +500,8 @@ export default function CharacterProductionStudio({
   ) {
     setQuickWriting(field);
     setMessage("");
+    quickWriteRevisionRef.current += 1;
+    const variation = quickWriteRevisionRef.current;
     try {
       const response = await fetch("/api/write/quick", {
         method: "POST",
@@ -506,6 +509,7 @@ export default function CharacterProductionStudio({
         body: JSON.stringify({
           field,
           currentText,
+          variation,
           character,
           context: {
             voiceDescription,
@@ -1383,6 +1387,7 @@ export default function CharacterProductionStudio({
                 busy={Boolean(busy) || Boolean(quickWriting)}
                 writing={quickWriting === "video"}
                 onClick={() => void quickWrite("video", scenePrompt, setScenePrompt)}
+                label={generatedVideo || character.videoUrl ? "Regenerate prompt" : "Quick Write"}
               />
             </div>
             {referenceImage && (
@@ -1410,7 +1415,22 @@ export default function CharacterProductionStudio({
             {activeStep < WORKFLOW_STEPS.length ? (
               <button type="button" onClick={() => jumpToStep(Math.min(WORKFLOW_STEPS.length, activeStep + 1))} className="mt-1 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:opacity-90">Continue to {WORKFLOW_STEPS[activeStep].label} →</button>
             ) : (
-              <a href="#generated-scene-log" className="mt-1 inline-block rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:opacity-90">Review outputs ↓</a>
+              <div className="mt-2 grid gap-2 sm:min-w-[420px]">
+                {onExit && (
+                  <button type="button" onClick={onExit} className="w-full rounded-full bg-accent px-4 py-3 text-xs font-bold text-paper shadow-[0_10px_28px_rgba(244,63,105,0.24)] hover:opacity-90">
+                    Finish & close studio →
+                  </button>
+                )}
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button type="button" onClick={() => void quickWrite("video", scenePrompt, setScenePrompt)} disabled={Boolean(busy) || Boolean(quickWriting)} className="rounded-full border border-accent/60 px-3 py-2 text-[10px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40">
+                    {quickWriting === "video" ? "Writing a new direction…" : "Regenerate prompt"}
+                  </button>
+                  <button type="button" onClick={generateVideo} disabled={!seedModelsReady || Boolean(busy)} className="rounded-full border border-accent/60 px-3 py-2 text-[10px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40">
+                    {busy === "video" ? "Rendering…" : "Regenerate video"}
+                  </button>
+                  <a href="#generated-scene-log" className="rounded-full border border-line px-3 py-2 text-[10px] font-semibold text-grey hover:border-accent hover:text-ink">Review outputs ↓</a>
+                </div>
+              </div>
             )}
           </div>
         </div>

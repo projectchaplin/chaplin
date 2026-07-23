@@ -42,9 +42,9 @@ const FIELD_RULES: Record<QuickField, string> = {
   dialogue: "Write a concise, performable line in this actor's established personality and locked voice. Preserve the user's intent, use subtext rather than exposition, and make it memorable without catchphrase clichés. Output spoken words only: no speaker label, parentheses, brackets, stage directions, or written pause cues. Use punctuation for cadence. Output dialogue only.",
   sfx: "Write only an ElevenLabs 1-2 second non-musical signature-sound prompt. Translate the actor's personality into one physical source, a precise material texture, a close acoustic distance, one unusual identifying detail, and a clean stop. It must work as a short repeatable sonic logo, not a sequence, biography, ambience bed, or score. No speech, voice, melody, riser, or trailer braam. 30-55 words.",
   theme: "Write only an Eleven Music prompt for a 12-second instrumental ident. Include BPM, key, a three-note motif, exact instruments, 0-3s / 3-8s / 8-12s development, mix priority, and final cadence. No biography, sound-effect sequence, vocals, choir, lyrics, or copyrighted imitation. 55-95 words.",
-  "identity-image": "Write only a concise Seedream 16:9 Identity Hero prompt for the actor's definitive casting image. Unless the user explicitly requests a stylized medium, require a visually striking live-action cinematic photograph of a real human: natural facial asymmetry, pores, fine hair, believable hands, tactile fabric, grounded body weight, optical depth, physically motivated light, and restrained film grain. Use coherent natural-language blocks in this order: ACTOR with repeatable face anchors; VISIBLE PERFORMANCE through expression, hands, posture, weight, and eyeline; SIGNATURE LOOK; one restrained WORLD detail; CAMERA; LIGHT; LOCKS AND EXCLUSIONS. One person. No biography, plot montage, fashion pose, generic hero stance, dialogue, text, logo, UI, or watermark. 140-220 words.",
-  image: "Write only a concise Seedream 16:9 story first-frame prompt. Unless the user explicitly requests a stylized medium, require a visually striking live-action cinematic photograph of a real human with natural skin, believable anatomy, tactile materials, optical depth, physical camera character, and motivated light. Use coherent natural-language blocks: SUBJECT identity anchors; PLAYABLE MOMENT; SET; CAMERA; LIGHT; CONTINUITY; EXCLUSIONS. Show one decision through face, hands, weight, and eyeline. No biography, plot summary, camera movement, dialogue, typography, logo, or watermark. 120-200 words.",
-  video: "Write only a Seedance five-second IMAGE-TO-VIDEO motion plan. State that the supplied image is exact first frame/source of truth; do not redescribe the actor, wardrobe, set, palette, or biography. Specify 0.0-1.2s, 1.2-3.5s, and 3.5-5.0s subject action; one facial beat; one camera path; fixed source-image axis/lens/horizon; light continuity; secondary motion; final frame; identity and geometry locks. Silent plate: no lip-sync, speech, subtitles, text, logo, or watermark. 130-220 words.",
+  "identity-image": "Write only a concise Seedream 16:9 Identity Hero prompt for the actor's definitive casting image. Unless the user explicitly requests a stylized medium, require a visually striking live-action cinematic photograph of a real human: natural facial asymmetry, pores, fine hair, believable hands, tactile fabric, grounded body weight, optical depth, physically motivated light, and restrained film grain. Use coherent natural-language blocks in this order: ACTOR with repeatable face anchors; VISIBLE PERFORMANCE through expression, hands, posture, weight, and eyeline; SIGNATURE LOOK; one restrained WORLD detail; CAMERA; LIGHT; LOCKS AND EXCLUSIONS. One person. No biography, plot montage, fashion pose, generic hero stance, dialogue, text, logo, UI, or watermark. Keep only generation-critical facts. 90-140 words.",
+  image: "Write only a concise Seedream 16:9 story first-frame prompt. Unless the user explicitly requests a stylized medium, require a visually striking live-action cinematic photograph of a real human with natural skin, believable anatomy, tactile materials, optical depth, physical camera character, and motivated light. Use coherent natural-language blocks: SUBJECT identity anchors; PLAYABLE MOMENT; SET; CAMERA; LIGHT; CONTINUITY; EXCLUSIONS. Show one decision through face, hands, weight, and eyeline. No biography, plot summary, camera movement, dialogue, typography, logo, or watermark. Keep only generation-critical facts. 80-130 words.",
+  video: "Write only a Seedance five-second IMAGE-TO-VIDEO motion plan. State that the supplied image is exact first frame/source of truth; do not redescribe the actor, wardrobe, set, palette, or biography. Specify 0.0-1.2s, 1.2-3.5s, and 3.5-5.0s subject action; one facial beat; one camera path; fixed source-image axis/lens/horizon; light continuity; secondary motion; final frame; identity and geometry locks. Silent plate: no lip-sync, speech, subtitles, text, logo, or watermark. Keep it direct and executable. 75-120 words.",
 };
 
 function clean(value: unknown, max = 4000) {
@@ -82,6 +82,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "AI actor context is invalid." }, { status: 400 });
     }
     const currentText = clean(body.currentText);
+    const variation = Math.max(1, Math.floor(Number(body.variation) || 1));
     fallbackField = field;
     fallbackCharacter = character;
     fallbackCurrentText = currentText;
@@ -107,6 +108,8 @@ export async function POST(request: Request) {
     const promptPayload = JSON.stringify({
       field,
       currentText: currentText || null,
+      regenerationPass: variation,
+      creativeInstruction: "Make a genuinely different creative choice, not a synonym-level paraphrase. Preserve canon and user intent while changing the central playable beat, visual action, composition, or rhythm as appropriate for this field.",
       actor: {
         name: character.name,
         archetype: character.archetype,
@@ -147,7 +150,8 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         max_tokens: Math.min(2000, writingConfig.maxTokens ?? 700),
-        system: `${writingConfig.promptPrelude} You are Chaplin's production copywriter. Rewrite exactly one field for an original fictional AI actor. Preserve useful user intent, character continuity, and provider constraints. Return only the requested field in structured JSON. ${FIELD_RULES[field]}`,
+        temperature: Math.min(1, Math.max(0.7, writingConfig.temperature ?? 0.9)),
+        system: `${writingConfig.promptPrelude} You are Chaplin's production copywriter. Rewrite exactly one field for an original fictional AI actor. This is creative regeneration pass ${variation}: make a materially new creative choice rather than paraphrasing the existing text. Preserve useful user intent, character continuity, and provider constraints. Return only the requested field in structured JSON. ${FIELD_RULES[field]}`,
         messages: [{
           role: "user",
           content: messageContent,

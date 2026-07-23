@@ -29,7 +29,7 @@ export const PIPELINE_STAGE_META: Record<PipelineStageId, {
     label: "Writing & direction",
     owner: "Story editor",
     purpose: "Character expansion, Quick Write, scene hooks, shot blueprints, and production prompts.",
-    temperatureSupported: false,
+    temperatureSupported: true,
   },
   voice: {
     label: "Voice",
@@ -73,7 +73,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       provider: "anthropic",
       model: "claude-sonnet-5",
       promptPrelude: "Preserve character canon, visible causality, production constraints, and useful user intent. Return only the requested production artifact.",
-      temperature: null,
+      temperature: 0.9,
       maxTokens: 8000,
       settings: {
         sceneVariations: 3,
@@ -160,6 +160,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
 };
 
 function finiteNumber(value: unknown, fallback: number, minimum: number, maximum: number) {
+  if (value == null || value === "") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
 }
