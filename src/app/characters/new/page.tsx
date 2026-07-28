@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useChaplinStore } from "@/lib/store";
 import Avatar from "@/components/Avatar";
+import BrandLogo from "@/components/BrandLogo";
 import Chip from "@/components/Chip";
 import { ARCHETYPES } from "@/data/seed";
 import type { Archetype, CharacterProductionBible, LicenseType, VoiceGender } from "@/lib/types";
@@ -837,16 +838,7 @@ export default function NewCharacterPage() {
                 aria-label="Chaplin actors"
                 className="relative flex h-10 w-[8.75rem] shrink-0 items-center"
               >
-                <Image
-                  src="/brand/chaplin-logo-transparent.png"
-                  alt="Chaplin"
-                  width={1826}
-                  height={585}
-                  priority
-                  quality={90}
-                  sizes="140px"
-                  className="h-10 w-auto max-w-[8.75rem] object-contain object-left"
-                />
+                <BrandLogo priority className="h-10" />
               </Link>
               <span className="h-8 w-px bg-white/10" />
               <label className="flex items-center gap-3 text-xs text-grey">

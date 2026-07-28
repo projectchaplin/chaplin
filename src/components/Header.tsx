@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useChaplinStore } from "@/lib/store";
 import Avatar from "@/components/Avatar";
 import HydrateStore from "@/components/HydrateStore";
+import BrandLogo from "@/components/BrandLogo";
 import { CHAPLIN_VERSION_LABEL } from "@/lib/version";
 import {
   clearClientAuthIdentity,
@@ -91,16 +92,10 @@ export default function Header() {
             data-header-wordmark
             className={`absolute inset-y-0 left-0 flex items-center transition-all duration-300 ${compact ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"}`}
           >
-            <Image
-              src="/brand/chaplin-logo-transparent.png"
-              alt="Chaplin"
+            <BrandLogo
               data-header-full-logo
-              width={1826}
-              height={585}
               priority
-              quality={90}
-              sizes="140px"
-              className="h-11 w-auto max-w-[8.75rem] object-contain object-left"
+              className="h-11"
             />
           </span>
           <Image

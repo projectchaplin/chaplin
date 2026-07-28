@@ -7,6 +7,7 @@ import { ARCHETYPE_HUE, ARCHETYPE_LABEL, hsl } from "@/lib/format";
 import { useChaplinStore } from "@/lib/store";
 import type { Character } from "@/lib/types";
 import type { HomepageBroll } from "@/components/HeroGridCard";
+import BrandLogo from "@/components/BrandLogo";
 import CountUp from "@/components/home/CountUp";
 
 /** Cycles the featured performance so the library reads as alive, not static. */
@@ -244,16 +245,7 @@ export default function HomeShell() {
           {/* Home lost its wordmark when the bespoke rail was removed — the app
               rail carries no brand, so nothing identified the product here. */}
           <Link href="/" aria-label="Chaplin home" className="hidden shrink-0 items-center sm:flex">
-            <Image
-              src="/brand/chaplin-logo-transparent.png"
-              alt="Chaplin"
-              width={1826}
-              height={585}
-              priority
-              quality={90}
-              sizes="264px"
-              className="h-14 w-auto max-w-[16.5rem] object-contain object-left"
-            />
+            <BrandLogo priority className="h-14" />
           </Link>
           <label className="relative mx-auto flex w-full max-w-[36rem] items-center">
             <span className="pointer-events-none absolute left-3.5 text-white/35">

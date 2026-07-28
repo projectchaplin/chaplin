@@ -3,6 +3,15 @@
 This changelog records user-facing product changes, production-pipeline changes,
 provider integrations, and the validation boundary for each major Chaplin update.
 
+## v0.2.24 - 2026-07-28 - Crisp Chaplin wordmark
+
+- Removed the glow-baked full-logo raster from every live navigation and footer
+  surface.
+- Added one reusable, sharp brand lockup built from the clean gradient C mark
+  and rendered CHAPLIN word text with no blur, shadow, filter, or bloom.
+- Applied the lockup consistently to the global header, homepage, footer, and
+  desktop actor-creation workspace while preserving the compact header mark.
+
 ## v0.2.23 - 2026-07-28 - Owner-only actor controls
 
 - Replaced demo-role checks on public actor profiles with server-derived
