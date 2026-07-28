@@ -133,18 +133,6 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
         : [authenticatedUser, ...(adminUser && adminUser.id !== authenticatedUser.id ? [adminUser] : [])];
       return {
         users,
-        characters: profile.role === "admin"
-          ? state.characters
-          : state.characters.map((character) => ({ ...character, makerId: profile.id })),
-        stories: profile.role === "admin"
-          ? state.stories
-          : state.stories.map((story) => ({ ...story, authorId: profile.id })),
-        castings: profile.role === "admin"
-          ? state.castings
-          : state.castings.map((casting) => ({ ...casting, casterId: profile.id })),
-        ledger: profile.role === "admin"
-          ? state.ledger
-          : state.ledger.map((entry) => ({ ...entry, makerId: profile.id })),
         currentUserId: profile.id,
         activeRole,
       };
@@ -348,7 +336,9 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
         return {
           ...local,
           ...remote,
-          makerId: state.activeRole === "admin" ? remote.makerId : state.currentUserId,
+          // Ownership comes from Supabase. Reassigning every catalogue actor to
+          // the current browser user made public actors look editable.
+          makerId: remote.makerId,
           galleryUrls: [...new Set([
             ...(remote.galleryUrls ?? []),
             ...(local?.galleryUrls ?? []),
@@ -395,7 +385,6 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
             users: mergedUsers,
             characters: mergedCharacters.map((character) => ({
               ...character,
-              makerId: requestedUser?.id ?? get().currentUserId,
               galleryUrls: character.galleryUrls
                 ? [...new Set(character.galleryUrls)]
                 : undefined,
@@ -404,18 +393,9 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
                 currentCharacters.find((current) => current.id === character.id)?.voiceGender ??
                 "androgynous",
             })),
-            stories: (saved.stories ?? get().stories).map((story: Story) => ({
-              ...story,
-              authorId: requestedUser?.id ?? get().currentUserId,
-            })),
-            castings: (saved.castings ?? get().castings).map((casting: Casting) => ({
-              ...casting,
-              casterId: requestedUser?.id ?? get().currentUserId,
-            })),
-            ledger: (saved.ledger ?? get().ledger).map((entry: LedgerEntry) => ({
-              ...entry,
-              makerId: requestedUser?.id ?? get().currentUserId,
-            })),
+            stories: saved.stories ?? get().stories,
+            castings: saved.castings ?? get().castings,
+            ledger: saved.ledger ?? get().ledger,
             currentUserId: requestedUser?.id ?? get().currentUserId,
             activeRole,
           });

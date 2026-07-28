@@ -3,6 +3,20 @@
 This changelog records user-facing product changes, production-pipeline changes,
 provider integrations, and the validation boundary for each major Chaplin update.
 
+## v0.2.23 - 2026-07-28 - Owner-only actor controls
+
+- Replaced demo-role checks on public actor profiles with server-derived
+  signed-in, owner, and private-admin access.
+- Removed production, media-generation, management, and developer controls for
+  signed-out visitors and signed-in non-owners while preserving casting for
+  authenticated creators.
+- Protected direct actor production-studio URLs on the server: signed-out
+  visitors return to sign-in and non-owners return to the public actor profile.
+- Stopped local hydration and catalogue synchronization from reassigning every
+  actor, story, casting, and ledger record to the current browser account.
+- Added explicit access-policy tests for signed-out, non-owner, owner, and
+  allow-listed admin states.
+
 ## v0.2.22 - 2026-07-28 - Sign-in footer repair
 
 - Aligned the shared desktop footer with the 5.5rem navigation rail so the

@@ -1,6 +1,6 @@
 {
   "name": "chaplin",
-  "version": "0.2.22",
+  "version": "0.2.23",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,6 +15,7 @@
     "verify:pipeline": "node scripts/verify-pipeline.mjs",
     "verify:mobile": "node scripts/verify-mobile.mjs",
     "test:character-graph": "node --import tsx --test src/lib/character-graph.test.ts",
+    "test:character-access": "node --import tsx --test src/lib/character-access.test.ts",
     "test:credits": "node --import tsx --test src/lib/credits.test.ts",
     "test:character-card": "node --import tsx --test src/lib/character-card.test.ts src/lib/character-coherence.test.ts",
     "test:prompt-lint": "node --import tsx --test src/lib/prompt-lint.test.ts",
