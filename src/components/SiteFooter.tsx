@@ -10,8 +10,11 @@ export default function SiteFooter() {
   if (pathname === "/" || pathname === "/super-admin") return null;
 
   return (
-    <footer className="border-t border-line relative z-10 pb-24">
-      <div className="app-width px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-grey">
+    <footer
+      data-site-footer
+      className="relative z-10 border-t border-line pb-24 lg:pb-0 lg:pl-[5.5rem]"
+    >
+      <div className="app-width flex min-w-0 flex-col items-center justify-between gap-2 px-6 py-6 text-xs text-grey sm:flex-row">
         <Image
           src="/brand/chaplin-logo-transparent.png"
           alt="Chaplin"
@@ -21,7 +24,7 @@ export default function SiteFooter() {
           sizes="112px"
           className="h-8 w-auto max-w-28 object-contain"
         />
-        <span>A casting marketplace for AI actors. Every actor, every audience. · {CHAPLIN_VERSION_LABEL}</span>
+        <span className="min-w-0 text-center sm:text-right">A casting marketplace for AI actors. Every actor, every audience. · {CHAPLIN_VERSION_LABEL}</span>
       </div>
     </footer>
   );

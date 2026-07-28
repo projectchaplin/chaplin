@@ -226,3 +226,4 @@ Chaplin by one version ordinal. Patch and minor counters roll after 99.
 | v0.2.18 | `0952e99` | 2026-07-28T19:57:05+05:30 | Redesign character profile hero stage |
 | v0.2.19 | `de7a82e` | 2026-07-28T20:01:31+05:30 | Hide Super Admin behind private entry |
 | v0.2.20 | `b9f6a5d` | 2026-07-28T20:23:51+05:30 | Harden Chaplin for public launch |
+| v0.2.21 | `78e11ca` | 2026-07-28T20:31:50+05:30 | Give AI actions a magic RGB edge |

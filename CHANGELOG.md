@@ -3,6 +3,15 @@
 This changelog records user-facing product changes, production-pipeline changes,
 provider integrations, and the validation boundary for each major Chaplin update.
 
+## v0.2.22 - 2026-07-28 - Sign-in footer repair
+
+- Aligned the shared desktop footer with the 5.5rem navigation rail so the
+  Chaplin wordmark is no longer covered on the sign-in screen.
+- Removed mobile-only bottom-navigation spacing from desktop footers, eliminating
+  the oversized empty area beneath authentication and other public pages.
+- Added safe shrinking and responsive text alignment for the footer description
+  while preserving the existing mobile layout.
+
 ## v0.2.21 - 2026-07-28 - Magic action visual language
 
 - Added a restrained cyan-to-violet-to-pink edge as the shared visual signature
