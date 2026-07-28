@@ -9,6 +9,13 @@ import {
   type AccountRole,
 } from "@/lib/server/auth";
 import { getSupabaseAdminClient } from "@/lib/server/supabase-admin";
+import {
+  assertMutationOrigin,
+  assertRequestBodySize,
+  enforceRateLimit,
+  safeInternalPath,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
@@ -39,6 +46,13 @@ function autoConfirmEmailEnabled() {
 async function confirmAuthUser(userId: string) {
   const result = await getSupabaseAdminClient().auth.admin.updateUserById(userId, { email_confirm: true });
   if (result.error) throw new Error(`Confirm local account: ${result.error.message}`);
+}
+
+async function grantSignupEntitlement(userId: string) {
+  const result = await getSupabaseAdminClient()
+    .from("creator_signup_entitlements")
+    .upsert({ user_id: userId, source: "chaplin-signup" }, { onConflict: "user_id" });
+  if (result.error) throw new Error(`Prepare welcome-credit eligibility: ${result.error.message}`);
 }
 
 async function findAuthUserIdByEmail(email: string) {
@@ -104,6 +118,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    assertMutationOrigin(request);
+    assertRequestBodySize(request, 32 * 1024);
     const input = await request.json() as Record<string, unknown>;
     const action = input.action;
     if (action === "logout") {
@@ -118,6 +134,13 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAuthClient();
 
     if (action === "admin-login") {
+      await enforceRateLimit({
+        request,
+        bucket: "admin-login",
+        limit: 5,
+        windowSeconds: 15 * 60,
+        discriminator: email,
+      });
       /*
         Fail closed. These used to fall back to a hardcoded
         chaplin@chaplin.in / "chaplin", which the login page also pre-filled —
@@ -155,22 +178,45 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
-    if (password.length < 8) throw new Error("Password must be at least 8 characters.");
-
     if (action === "signup") {
+      if (password.length < 10) throw new Error("Password must be at least 10 characters.");
+      await enforceRateLimit({
+        request,
+        bucket: "signup-hour",
+        limit: 3,
+        windowSeconds: 60 * 60,
+      });
+      await enforceRateLimit({
+        request,
+        bucket: "signup-email",
+        limit: 3,
+        windowSeconds: 24 * 60 * 60,
+        discriminator: email,
+      });
       const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
       const role: AccountRole = "creator";
       if (!name) throw new Error("Enter your name or studio name.");
+      if (!/[a-z]/i.test(password) || !/\d/.test(password)) {
+        throw new Error("Password must include at least one letter and one number.");
+      }
+      const next = safeInternalPath(input.next, "/feed");
+      const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL
+        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
+        : request.nextUrl.origin;
       const result = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: { display_name: name, account_role: role },
-          emailRedirectTo: `${request.nextUrl.origin}/auth?confirmed=1${typeof input.next === "string" && input.next.startsWith("/") ? `&next=${encodeURIComponent(input.next)}` : ""}`,
+          emailRedirectTo: `${configuredOrigin}/auth?confirmed=1&next=${encodeURIComponent(next)}`,
         },
       });
       if (result.error) throw new Error(result.error.message);
       if (!result.data.user) throw new Error("Supabase did not create an account.");
+      if ((result.data.user.identities?.length ?? 0) < 1) {
+        throw new Error("An account with this email already exists. Sign in instead.");
+      }
+      await grantSignupEntitlement(result.data.user.id);
       let session = result.data.session;
       let user = result.data.user;
       if (!session && autoConfirmEmailEnabled()) {
@@ -190,6 +236,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "login") {
+      if (!password) throw new Error("Incorrect email or password.");
+      await enforceRateLimit({
+        request,
+        bucket: "creator-login",
+        limit: 10,
+        windowSeconds: 15 * 60,
+        discriminator: email,
+      });
       let result = await supabase.auth.signInWithPassword({ email, password });
       if (result.error && autoConfirmEmailEnabled() && /email not confirmed/i.test(result.error.message)) {
         const userId = await findAuthUserIdByEmail(email);
@@ -198,7 +252,7 @@ export async function POST(request: NextRequest) {
           result = await supabase.auth.signInWithPassword({ email, password });
         }
       }
-      if (result.error) throw new Error(result.error.message);
+      if (result.error) throw new Error("Incorrect email or password.");
       if (!result.data.session || !result.data.user) throw new Error("Supabase did not return a session.");
       const identity = await ensureAuthProfile(result.data.user);
       const response = NextResponse.json({ identity });
@@ -209,6 +263,9 @@ export async function POST(request: NextRequest) {
 
     throw new Error("Unknown authentication action.");
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Authentication failed." }, { status: 400 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Authentication failed." },
+      { status: securityErrorStatus(error, 400) },
+    );
   }
 }

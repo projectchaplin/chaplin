@@ -1,24 +1,48 @@
 import type { PipelineStepAction } from "@/lib/media-pipeline-types";
 import { getMediaPipelineRun, transitionMediaPipelineStep } from "@/lib/server/media-pipeline";
+import { requireOwnedPipelineRun, requireRequestIdentity } from "@/lib/server/auth";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
 const actions: PipelineStepAction[] = ["queue", "start", "complete", "approve", "reject", "retry", "fail", "skip", "cancel"];
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const identity = await requireRequestIdentity(request);
     const { id } = await params;
+    await requireOwnedPipelineRun(identity, id);
     const run = await getMediaPipelineRun(id);
     if (!run) return Response.json({ error: "Media pipeline not found." }, { status: 404 });
     return Response.json({ run }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not load media pipeline." }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Could not load media pipeline.";
+    return Response.json(
+      { error: message },
+      { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 500) },
+    );
   }
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertRequestBodySize(request, 256 * 1024);
+    const identity = await requireRequestIdentity(request);
     const { id } = await params;
+    await requireOwnedPipelineRun(identity, id);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({
+        request,
+        bucket: "pipeline-transition",
+        limit: 240,
+        windowSeconds: 60 * 60,
+        identityId: identity.id,
+      });
+    }
     const body = await request.json() as Record<string, unknown>;
     if (typeof body.stepKey !== "string" || !body.stepKey.trim()) throw new Error("Step key is required.");
     if (typeof body.action !== "string" || !actions.includes(body.action as PipelineStepAction)) {
@@ -37,6 +61,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return Response.json({ run });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not update media pipeline.";
-    return Response.json({ error: message }, { status: /required|unknown|cannot/i.test(message) ? 400 : 500 });
+    return Response.json(
+      { error: message },
+      {
+        status: securityErrorStatus(
+          error,
+          message === "Sign in to continue." ? 401 : /required|unknown|cannot/i.test(message) ? 400 : 500,
+        ),
+      },
+    );
   }
 }

@@ -1,4 +1,11 @@
 import { getSupabaseAdminClient } from "@/lib/server/supabase-admin";
+import { requireRequestIdentity, type AuthIdentity } from "@/lib/server/auth";
+import {
+  assertMutationOrigin,
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -147,22 +154,43 @@ async function logConcierge(utterance: string, result: ConciergeIntent, provider
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const utterance = clean(body.utterance);
-  const role = clean(body.role, 20) || "creator";
-  const creatorContext = body.creatorContext && typeof body.creatorContext === "object" && !Array.isArray(body.creatorContext)
-    ? body.creatorContext as Record<string, unknown>
-    : {};
-  if (utterance.length < 3) {
-    return Response.json({ error: "Say or type what you want to make." }, { status: 400 });
-  }
+  try {
+    assertMutationOrigin(request);
+    assertRequestBodySize(request, 64 * 1024);
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const utterance = clean(body.utterance);
+    const creatorContext = body.creatorContext && typeof body.creatorContext === "object" && !Array.isArray(body.creatorContext)
+      ? body.creatorContext as Record<string, unknown>
+      : {};
+    if (utterance.length < 3) {
+      return Response.json({ error: "Say or type what you want to make." }, { status: 400 });
+    }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
-  const contextJson = JSON.stringify(creatorContext).slice(0, 30_000);
-
-  if (apiKey) {
+    let identity: AuthIdentity | null = null;
     try {
+      identity = await requireRequestIdentity(request);
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "Sign in to continue.") throw error;
+    }
+    const role = identity?.role ?? "creator";
+    if (!identity) {
+      const fallback = localIntent(utterance, role, {});
+      return Response.json({ ...fallback, provider: "chaplin-local", requiresSignIn: true });
+    }
+    await enforceRateLimit({
+      request,
+      bucket: "concierge-intent",
+      limit: 60,
+      windowSeconds: 60 * 60,
+      identityId: identity.id,
+    });
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    const contextJson = JSON.stringify(creatorContext).slice(0, 30_000);
+
+    if (apiKey) {
+      try {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -192,13 +220,17 @@ ${contextJson}`,
       console.log(`[concierge] provider=anthropic intent=${parsed.intent} name=${parsed.name ?? "-"} utterance="${utterance.slice(0, 120)}"`);
       void logConcierge(utterance, parsed, "anthropic", model);
       return Response.json({ ...parsed, provider: "anthropic" });
-    } catch (error) {
-      console.warn("[concierge] Claude failed, using local intent:", error instanceof Error ? error.message : error);
+      } catch (error) {
+        console.warn("[concierge] Claude failed, using local intent:", error instanceof Error ? error.message : error);
+      }
     }
-  }
 
-  const fallback = localIntent(utterance, role, creatorContext);
-  console.log(`[concierge] provider=local intent=${fallback.intent} utterance="${utterance.slice(0, 120)}"`);
-  void logConcierge(utterance, fallback, "chaplin-local", "heuristic");
-  return Response.json({ ...fallback, provider: "chaplin-local" });
+    const fallback = localIntent(utterance, role, creatorContext);
+    console.log(`[concierge] provider=local intent=${fallback.intent} utterance="${utterance.slice(0, 120)}"`);
+    void logConcierge(utterance, fallback, "chaplin-local", "heuristic");
+    return Response.json({ ...fallback, provider: "chaplin-local" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Concierge request failed.";
+    return Response.json({ error: message }, { status: securityErrorStatus(error, 400) });
+  }
 }

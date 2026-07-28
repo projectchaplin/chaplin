@@ -1,6 +1,12 @@
 import { composeCharacterInteractionPrompt } from "@/lib/character-system";
 import { buildProductionBible } from "@/lib/production-prompting";
 import { listCharacters } from "@/lib/server/supabase-admin";
+import {
+  assertMutationOrigin,
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -43,11 +49,20 @@ function conversationMemory(value: unknown) {
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const message = clean(body.message);
-  const memory = conversationMemory(body.history);
-  if (message.length < 2) return Response.json({ error: "Write something for the actor first." }, { status: 400 });
+  try {
+    assertMutationOrigin(request);
+    assertRequestBodySize(request, 32 * 1024);
+    const { id } = await context.params;
+    await enforceRateLimit({
+      request,
+      bucket: `public-character-chat:${id}`,
+      limit: 20,
+      windowSeconds: 60 * 60,
+    });
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const message = clean(body.message);
+    const memory = conversationMemory(body.history);
+    if (message.length < 2) return Response.json({ error: "Write something for the actor first." }, { status: 400 });
 
   let character;
   try {
@@ -64,8 +79,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   if (!apiKey) return Response.json({ reply: fallback, provider: "character-local", canSpeak: Boolean(character.voiceId) });
 
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -85,7 +100,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const reply = clean(data.content?.find((block) => block.type === "text")?.text, 700);
     if (!response.ok || !reply) throw new Error("Actor response unavailable.");
     return Response.json({ reply, provider: "anthropic", canSpeak: Boolean(character.voiceId) });
-  } catch {
-    return Response.json({ reply: fallback, provider: "character-local", canSpeak: Boolean(character.voiceId) });
+    } catch {
+      return Response.json({ reply: fallback, provider: "character-local", canSpeak: Boolean(character.voiceId) });
+    }
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Actor interaction failed." },
+      { status: securityErrorStatus(error, 400) },
+    );
   }
 }

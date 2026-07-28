@@ -5,6 +5,11 @@ import type { Archetype, Character, CharacterProductionBible, LicenseType, Voice
 import { requireRequestIdentity } from "@/lib/server/auth";
 import { refundCreatorCredits, spendCreatorCredits } from "@/lib/server/credits";
 import { CHARACTER_CREATION_CREDITS } from "@/lib/credits";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
@@ -104,6 +109,7 @@ function parseCharacter(value: unknown): Character {
 
 export async function POST(request: NextRequest) {
   try {
+    assertRequestBodySize(request, 256 * 1024);
     const body = await request.json() as unknown;
     const identity = await requireRequestIdentity(request);
     const ensureOnly = Boolean(
@@ -123,10 +129,22 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (existing.error) throw new Error(`Check AI actor: ${existing.error.message}`);
       if (existing.data) {
+        if (identity.role !== "admin" && existing.data.maker_id !== identity.id) {
+          return Response.json({ error: "This AI actor does not belong to your studio." }, { status: 404 });
+        }
         return Response.json({
           character: { ...character, makerId: existing.data.maker_id ?? character.makerId },
         });
       }
+    }
+    if (identity.role !== "admin") {
+      await enforceRateLimit({
+        request,
+        bucket: "character-create",
+        limit: 6,
+        windowSeconds: 24 * 60 * 60,
+        identityId: identity.id,
+      });
     }
     const idempotencyKey = `character:create:${character.id}`;
     const reservation = await spendCreatorCredits({
@@ -153,7 +171,12 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Could not save AI actor.";
     return Response.json(
       { error: message },
-      { status: message === "Sign in to continue." ? 401 : message.includes("Not enough Chaplin credits") ? 402 : 400 }
+      {
+        status: securityErrorStatus(
+          error,
+          message === "Sign in to continue." ? 401 : message.includes("Not enough Chaplin credits") ? 402 : 400,
+        ),
+      }
     );
   }
 }

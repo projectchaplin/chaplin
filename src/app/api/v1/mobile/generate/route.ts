@@ -34,7 +34,10 @@ export async function POST(request: Request) {
     await enforceMobileBetaAllowance(identity, characterId);
     const forwarded = new Request(request.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: request.headers.get("authorization") ?? "",
+      },
       body: JSON.stringify(input),
     });
     return generate(forwarded);

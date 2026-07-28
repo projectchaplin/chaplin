@@ -1,6 +1,5 @@
 ﻿import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { NextRequest } from "next/server";
 import {
   beginGeneration,
   completeGeneration,
@@ -26,7 +25,12 @@ import {
   type PipelineStageId,
 } from "@/lib/pipeline-config";
 import { getPipelineConfig } from "@/lib/server/pipeline-config";
-import { requireRequestIdentity } from "@/lib/server/auth";
+import { requireOwnedCharacter, requireRequestIdentity } from "@/lib/server/auth";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 import { assertPromptConsistency, readCharacterCardV2 } from "@/lib/character-card";
 import {
   assertSignatureSfxPrompt,
@@ -675,33 +679,58 @@ function lockVisualIdentity(prompt: string, hasReference: boolean) {
 }
 
 export async function GET(request: Request) {
-  const characterId = new URL(request.url).searchParams.get("characterId");
-  const [production, providers, pipeline] = characterId
-    ? await Promise.all([
-        getCharacterProductionState(characterId),
-        getCharacterProviderHealth(characterId),
-        getPipelineConfig(),
-      ])
-    : [null, null, await getPipelineConfig()];
-  return Response.json({
-    elevenLabs: Boolean(elevenKey()),
-    seedModels: Boolean(process.env.SEEDANCE_API_KEY ?? process.env.SEEDREAM_API_KEY),
-    openRouter: Boolean(process.env.OPENROUTER_API_KEY),
-    openAI: Boolean(process.env.OPENAI_API_KEY),
-    database: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
-    production,
-    providers,
-    pipeline,
-  });
+  try {
+    const identity = await requireRequestIdentity(request);
+    const characterId = new URL(request.url).searchParams.get("characterId");
+    if (characterId) await requireOwnedCharacter(identity, characterId);
+    const [production, providers, pipeline] = characterId
+      ? await Promise.all([
+          getCharacterProductionState(characterId),
+          getCharacterProviderHealth(characterId),
+          getPipelineConfig(),
+        ])
+      : [null, null, await getPipelineConfig()];
+    return Response.json({
+      elevenLabs: Boolean(elevenKey()),
+      seedModels: Boolean(process.env.SEEDANCE_API_KEY ?? process.env.SEEDREAM_API_KEY),
+      openRouter: Boolean(process.env.OPENROUTER_API_KEY),
+      openAI: Boolean(process.env.OPENAI_API_KEY),
+      database: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+      production,
+      providers,
+      pipeline,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not load generation state.";
+    return Response.json({ error: message }, { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 400) });
+  }
 }
 
 export async function POST(request: Request) {
   let jobId: string | undefined;
   try {
-    await requireRequestIdentity(request);
+    assertRequestBodySize(request, 256 * 1024);
+    const identity = await requireRequestIdentity(request);
     const input = (await request.json()) as Input;
     const action = text(input, "action", 1, 30);
     const characterId = text(input, "characterId", 1, 100);
+    await requireOwnedCharacter(identity, characterId);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({
+        request,
+        bucket: "generation-total",
+        limit: 100,
+        windowSeconds: 24 * 60 * 60,
+        identityId: identity.id,
+      });
+      await enforceRateLimit({
+        request,
+        bucket: `generation-${action}`,
+        limit: action === "video" ? 6 : action === "image" ? 20 : 30,
+        windowSeconds: 24 * 60 * 60,
+        identityId: identity.id,
+      });
+    }
     let requestCharacter: Character | undefined;
     if (input.character && typeof input.character === "object") {
       const character = input.character as Character;
@@ -720,7 +749,6 @@ export async function POST(request: Request) {
     let experimentId: string | undefined;
     let experimentVariantId: string | undefined;
     if (input.pipelineExperiment && typeof input.pipelineExperiment === "object") {
-      const identity = await requireRequestIdentity(request as NextRequest);
       if (identity.role !== "admin") throw new Error("Super Admin access is required for isolated pipeline tests.");
       const experiment = input.pipelineExperiment as Record<string, unknown>;
       experimentId = text(experiment, "id", 1, 100);
@@ -1760,11 +1788,14 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Generation failed.";
     if (jobId) await failGeneration(jobId, message);
-    const status = message === "Sign in to continue."
-      ? 401
-      : error instanceof RequestValidationError || error instanceof SyntaxError
-        ? 400
-        : 500;
+    const status = securityErrorStatus(
+      error,
+      message === "Sign in to continue."
+        ? 401
+        : error instanceof RequestValidationError || error instanceof SyntaxError
+          ? 400
+          : 500,
+    );
     return Response.json({ error: message }, { status });
   }
 }

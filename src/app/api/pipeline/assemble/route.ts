@@ -7,6 +7,16 @@ import { promisify } from "node:util";
 import { attachMediaPipelineOutput, getMediaPipelineRun } from "@/lib/server/media-pipeline";
 import { getCharacterProductionState, saveMediaAsset } from "@/lib/server/supabase-admin";
 import { ffmpegExecutable, isMissingFfmpegError } from "@/lib/server/ffmpeg-runtime";
+import {
+  requireOwnedCharacter,
+  requireOwnedPipelineRun,
+  requireRequestIdentity,
+} from "@/lib/server/auth";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -53,6 +63,8 @@ async function hasAudioStream(sourcePath: string, ffmpeg: string) {
 export async function POST(request: Request) {
   let workDirectory = "";
   try {
+    assertRequestBodySize(request, 256 * 1024);
+    const identity = await requireRequestIdentity(request);
     const input = await request.json() as Record<string, unknown>;
     const runId = typeof input.runId === "string" ? input.runId : "";
     const characterId = typeof input.characterId === "string" ? input.characterId : "";
@@ -71,6 +83,19 @@ export async function POST(request: Request) {
     const finalDurationSeconds = Math.min(120, Math.max(1, Number(input.finalDurationSeconds) || shotUrls.length * sceneDurationSeconds));
     if (!runId || !characterId || shotUrls.length < 1 || shotUrls.length > 20) {
       throw new Error("A pipeline run, actor, and between one and twenty scene URLs are required.");
+    }
+    await Promise.all([
+      requireOwnedPipelineRun(identity, runId),
+      requireOwnedCharacter(identity, characterId),
+    ]);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({
+        request,
+        bucket: "pipeline-assembly",
+        limit: 12,
+        windowSeconds: 24 * 60 * 60,
+        identityId: identity.id,
+      });
     }
     const run = await getMediaPipelineRun(runId);
     if (!run) throw new Error("Pipeline run was not found.");
@@ -283,7 +308,7 @@ export async function POST(request: Request) {
       : error instanceof Error ? error.message : "Could not assemble the Punch output.";
     return Response.json(
       { error: message },
-      { status: 500 },
+      { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 500) },
     );
   } finally {
     if (workDirectory) await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined);

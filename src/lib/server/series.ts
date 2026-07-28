@@ -27,10 +27,15 @@ function storyEngine(value: unknown): SeriesStoryEngine {
   };
 }
 
-export async function listSeries(): Promise<SeriesSummary[]> {
+export async function listSeries(ownerId?: string): Promise<SeriesSummary[]> {
   const supabase = getSupabaseAdminClient();
+  let seriesQuery = supabase
+    .from("series")
+    .select("id,owner_id,title,logline,premise,genre,primary_language,secondary_language,episode_duration_seconds,status,story_engine,updated_at")
+    .order("updated_at", { ascending: false });
+  if (ownerId) seriesQuery = seriesQuery.eq("owner_id", ownerId);
   const [seriesResult, episodesResult] = await Promise.all([
-    supabase.from("series").select("id,owner_id,title,logline,premise,genre,primary_language,secondary_language,episode_duration_seconds,status,story_engine,updated_at").order("updated_at", { ascending: false }),
+    seriesQuery,
     supabase.from("episodes").select("series_id"),
   ]);
   fail(seriesResult.error, "Load series");
@@ -238,4 +243,3 @@ export async function createSeries(input: NewSeriesInput): Promise<SeriesDetail>
   if (!created) throw new Error("The series was saved but could not be reloaded.");
   return created;
 }
-

@@ -23,7 +23,11 @@ export async function POST(request: Request) {
     body.set("characterId", characterId);
     body.set("kind", "avatar");
     body.set("file", file);
-    const forwarded = new Request(request.url, { method: "POST", body });
+    const forwarded = new Request(request.url, {
+      method: "POST",
+      headers: { Authorization: request.headers.get("authorization") ?? "" },
+      body,
+    });
     return uploadReference(forwarded);
   } catch (error) {
     return mobileError(error);

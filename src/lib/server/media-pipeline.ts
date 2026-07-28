@@ -63,6 +63,7 @@ async function hydrateRun(runRow: Record<string, unknown>): Promise<MediaPipelin
     currentStep: typeof runRow.current_step === "string" ? runRow.current_step : null,
     spec: record(runRow.spec),
     manifest: record(runRow.manifest),
+    createdBy: typeof runRow.created_by === "string" ? runRow.created_by : null,
     steps: (stepsResult.data ?? []).map((row) => mapStep(row, labels.get(row.step_key) ?? row.step_key)),
     createdAt: String(runRow.created_at),
     updatedAt: String(runRow.updated_at),
@@ -73,7 +74,7 @@ export async function getMediaPipelineRun(runId: string) {
   const supabase = getSupabaseAdminClient();
   const result = await supabase
     .from("media_pipeline_runs")
-    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_at,updated_at")
+    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_by,created_at,updated_at")
     .eq("id", runId)
     .maybeSingle();
   fail(result.error, "Load media pipeline");
@@ -84,7 +85,7 @@ export async function listMediaPipelineRuns(scopeType: PipelineScope, scopeId: s
   const supabase = getSupabaseAdminClient();
   const result = await supabase
     .from("media_pipeline_runs")
-    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_at,updated_at")
+    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_by,created_at,updated_at")
     .eq("scope_type", scopeType)
     .eq("scope_id", scopeId)
     .order("created_at", { ascending: false });
@@ -147,11 +148,16 @@ export async function createMediaPipelineRun(input: {
 
   const existing = await supabase
     .from("media_pipeline_runs")
-    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_at,updated_at")
+    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_by,created_at,updated_at")
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
   fail(existing.error, "Check pipeline idempotency");
-  if (existing.data) return hydrateRun(existing.data);
+  if (existing.data) {
+    if (input.createdBy && existing.data.created_by !== input.createdBy) {
+      throw new Error("This pipeline idempotency key belongs to another creator.");
+    }
+    return hydrateRun(existing.data);
+  }
 
   const now = new Date().toISOString();
   const runInsert = await supabase
@@ -179,7 +185,7 @@ export async function createMediaPipelineRun(input: {
       created_at: now,
       updated_at: now,
     })
-    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_at,updated_at")
+    .select("id,scope_type,scope_id,output_type,status,current_step,spec,manifest,created_by,created_at,updated_at")
     .single();
   fail(runInsert.error, "Create media pipeline");
   if (!runInsert.data) throw new Error("Create media pipeline: no run was returned.");

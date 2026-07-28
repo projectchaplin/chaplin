@@ -35,7 +35,9 @@ function AuthForm() {
         return;
       }
       const requestedDestination = searchParams.get("next");
-      const destination = requestedDestination?.startsWith("/") ? requestedDestination : data.identity?.role === "admin" ? "/admin" : "/feed";
+      const destination = requestedDestination?.startsWith("/") && !requestedDestination.startsWith("//")
+        ? requestedDestination
+        : data.identity?.role === "admin" ? "/admin" : "/feed";
       window.location.assign(destination);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
@@ -70,7 +72,7 @@ function AuthForm() {
 
           {mode === "signup" && <label className="block"><span className="mb-1.5 block text-xs font-semibold text-grey">Name or studio</span><input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required className="w-full rounded-lg border border-line bg-paper px-3.5 py-3 text-sm outline-none focus:border-accent" /></label>}
           <label className="block"><span className="mb-1.5 block text-xs font-semibold text-grey">Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required className="w-full rounded-lg border border-line bg-paper px-3.5 py-3 text-sm outline-none focus:border-accent" /></label>
-          <label className="block"><span className="mb-1.5 block text-xs font-semibold text-grey">Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={8} required className="w-full rounded-lg border border-line bg-paper px-3.5 py-3 text-sm outline-none focus:border-accent" /><span className="mt-1 block text-[10px] text-grey">Minimum 8 characters.</span></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-semibold text-grey">Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={mode === "signup" ? 10 : 1} required className="w-full rounded-lg border border-line bg-paper px-3.5 py-3 text-sm outline-none focus:border-accent" />{mode === "signup" && <span className="mt-1 block text-[10px] text-grey">At least 10 characters with a letter and number.</span>}</label>
 
           {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
           {message && <p className="rounded-lg border border-accent-secondary/40 bg-accent-secondary/10 px-3 py-2 text-xs text-accent-light">{message}</p>}

@@ -1,13 +1,28 @@
 import { listCharacters } from "@/lib/server/supabase-admin";
+import {
+  assertMutationOrigin,
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const text = typeof body.text === "string" ? body.text.trim().slice(0, 700) : "";
-  if (!text) return Response.json({ error: "A reply is required." }, { status: 400 });
+  try {
+    assertMutationOrigin(request);
+    assertRequestBodySize(request, 16 * 1024);
+    const { id } = await context.params;
+    await enforceRateLimit({
+      request,
+      bucket: `public-character-voice:${id}`,
+      limit: 10,
+      windowSeconds: 60 * 60,
+    });
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const text = typeof body.text === "string" ? body.text.trim().slice(0, 700) : "";
+    if (!text) return Response.json({ error: "A reply is required." }, { status: 400 });
 
   const apiKey = process.env.ELEVENLABS_API_KEY ?? process.env.ELEVEN_LABS_API_KEY;
   if (!apiKey) return Response.json({ error: "Voice playback is not configured." }, { status: 503 });
@@ -53,7 +68,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }, { status: orphaned ? 409 : 502 });
   }
 
-  return new Response(response.body, {
-    headers: { "content-type": response.headers.get("content-type") ?? "audio/mpeg", "cache-control": "no-store" },
-  });
+    return new Response(response.body, {
+      headers: { "content-type": response.headers.get("content-type") ?? "audio/mpeg", "cache-control": "no-store" },
+    });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Voice interaction failed." },
+      { status: securityErrorStatus(error, 400) },
+    );
+  }
 }

@@ -4,6 +4,7 @@ import { anthropicImageBlock, type AnthropicImageBlock } from "@/lib/server/anth
 import { getCharacterProductionState } from "@/lib/server/supabase-admin";
 import { getPipelineConfig } from "@/lib/server/pipeline-config";
 import { requireRequestIdentity } from "@/lib/server/auth";
+import { assertRequestBodySize, enforceRateLimit, securityErrorStatus } from "@/lib/server/request-security";
 import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
 import {
   normalizeProductionFormat,
@@ -237,7 +238,11 @@ export async function GET() {
 export async function POST(request: Request) {
   let fallbackInput: Parameters<typeof fallbackDraft>[0] | null = null;
   try {
-    await requireRequestIdentity(request);
+    assertRequestBodySize(request, 512 * 1024);
+    const identity = await requireRequestIdentity(request);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({ request, bucket: "write-magic", limit: 30, windowSeconds: 86400, identityId: identity.id });
+    }
     const body = await request.json() as Record<string, unknown>;
     const requestedFormat = normalizeProductionFormat(clean(body.format, 20), "punch");
     const format = FORMATS.has(requestedFormat) ? requestedFormat : "punch";
@@ -427,7 +432,7 @@ export async function POST(request: Request) {
     }
     return Response.json(
       { error: message },
-      { status: message === "Sign in to continue." ? 401 : 502 }
+      { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 502) }
     );
   }
 }

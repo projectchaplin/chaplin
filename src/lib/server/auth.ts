@@ -5,6 +5,7 @@ import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { getSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { ensureWelcomeCredits } from "@/lib/server/credits";
+import { assertMutationOrigin, RequestSecurityError } from "@/lib/server/request-security";
 import { CHAPLIN_BRAND_AVATAR, userAvatarUrl } from "@/lib/user-avatars";
 
 export type AccountRole = "creator" | "admin";
@@ -36,10 +37,12 @@ function roleBadges(role: AccountRole) {
 }
 
 function requestedRole(user: User): AccountRole {
-  const metadataRole = user.user_metadata?.account_role;
-  const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL ?? "chaplin@chaplin.in").trim().toLowerCase();
+  // user_metadata is writable by the signed-in Supabase user and must never be
+  // treated as an authorization source. Admin is granted only by the
+  // deployment's private allow-list value.
+  const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL ?? "").trim().toLowerCase();
   if (superAdminEmail && user.email?.toLowerCase() === superAdminEmail) return "admin";
-  return metadataRole === "admin" ? "admin" : "creator";
+  return "creator";
 }
 
 export async function ensureAuthProfile(user: User): Promise<AuthIdentity> {
@@ -93,6 +96,7 @@ export async function identityFromAccessToken(accessToken: string) {
 }
 
 export async function requireRequestIdentity(request: NextRequest | Request) {
+  assertMutationOrigin(request);
   const requestWithCookies = request as NextRequest;
   const cookieToken = typeof requestWithCookies.cookies?.get === "function"
     ? requestWithCookies.cookies.get(ACCESS_COOKIE)?.value
@@ -102,6 +106,96 @@ export async function requireRequestIdentity(request: NextRequest | Request) {
   const identity = accessToken ? await identityFromAccessToken(accessToken) : null;
   if (!identity) throw new Error("Sign in to continue.");
   return identity;
+}
+
+export async function requireAdminIdentity(request: NextRequest | Request) {
+  const identity = await requireRequestIdentity(request);
+  if (identity.role !== "admin") {
+    throw new RequestSecurityError("Super Admin access is required.", 403, "FORBIDDEN");
+  }
+  return identity;
+}
+
+export async function requireOwnedCharacter(identity: AuthIdentity, characterId: string) {
+  const cleanId = characterId.trim();
+  if (!cleanId) {
+    throw new RequestSecurityError("Choose an AI actor.", 400, "INVALID_CHARACTER");
+  }
+  if (identity.role === "admin") return;
+  const result = await getSupabaseAdminClient()
+    .from("characters")
+    .select("maker_id")
+    .eq("id", cleanId)
+    .maybeSingle();
+  if (result.error) throw new Error(`Check AI actor ownership: ${result.error.message}`);
+  if (!result.data || result.data.maker_id !== identity.id) {
+    throw new RequestSecurityError(
+      "This AI actor does not belong to your studio.",
+      404,
+      "CHARACTER_NOT_FOUND",
+    );
+  }
+}
+
+export async function requireOwnedScope(
+  identity: AuthIdentity,
+  scopeType: "actor" | "shot" | "episode" | "spot" | "brief",
+  scopeId: string,
+) {
+  if (identity.role === "admin") return;
+  const admin = getSupabaseAdminClient();
+  if (scopeType === "actor") {
+    await requireOwnedCharacter(identity, scopeId);
+    return;
+  }
+  if (scopeType === "spot" || scopeType === "episode") {
+    const story = await admin.from("stories").select("author_id").eq("id", scopeId).maybeSingle();
+    if (story.error) throw new Error(`Check production ownership: ${story.error.message}`);
+    if (story.data?.author_id === identity.id) return;
+    if (scopeType === "spot") {
+      throw new RequestSecurityError("This production does not belong to your studio.", 404, "SCOPE_NOT_FOUND");
+    }
+    const episode = await admin.from("episodes").select("series_id").eq("id", scopeId).maybeSingle();
+    if (episode.error) throw new Error(`Check episode ownership: ${episode.error.message}`);
+    if (episode.data) {
+      const series = await admin.from("series").select("owner_id").eq("id", episode.data.series_id).maybeSingle();
+      if (series.error) throw new Error(`Check series ownership: ${series.error.message}`);
+      if (series.data?.owner_id === identity.id) return;
+    }
+  }
+  if (scopeType === "shot") {
+    const shot = await admin.from("episode_shots").select("episode_id").eq("id", scopeId).maybeSingle();
+    if (shot.error) throw new Error(`Check shot ownership: ${shot.error.message}`);
+    if (shot.data) {
+      await requireOwnedScope(identity, "episode", shot.data.episode_id);
+      return;
+    }
+  }
+  if (scopeType === "brief") {
+    const brief = await admin.from("video_briefs").select("owner_id").eq("id", scopeId).maybeSingle();
+    if (brief.error) throw new Error(`Check brief ownership: ${brief.error.message}`);
+    if (brief.data?.owner_id === identity.id) return;
+  }
+  throw new RequestSecurityError("This production does not belong to your studio.", 404, "SCOPE_NOT_FOUND");
+}
+
+export async function requireOwnedPipelineRun(identity: AuthIdentity, runId: string) {
+  if (identity.role === "admin") return;
+  const result = await getSupabaseAdminClient()
+    .from("media_pipeline_runs")
+    .select("created_by,scope_type,scope_id")
+    .eq("id", runId)
+    .maybeSingle();
+  if (result.error) throw new Error(`Check pipeline ownership: ${result.error.message}`);
+  if (!result.data) {
+    throw new RequestSecurityError("Media pipeline not found.", 404, "PIPELINE_NOT_FOUND");
+  }
+  if (result.data.created_by === identity.id) return;
+  await requireOwnedScope(
+    identity,
+    result.data.scope_type as "actor" | "shot" | "episode" | "spot" | "brief",
+    result.data.scope_id,
+  );
 }
 
 export async function getServerAuthIdentity() {

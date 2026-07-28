@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRequestIdentity } from "@/lib/server/auth";
 import { getSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { normalizeProductionFormat } from "@/lib/production-formats";
+import { assertRequestBodySize, enforceRateLimit, securityErrorStatus } from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,7 @@ function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Could not access drafts.";
   return NextResponse.json(
     { error: message },
-    { status: message === "Sign in to continue." ? 401 : 400 },
+    { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 400) },
   );
 }
 
@@ -48,7 +49,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    assertRequestBodySize(request, 512 * 1024);
     const identity = await requireRequestIdentity(request);
+    await enforceRateLimit({ request, bucket: "draft-save", limit: 120, windowSeconds: 3600, identityId: identity.id });
     const input = await request.json() as Record<string, unknown>;
     const id = clean(input.id, 64);
     const requestedFormat = normalizeProductionFormat(typeof input.format === "string" ? input.format : null);
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const identity = await requireRequestIdentity(request);
+    await enforceRateLimit({ request, bucket: "draft-delete", limit: 60, windowSeconds: 3600, identityId: identity.id });
     const id = request.nextUrl.searchParams.get("id")?.trim();
     if (!id) throw new Error("Choose a draft to delete.");
     const result = await getSupabaseAdminClient()

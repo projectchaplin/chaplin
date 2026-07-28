@@ -3,6 +3,25 @@
 This changelog records user-facing product changes, production-pipeline changes,
 provider integrations, and the validation boundary for each major Chaplin update.
 
+## v0.2.20 - 2026-07-28 - Public-launch security hardening
+
+- Removed the user-metadata Super Admin escalation path and made the private
+  deployment email allow-list the only source of admin authority.
+- Enforced ownership across generation, uploads, series, products, media
+  selection, and pipeline creation, transitions, mixing, and assembly.
+- Added persistent Supabase rate limits for authentication, provider-backed
+  generation and writing, uploads, public actor interactions, Concierge, feed,
+  and high-volume mutations.
+- Closed free-production format/duration mismatches while preserving the
+  25-credit actor plus 75-credit 15-second Punch welcome promise, and bound that
+  grant to server-entitled Chaplin signups so direct Supabase accounts cannot
+  farm promotional wallets.
+- Added same-origin mutation checks, safe local redirects, upload signature and
+  payload validation, generic login failures, stronger signup passwords, and
+  public security headers.
+- Documented the remaining production controls that must be enabled at the
+  Supabase and provider layers.
+
 ## v0.2.19 - 2026-07-28 - Private Super Admin entry
 
 - Removed Super Admin links, role switching, and operations shortcuts from the

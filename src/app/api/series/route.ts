@@ -1,5 +1,11 @@
 import { createSeries, listSeries } from "@/lib/server/series";
 import type { NewSeriesInput, SeriesStoryEngine } from "@/lib/series-types";
+import { requireRequestIdentity } from "@/lib/server/auth";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
@@ -83,22 +89,46 @@ function parseInput(value: unknown): NewSeriesInput {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return Response.json({ series: await listSeries() }, { headers: { "Cache-Control": "no-store" } });
+    const identity = await requireRequestIdentity(request);
+    return Response.json(
+      { series: await listSeries(identity.role === "admin" ? undefined : identity.id) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not load series." }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Could not load series.";
+    return Response.json(
+      { error: message },
+      { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 500) },
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const series = await createSeries(parseInput(await request.json()));
+    assertRequestBodySize(request, 512 * 1024);
+    const identity = await requireRequestIdentity(request);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({
+        request,
+        bucket: "series-create",
+        limit: 4,
+        windowSeconds: 24 * 60 * 60,
+        identityId: identity.id,
+      });
+    }
+    const parsed = parseInput(await request.json());
+    const series = await createSeries({ ...parsed, ownerId: identity.id });
     return Response.json({ series }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create the series.";
-    const status = message.includes("required") || message.includes("must") || message.includes("Cast between") ? 400 : 500;
+    const status = securityErrorStatus(
+      error,
+      message === "Sign in to continue."
+        ? 401
+        : message.includes("required") || message.includes("must") || message.includes("Cast between") ? 400 : 500,
+    );
     return Response.json({ error: message }, { status });
   }
 }
-

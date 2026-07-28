@@ -6,6 +6,16 @@ import { promisify } from "node:util";
 import { getMediaPipelineRun } from "@/lib/server/media-pipeline";
 import { getCharacterProductionState, saveMediaAsset } from "@/lib/server/supabase-admin";
 import { ffmpegExecutable, isMissingFfmpegError } from "@/lib/server/ffmpeg-runtime";
+import {
+  requireOwnedCharacter,
+  requireOwnedPipelineRun,
+  requireRequestIdentity,
+} from "@/lib/server/auth";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -32,10 +42,25 @@ async function download(url: string, destination: string) {
 export async function POST(request: Request) {
   let workDirectory = "";
   try {
+    assertRequestBodySize(request, 64 * 1024);
+    const identity = await requireRequestIdentity(request);
     const input = await request.json() as Record<string, unknown>;
     const runId = typeof input.runId === "string" ? input.runId : "";
     const characterId = typeof input.characterId === "string" ? input.characterId : "";
     if (!runId || !characterId) throw new Error("Pipeline run and character are required.");
+    await Promise.all([
+      requireOwnedPipelineRun(identity, runId),
+      requireOwnedCharacter(identity, characterId),
+    ]);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({
+        request,
+        bucket: "pipeline-mix",
+        limit: 30,
+        windowSeconds: 24 * 60 * 60,
+        identityId: identity.id,
+      });
+    }
     const run = await getMediaPipelineRun(runId);
     if (!run) throw new Error("Pipeline run was not found.");
 
@@ -120,7 +145,10 @@ export async function POST(request: Request) {
     const message = isMissingFfmpegError(error)
       ? "Chaplin's sound-and-video editor is not available in this deployment. The bundled FFmpeg binary was not packaged."
       : error instanceof Error ? error.message : "Could not mix the shot.";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json(
+      { error: message },
+      { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 500) },
+    );
   } finally {
     if (workDirectory) await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined);
   }

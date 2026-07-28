@@ -6,6 +6,7 @@ import {
   getCharacterProductionState,
 } from "@/lib/server/supabase-admin";
 import { requireRequestIdentity } from "@/lib/server/auth";
+import { assertRequestBodySize, enforceRateLimit, securityErrorStatus } from "@/lib/server/request-security";
 import { calculateGenerationBilling } from "@/lib/server/billing";
 import { anthropicImageBlock } from "@/lib/server/anthropic-image";
 import {
@@ -106,7 +107,11 @@ export async function POST(request: Request) {
   let fallbackCharacter: Character | null = null;
   let fallbackCurrentText = "";
   try {
-    await requireRequestIdentity(request);
+    assertRequestBodySize(request, 256 * 1024);
+    const identity = await requireRequestIdentity(request);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({ request, bucket: "write-quick", limit: 60, windowSeconds: 86400, identityId: identity.id });
+    }
     const body = await request.json() as Record<string, unknown>;
     const field = clean(body.field, 40) as QuickField;
     if (!FIELDS.includes(field)) {
@@ -371,6 +376,6 @@ export async function POST(request: Request) {
         warning: `Claude could not run: ${message} Local Quick Write was used instead.`,
       });
     }
-    return Response.json({ error: message }, { status: message === "Sign in to continue." ? 401 : 502 });
+    return Response.json({ error: message }, { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 502) });
   }
 }

@@ -1,12 +1,15 @@
 import { NextRequest } from "next/server";
 import { createFeedReply } from "@/lib/server/feed";
 import { requireRequestIdentity } from "@/lib/server/auth";
+import { assertRequestBodySize, enforceRateLimit, securityErrorStatus } from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
+    assertRequestBodySize(request, 16 * 1024);
     const identity = await requireRequestIdentity(request);
+    await enforceRateLimit({ request, bucket: "feed-reply", limit: 60, windowSeconds: 3600, identityId: identity.id });
     const input = await request.json() as Record<string, unknown>;
     const postId = typeof input.postId === "string" ? input.postId : "";
     const body = typeof input.body === "string" ? input.body.trim().slice(0, 1000) : "";
@@ -15,6 +18,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ id: await createFeedReply({ postId, authorId: identity.id, body, parentReplyId }) }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not publish the reply.";
-    return Response.json({ error: message }, { status: message === "Sign in to continue." ? 401 : 400 });
+    return Response.json({ error: message }, { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 400) });
   }
 }

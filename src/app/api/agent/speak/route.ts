@@ -1,3 +1,10 @@
+import { requireRequestIdentity } from "@/lib/server/auth";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
+
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
@@ -5,10 +12,20 @@ const DEFAULT_CONCIERGE_VOICE_ID = "xMagNCpMgZ83QOEsHNre";
 const CONCIERGE_MODEL = "eleven_flash_v2_5";
 
 export async function POST(request: Request) {
-  const apiKey = process.env.ELEVENLABS_API_KEY ?? process.env.ELEVEN_LABS_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "ElevenLabs speech is not configured." }, { status: 503 });
-  }
+  try {
+    assertRequestBodySize(request, 16 * 1024);
+    const identity = await requireRequestIdentity(request);
+    await enforceRateLimit({
+      request,
+      bucket: "concierge-speech",
+      limit: 60,
+      windowSeconds: 60 * 60,
+      identityId: identity.id,
+    });
+    const apiKey = process.env.ELEVENLABS_API_KEY ?? process.env.ELEVEN_LABS_API_KEY;
+    if (!apiKey) {
+      return Response.json({ error: "ElevenLabs speech is not configured." }, { status: 503 });
+    }
 
   const input = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const text = typeof input.text === "string" ? input.text.trim().slice(0, 320) : "";
@@ -47,12 +64,19 @@ export async function POST(request: Request) {
     return Response.json({ error: "Natural voice is temporarily unavailable." }, { status: 502 });
   }
 
-  return new Response(response.body, {
-    status: 200,
-    headers: {
-      "content-type": response.headers.get("content-type") ?? "audio/mpeg",
-      "cache-control": "no-store",
-      "x-chaplin-voice-model": CONCIERGE_MODEL,
-    },
-  });
+    return new Response(response.body, {
+      status: 200,
+      headers: {
+        "content-type": response.headers.get("content-type") ?? "audio/mpeg",
+        "cache-control": "no-store",
+        "x-chaplin-voice-model": CONCIERGE_MODEL,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Speech request failed.";
+    return Response.json(
+      { error: message },
+      { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 400) },
+    );
+  }
 }

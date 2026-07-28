@@ -17,6 +17,7 @@ import {
   getCharacterProductionState,
 } from "@/lib/server/supabase-admin";
 import { requireRequestIdentity } from "@/lib/server/auth";
+import { assertRequestBodySize, enforceRateLimit, securityErrorStatus } from "@/lib/server/request-security";
 import { anthropicImageBlock } from "@/lib/server/anthropic-image";
 import type { Character } from "@/lib/types";
 import { dialogueForEditor } from "@/lib/dialogue-performance";
@@ -78,7 +79,11 @@ export async function POST(request: Request) {
   let fallbackVariation = 0;
   let jobId: string | null = null;
   try {
-    await requireRequestIdentity(request);
+    assertRequestBodySize(request, 256 * 1024);
+    const identity = await requireRequestIdentity(request);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({ request, bucket: "write-scene", limit: 60, windowSeconds: 86400, identityId: identity.id });
+    }
     const body = await request.json() as Record<string, unknown>;
     if (!body.character || typeof body.character !== "object") {
       return Response.json({ error: "AI actor context is required." }, { status: 400 });
@@ -203,6 +208,6 @@ export async function POST(request: Request) {
           : "AI writing is not configured, so Chaplin used a stock scene. These repeat across actors until a writer is connected.",
       });
     }
-    return Response.json({ error: message }, { status: message === "Sign in to continue." ? 401 : 502 });
+    return Response.json({ error: message }, { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 502) });
   }
 }

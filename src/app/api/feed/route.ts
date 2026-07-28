@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createFeedPost, listFeedPosts } from "@/lib/server/feed";
 import { requireRequestIdentity } from "@/lib/server/auth";
 import type { FeedMediaKind } from "@/lib/feed-types";
+import { assertRequestBodySize, enforceRateLimit, securityErrorStatus } from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
@@ -12,8 +13,17 @@ function clean(value: unknown, max: number) {
 function mediaUrl(value: unknown) {
   const url = clean(value, 2000);
   if (!url) return "";
-  if (url.startsWith("/") || /^https?:\/\//i.test(url)) return url;
-  throw new Error("Media must use a valid image or video URL.");
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  const configuredStorageHost = process.env.SUPABASE_URL
+    ? new URL(process.env.SUPABASE_URL).hostname
+    : "";
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:" && parsed.hostname === configuredStorageHost) return parsed.toString();
+  } catch {
+    // Fall through to the public validation error.
+  }
+  throw new Error("Media must come from Chaplin's configured storage.");
 }
 
 export async function GET(request: Request) {
@@ -28,7 +38,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: NextRequest) {
   try {
+    assertRequestBodySize(request, 32 * 1024);
     const identity = await requireRequestIdentity(request);
+    await enforceRateLimit({ request, bucket: "feed-post", limit: 10, windowSeconds: 3600, identityId: identity.id });
     const body = await request.json() as Record<string, unknown>;
     const postBody = clean(body.body, 2000);
     const url = mediaUrl(body.mediaUrl);
@@ -42,6 +54,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ id }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not publish the post.";
-    return Response.json({ error: message }, { status: message === "Sign in to continue." ? 401 : 400 });
+    return Response.json({ error: message }, { status: securityErrorStatus(error, message === "Sign in to continue." ? 401 : 400) });
   }
 }

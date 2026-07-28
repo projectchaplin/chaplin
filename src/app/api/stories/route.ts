@@ -3,6 +3,11 @@ import { requireRequestIdentity } from "@/lib/server/auth";
 import { getSupabaseAdminClient, persistStory } from "@/lib/server/supabase-admin";
 import { productionCreditCost } from "@/lib/credits";
 import { refundCreatorCredits, spendCreatorCredits } from "@/lib/server/credits";
+import {
+  assertRequestBodySize,
+  enforceRateLimit,
+  securityErrorStatus,
+} from "@/lib/server/request-security";
 
 export const runtime = "nodejs";
 
@@ -47,6 +52,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    assertRequestBodySize(request, 256 * 1024);
     const input = await request.json() as Record<string, unknown>;
     const id = text(input.id, 120);
     const title = text(input.title, 200);
@@ -54,12 +60,30 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "A story id and title are required." }, { status: 400 });
     }
     const identity = await requireRequestIdentity(request);
+    if (identity.role !== "admin") {
+      await enforceRateLimit({
+        request,
+        bucket: "production-create",
+        limit: 12,
+        windowSeconds: 24 * 60 * 60,
+        identityId: identity.id,
+      });
+    }
     const format = text(input.format, 30);
     const durationSeconds = Number(input.durationSeconds);
     if (!["spark", "punch", "episode", "spot"].includes(format) || !Number.isFinite(durationSeconds)) {
       return Response.json({ error: "A valid production format and duration are required." }, { status: 400 });
     }
-    const creditCost = productionCreditCost(format, durationSeconds);
+    const creditCost = identity.role === "admin" ? 0 : productionCreditCost(format, durationSeconds);
+    const existing = await getSupabaseAdminClient()
+      .from("stories")
+      .select("author_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (existing.error) throw new Error(`Check production ownership: ${existing.error.message}`);
+    if (existing.data && identity.role !== "admin" && existing.data.author_id !== identity.id) {
+      return Response.json({ error: "This production does not belong to your studio." }, { status: 404 });
+    }
     const idempotencyKey = `production:start:${id}`;
     const reservation = creditCost > 0
       ? await spendCreatorCredits({
@@ -93,13 +117,16 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save the story.";
-    const status = message === "Sign in to continue."
-      ? 401
-      : message.includes("Not enough Chaplin credits")
-        ? 402
-        : /required|invalid/i.test(message)
-          ? 400
-          : 500;
+    const status = securityErrorStatus(
+      error,
+      message === "Sign in to continue."
+        ? 401
+        : message.includes("Not enough Chaplin credits")
+          ? 402
+          : /required|invalid|do not match/i.test(message)
+            ? 400
+            : 500,
+    );
     return Response.json({ error: message }, { status });
   }
 }

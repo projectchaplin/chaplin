@@ -83,6 +83,7 @@ export interface MediaPipelineRun {
   currentStep: string | null;
   spec: Record<string, unknown>;
   manifest: Record<string, unknown>;
+  createdBy: string | null;
   steps: MediaPipelineStep[];
   createdAt: string;
   updatedAt: string;
