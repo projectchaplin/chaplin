@@ -33,7 +33,7 @@ export default function Header() {
 
   useEffect(() => {
     let cancelled = false;
-    void getClientAuthIdentity()
+    const loadIdentity = (force = false) => void getClientAuthIdentity(force)
       .then((identity) => {
         if (cancelled) return;
         setAuthIdentity(identity);
@@ -46,7 +46,13 @@ export default function Header() {
           setAuthReady(true);
         }
       });
-    return () => { cancelled = true; };
+    loadIdentity();
+    const refreshCredits = () => loadIdentity(true);
+    window.addEventListener("chaplin:credits-updated", refreshCredits);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("chaplin:credits-updated", refreshCredits);
+    };
   }, [syncAuthenticatedUser]);
 
   async function signOut() {
@@ -151,6 +157,11 @@ export default function Header() {
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{authIdentity ? "Signed-in account" : "Chaplin account"}</p>
                     <p className="text-xs text-grey mt-1">{authIdentity ? `${authIdentity.email} · ${authIdentity.role === "admin" ? "super admin" : "creator"}` : "Sign in once and start creating."}</p>
+                    {authIdentity?.role === "creator" && (
+                      <p className="mt-2 inline-flex rounded-full border border-accent/35 bg-accent/10 px-2.5 py-1 font-mono text-[10px] font-semibold text-accent">
+                        {authIdentity.creditBalance ?? 0} credits
+                      </p>
+                    )}
                   </div>
                   <button onClick={() => setOpen(false)} className="text-grey hover:text-ink text-lg leading-none" aria-label="Close account menu">×</button>
                 </div>
@@ -173,9 +184,9 @@ export default function Header() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <Link href="/auth" onClick={() => setOpen(false)} className="rounded-md border border-accent bg-accent/10 p-3">
-                      <span className="block text-xs font-semibold">Creator sign in</span>
-                      <span className="mt-1 block text-[10px] leading-snug text-grey">Sign in and start creating immediately.</span>
+                    <Link href="/auth?next=/create" onClick={() => setOpen(false)} className="rounded-md border border-accent bg-accent/10 p-3">
+                      <span className="block text-xs font-semibold">Sign up or sign in</span>
+                      <span className="mt-1 block text-[10px] leading-snug text-grey">New creators get 100 credits on the house.</span>
                     </Link>
                     <Link href="/admin/login" onClick={() => setOpen(false)} className="rounded-md border border-line p-3 hover:border-accent/60">
                       <span className="block text-xs font-semibold">Super Admin</span>
@@ -185,8 +196,8 @@ export default function Header() {
                 )}
 
                 <div className="border-t border-line mt-3 pt-3 px-1 flex items-center justify-between gap-3">
-                  {authIdentity ? <button type="button" onClick={() => void signOut()} className="text-xs font-semibold text-grey hover:text-accent">Sign out</button> : <Link href="/auth" onClick={() => setOpen(false)} className="text-xs font-semibold text-accent">Sign in or create account</Link>}
-                  {authIdentity?.role !== "admin" && (
+                  {authIdentity ? <button type="button" onClick={() => void signOut()} className="text-xs font-semibold text-grey hover:text-accent">Sign out</button> : <Link href="/auth?next=/create" onClick={() => setOpen(false)} className="text-xs font-semibold text-accent">Sign up or sign in</Link>}
+                  {authIdentity?.role === "creator" && (
                     <Link href="/characters/new" onClick={() => setOpen(false)} className="text-xs text-accent hover:underline whitespace-nowrap">
                       + New actor
                     </Link>

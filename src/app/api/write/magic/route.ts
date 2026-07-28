@@ -3,6 +3,7 @@ import { planCameraForScene, type CameraMovementId } from "@/lib/camera-movement
 import { anthropicImageBlock, type AnthropicImageBlock } from "@/lib/server/anthropic-image";
 import { getCharacterProductionState } from "@/lib/server/supabase-admin";
 import { getPipelineConfig } from "@/lib/server/pipeline-config";
+import { requireRequestIdentity } from "@/lib/server/auth";
 import type { Archetype, CharacterProductionBible, VoiceGender } from "@/lib/types";
 import {
   normalizeProductionFormat,
@@ -236,6 +237,7 @@ export async function GET() {
 export async function POST(request: Request) {
   let fallbackInput: Parameters<typeof fallbackDraft>[0] | null = null;
   try {
+    await requireRequestIdentity(request);
     const body = await request.json() as Record<string, unknown>;
     const requestedFormat = normalizeProductionFormat(clean(body.format, 20), "punch");
     const format = FORMATS.has(requestedFormat) ? requestedFormat : "punch";
@@ -425,7 +427,7 @@ export async function POST(request: Request) {
     }
     return Response.json(
       { error: message },
-      { status: 502 }
+      { status: message === "Sign in to continue." ? 401 : 502 }
     );
   }
 }

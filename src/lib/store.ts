@@ -67,6 +67,7 @@ interface ChaplinState extends ChaplinWorld {
   addCharacter: (input: NewCharacterInput) => Character;
   removeCharacter: (characterId: string) => void;
   addStory: (input: NewStoryInput) => Story;
+  removeStory: (storyId: string) => void;
   setCharacterVoice: (characterId: string, voiceId: string) => void;
   addCharacterImage: (characterId: string, imageUrl: string) => void;
   setCharacterVideo: (characterId: string, videoUrl: string) => void;
@@ -289,6 +290,15 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
 
     persist(get());
     return story;
+  },
+
+  removeStory: (storyId) => {
+    set((state) => ({
+      stories: state.stories.filter((story) => story.id !== storyId),
+      castings: state.castings.filter((casting) => casting.storyId !== storyId),
+      ledger: state.ledger.filter((entry) => entry.storyId !== storyId),
+    }));
+    persist(get());
   },
 
 

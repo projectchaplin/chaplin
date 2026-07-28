@@ -4,6 +4,7 @@ import { createClient, type Session, type User } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { getSupabaseAdminClient } from "@/lib/server/supabase-admin";
+import { ensureWelcomeCredits } from "@/lib/server/credits";
 import { CHAPLIN_BRAND_AVATAR, userAvatarUrl } from "@/lib/user-avatars";
 
 export type AccountRole = "creator" | "admin";
@@ -14,6 +15,7 @@ export type AuthIdentity = {
   name: string;
   role: AccountRole;
   imageUrl: string;
+  creditBalance: number | null;
 };
 
 export const ACCESS_COOKIE = "chaplin-access-token";
@@ -80,7 +82,8 @@ export async function ensureAuthProfile(user: User): Promise<AuthIdentity> {
   }, { onConflict: "id" });
   if (userResult.error) throw new Error(`Save authenticated creator: ${userResult.error.message}`);
 
-  return { id: user.id, email: user.email, name, role, imageUrl };
+  const creditBalance = role === "creator" ? await ensureWelcomeCredits(user.id) : null;
+  return { id: user.id, email: user.email, name, role, imageUrl, creditBalance };
 }
 
 export async function identityFromAccessToken(accessToken: string) {
@@ -89,8 +92,13 @@ export async function identityFromAccessToken(accessToken: string) {
   return ensureAuthProfile(result.data.user);
 }
 
-export async function requireRequestIdentity(request: NextRequest) {
-  const accessToken = request.cookies.get(ACCESS_COOKIE)?.value;
+export async function requireRequestIdentity(request: NextRequest | Request) {
+  const requestWithCookies = request as NextRequest;
+  const cookieToken = typeof requestWithCookies.cookies?.get === "function"
+    ? requestWithCookies.cookies.get(ACCESS_COOKIE)?.value
+    : undefined;
+  const bearerToken = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const accessToken = cookieToken ?? bearerToken;
   const identity = accessToken ? await identityFromAccessToken(accessToken) : null;
   if (!identity) throw new Error("Sign in to continue.");
   return identity;

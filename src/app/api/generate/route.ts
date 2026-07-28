@@ -10,7 +10,7 @@ import {
   saveCharacterVoice,
   saveMediaAsset,
   saveRemoteMediaAsset,
-  ensureCharacter,
+  listCharacters,
   selectCharacterSfxAsset,
 } from "@/lib/server/supabase-admin";
 import { calculateGenerationBilling } from "@/lib/server/billing";
@@ -698,6 +698,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   let jobId: string | undefined;
   try {
+    await requireRequestIdentity(request);
     const input = (await request.json()) as Input;
     const action = text(input, "action", 1, 30);
     const characterId = text(input, "characterId", 1, 100);
@@ -705,7 +706,8 @@ export async function POST(request: Request) {
     if (input.character && typeof input.character === "object") {
       const character = input.character as Character;
       if (character.id !== characterId) throw new RequestValidationError("AI actor identity does not match this generation request.");
-      await ensureCharacter(character);
+      const exists = (await listCharacters()).some((candidate) => candidate.id === character.id);
+      if (!exists) throw new RequestValidationError("Create and save this AI actor before generating media.");
       requestCharacter = character;
     }
 
@@ -1758,7 +1760,11 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Generation failed.";
     if (jobId) await failGeneration(jobId, message);
-    const status = error instanceof RequestValidationError || error instanceof SyntaxError ? 400 : 500;
+    const status = message === "Sign in to continue."
+      ? 401
+      : error instanceof RequestValidationError || error instanceof SyntaxError
+        ? 400
+        : 500;
     return Response.json({ error: message }, { status });
   }
 }

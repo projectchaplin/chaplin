@@ -12,6 +12,7 @@ import {
   suggestedCharacterName,
 } from "@/lib/character-coherence";
 import { getPipelineConfig } from "@/lib/server/pipeline-config";
+import { requireRequestIdentity } from "@/lib/server/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // json_schema output on this bible runs 35-55s; give real headroom over the wall clock
@@ -279,6 +280,7 @@ const OUTPUT_SCHEMA = {
 export async function POST(request: Request) {
   let fallbackInput: Parameters<typeof localSuggestion>[0] | null = null;
   try {
+    await requireRequestIdentity(request);
     const body = await request.json() as Record<string, unknown>;
     const targetValue = clean(body.target, 30) as SuggestionTarget;
     const target = TARGETS.includes(targetValue) ? targetValue : "all";
@@ -410,6 +412,6 @@ export async function POST(request: Request) {
         warning: `Claude could not run: ${message} Local character suggestions were used instead.`,
       });
     }
-    return Response.json({ error: message }, { status: 502 });
+    return Response.json({ error: message }, { status: message === "Sign in to continue." ? 401 : 502 });
   }
 }

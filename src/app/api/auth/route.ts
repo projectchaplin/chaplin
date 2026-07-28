@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
         password,
         options: {
           data: { display_name: name, account_role: role },
-          emailRedirectTo: `${request.nextUrl.origin}/auth?confirmed=1`,
+          emailRedirectTo: `${request.nextUrl.origin}/auth?confirmed=1${typeof input.next === "string" && input.next.startsWith("/") ? `&next=${encodeURIComponent(input.next)}` : ""}`,
         },
       });
       if (result.error) throw new Error(result.error.message);

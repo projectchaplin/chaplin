@@ -22,7 +22,10 @@ export async function POST(request: Request) {
     if (!character) throw new Error("Actor not found.");
     const forwarded = new Request(request.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: request.headers.get("authorization") ?? "",
+      },
       body: JSON.stringify({
         format: "spark",
         durationSeconds: 5,

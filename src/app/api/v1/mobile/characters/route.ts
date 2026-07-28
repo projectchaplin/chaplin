@@ -11,6 +11,8 @@ import {
   listCharacters,
   persistCharacter,
 } from "@/lib/server/supabase-admin";
+import { CHARACTER_CREATION_CREDITS } from "@/lib/credits";
+import { refundCreatorCredits, spendCreatorCredits } from "@/lib/server/credits";
 
 export const runtime = "nodejs";
 
@@ -94,8 +96,27 @@ export async function POST(request: Request) {
         socialLikes: 0,
       },
     };
-    await persistCharacter(character);
-    return Response.json({ character }, { status: 201 });
+    const idempotencyKey = `character:create:${character.id}`;
+    const reservation = await spendCreatorCredits({
+      userId: identity.id,
+      amount: CHARACTER_CREATION_CREDITS,
+      idempotencyKey,
+      description: `Create actor: ${character.name}`,
+      metadata: { characterId: character.id, client: "mobile" },
+    });
+    try {
+      await persistCharacter(character);
+    } catch (error) {
+      if (reservation.applied) {
+        await refundCreatorCredits({
+          userId: identity.id,
+          idempotencyKey,
+          description: `Actor save failed: ${character.name}`,
+        });
+      }
+      throw error;
+    }
+    return Response.json({ character, creditBalance: reservation.balance }, { status: 201 });
   } catch (error) {
     return mobileError(error);
   }

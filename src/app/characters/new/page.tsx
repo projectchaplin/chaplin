@@ -808,9 +808,10 @@ export default function NewCharacterPage() {
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
         console.error("Saving the AI actor failed", { status: response.status, error: data?.error });
-        throw new Error("We could not save this actor. Please try again.");
+        throw new Error(data?.error ?? "We could not save this actor. Please try again.");
       }
       window.localStorage.removeItem(draftStorageKey);
+      window.dispatchEvent(new Event("chaplin:credits-updated"));
       window.dispatchEvent(new CustomEvent("chaplin:catalogue-updated", { detail: { characterId: character.id } }));
       router.push(`/characters/${character.id}`);
     } catch (submitError) {

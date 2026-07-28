@@ -10,7 +10,10 @@ export async function POST(request: Request) {
     const body = await request.text();
     const forwarded = new Request(request.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: request.headers.get("authorization") ?? "",
+      },
       body,
     });
     return writeCharacter(forwarded);

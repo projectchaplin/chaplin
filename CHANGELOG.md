@@ -3,6 +3,24 @@
 This changelog records user-facing product changes, production-pipeline changes,
 provider integrations, and the validation boundary for each major Chaplin update.
 
+## v0.2.17 - 2026-07-28 - Creator sign-in gate and 100 welcome credits
+
+- Browsing remains open, while actor, video, story, series, and general creation
+  routes now send signed-out visitors to one combined sign-up / sign-in screen
+  and return them to the creation route they originally chose.
+- Every creator account receives 100 idempotent welcome credits. Creating an AI
+  actor uses 25 credits and starting a 15-second Punch uses 75, so the welcome
+  balance covers exactly that first creator loop.
+- Added a dedicated creator wallet and immutable credit history, separate from
+  actor royalty earnings. Failed actor or production saves refund a newly
+  reserved charge, while retries reuse the original reservation.
+- Character, story, writing, and generation APIs now require the authenticated
+  account; character ownership comes from the server session rather than a
+  browser-supplied maker ID. Native bearer-token creation remains supported.
+- Applied the wallet migration and passed focused ESLint, strict TypeScript,
+  credit-contract tests, the production build, and live HTTP checks for the
+  creation redirect, welcome offer, and unauthenticated API rejection.
+
 ## v0.2.16 - 2026-07-27 - Step back through the hero
 
 - The hero now has previous / next controls. It advances on its own — when a

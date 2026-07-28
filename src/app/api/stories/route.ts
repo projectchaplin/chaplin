@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { requireRequestIdentity } from "@/lib/server/auth";
 import { getSupabaseAdminClient, persistStory } from "@/lib/server/supabase-admin";
+import { productionCreditCost } from "@/lib/credits";
+import { refundCreatorCredits, spendCreatorCredits } from "@/lib/server/credits";
 
 export const runtime = "nodejs";
 
@@ -51,26 +53,53 @@ export async function POST(request: NextRequest) {
     if (!id || !title) {
       return Response.json({ error: "A story id and title are required." }, { status: 400 });
     }
-    /*
-      The session owns authorship. The client sends the store's currentUserId,
-      which is the demo "u-creator" until a profile loads, so trusting it filed
-      productions under an id the owner's own session never matches - written,
-      then invisible. The body value is only a fallback for unauthenticated
-      local use.
-    */
-    const identity = await requireRequestIdentity(request).catch(() => null);
-    const story = await persistStory({
-      id,
-      authorId: identity?.id ?? (text(input.authorId, 120) || null),
-      title,
-      logline: text(input.logline, 2000),
-      coverHue: Number.isFinite(Number(input.coverHue)) ? Number(input.coverHue) : 205,
-      backdropUrl: text(input.backdropUrl, 1000) || null,
-      posterUrl: text(input.posterUrl, 1000) || null,
-    });
-    return Response.json({ story }, { status: 201 });
+    const identity = await requireRequestIdentity(request);
+    const format = text(input.format, 30);
+    const durationSeconds = Number(input.durationSeconds);
+    if (!["spark", "punch", "episode", "spot"].includes(format) || !Number.isFinite(durationSeconds)) {
+      return Response.json({ error: "A valid production format and duration are required." }, { status: 400 });
+    }
+    const creditCost = productionCreditCost(format, durationSeconds);
+    const idempotencyKey = `production:start:${id}`;
+    const reservation = creditCost > 0
+      ? await spendCreatorCredits({
+          userId: identity.id,
+          amount: creditCost,
+          idempotencyKey,
+          description: `Start 15-second Punch: ${title}`,
+          metadata: { storyId: id, format, durationSeconds },
+        })
+      : null;
+    try {
+      const story = await persistStory({
+        id,
+        authorId: identity.id,
+        title,
+        logline: text(input.logline, 2000),
+        coverHue: Number.isFinite(Number(input.coverHue)) ? Number(input.coverHue) : 205,
+        backdropUrl: text(input.backdropUrl, 1000) || null,
+        posterUrl: text(input.posterUrl, 1000) || null,
+      });
+      return Response.json({ story, creditBalance: reservation?.balance ?? null }, { status: 201 });
+    } catch (error) {
+      if (reservation?.applied) {
+        await refundCreatorCredits({
+          userId: identity.id,
+          idempotencyKey,
+          description: `Production save failed: ${title}`,
+        });
+      }
+      throw error;
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save the story.";
-    return Response.json({ error: message }, { status: /required|invalid/i.test(message) ? 400 : 500 });
+    const status = message === "Sign in to continue."
+      ? 401
+      : message.includes("Not enough Chaplin credits")
+        ? 402
+        : /required|invalid/i.test(message)
+          ? 400
+          : 500;
+    return Response.json({ error: message }, { status });
   }
 }

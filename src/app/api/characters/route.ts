@@ -1,6 +1,10 @@
-import { ensureCharacter, listCharacters, persistCharacter } from "@/lib/server/supabase-admin";
+import type { NextRequest } from "next/server";
+import { getSupabaseAdminClient, listCharacters, persistCharacter } from "@/lib/server/supabase-admin";
 import { parseCharacterCardV2 } from "@/lib/character-card";
 import type { Archetype, Character, CharacterProductionBible, LicenseType, VoiceGender } from "@/lib/types";
+import { requireRequestIdentity } from "@/lib/server/auth";
+import { refundCreatorCredits, spendCreatorCredits } from "@/lib/server/credits";
+import { CHARACTER_CREATION_CREDITS } from "@/lib/credits";
 
 export const runtime = "nodejs";
 
@@ -98,25 +102,58 @@ function parseCharacter(value: unknown): Character {
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as unknown;
+    const identity = await requireRequestIdentity(request);
     const ensureOnly = Boolean(
       body && typeof body === "object" && (body as Record<string, unknown>).ensureOnly === true
     );
     const character = parseCharacter(
-      ensureOnly ? (body as Record<string, unknown>).character : body
+      {
+        ...((ensureOnly ? (body as Record<string, unknown>).character : body) as Record<string, unknown>),
+        makerId: identity.id,
+      }
     );
     if (ensureOnly) {
-      await ensureCharacter(character);
-    } else {
-      await persistCharacter(character);
+      const existing = await getSupabaseAdminClient()
+        .from("characters")
+        .select("id,maker_id")
+        .eq("id", character.id)
+        .maybeSingle();
+      if (existing.error) throw new Error(`Check AI actor: ${existing.error.message}`);
+      if (existing.data) {
+        return Response.json({
+          character: { ...character, makerId: existing.data.maker_id ?? character.makerId },
+        });
+      }
     }
-    return Response.json({ character });
+    const idempotencyKey = `character:create:${character.id}`;
+    const reservation = await spendCreatorCredits({
+      userId: identity.id,
+      amount: CHARACTER_CREATION_CREDITS,
+      idempotencyKey,
+      description: `Create actor: ${character.name}`,
+      metadata: { characterId: character.id },
+    });
+    try {
+      await persistCharacter(character);
+    } catch (error) {
+      if (reservation.applied) {
+        await refundCreatorCredits({
+          userId: identity.id,
+          idempotencyKey,
+          description: `Actor save failed: ${character.name}`,
+        });
+      }
+      throw error;
+    }
+    return Response.json({ character, creditBalance: reservation.balance }, { status: 201 });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save AI actor.";
     return Response.json(
-      { error: error instanceof Error ? error.message : "Could not save AI actor." },
-      { status: 400 }
+      { error: message },
+      { status: message === "Sign in to continue." ? 401 : message.includes("Not enough Chaplin credits") ? 402 : 400 }
     );
   }
 }

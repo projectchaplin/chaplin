@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useChaplinStore } from "@/lib/store";
+import { CHARACTER_CREATION_CREDITS, PUNCH_15S_CREDITS } from "@/lib/credits";
 
 const rolePaths = {
   creator: [
-    { href: "/characters/new", runtime: "CANON", title: "Create an actor", copy: "Build the identity, voice, movement, sound, and production bible." },
+    { href: "/characters/new", runtime: `${CHARACTER_CREATION_CREDITS} CR`, title: "Create an actor", copy: "Build the identity, voice, movement, sound, and production bible." },
     { href: "/videos/new", runtime: "VIDEO", title: "Create a typed video", copy: "Choose actor, product, UGC, hero, or brand-spot grammar before shots are planned." },
     { href: "/studio/write?format=spark", runtime: "5 SEC", title: "Create a Spark", copy: "One private audition shot. It proves a casting choice and never enters the feed." },
-    { href: "/studio/write?format=punch", runtime: "15 SEC", title: "Create a Punch", copy: "Three approved shots: hook, pressure, and a memorable personality choice." },
+    { href: "/studio/write?format=punch", runtime: `${PUNCH_15S_CREDITS} CR`, title: "Create a 15-second Punch", copy: "Three approved shots: hook, pressure, and a memorable personality choice." },
     { href: "/studio/write?format=episode", runtime: "60 SEC", title: "Create an Episode", copy: "Twelve approved shots ending on a situation-changing cliffhanger." },
   ],
   admin: [
@@ -32,6 +33,11 @@ export default function CreatePage() {
       <p className="mt-4 max-w-2xl text-grey">
         The output is chosen before the prompt. Runtime, shot count, approvals, destination, and who can publish are fixed from the start.
       </p>
+      {role === "creator" && (
+        <p className="mt-3 max-w-2xl text-sm text-accent">
+          Your 100 welcome credits cover one actor and one 15-second Punch.
+        </p>
+      )}
       <div className="mt-10 border-t border-line">
         {paths.map((item, index) => (
           <Link key={item.href} href={item.href} className="group grid gap-3 border-b border-line py-6 transition-colors hover:border-accent sm:grid-cols-[90px_1fr_1fr] sm:items-center">

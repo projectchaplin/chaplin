@@ -199,6 +199,7 @@ export default function StoryBuilderForm() {
   const currentUserId = useChaplinStore((s) => s.currentUserId);
   const activeRole = useChaplinStore((s) => s.activeRole);
   const addStory = useChaplinStore((s) => s.addStory);
+  const removeStory = useChaplinStore((s) => s.removeStory);
 
   const [format, setFormat] = useState<ProductionFormat>(() =>
     normalizeProductionFormat(searchParams.get("format"), "punch")
@@ -1039,18 +1040,32 @@ export default function StoryBuilderForm() {
       story did not, and Productions listed nothing. Awaited so the row is in
       place before the production starts.
     */
-    await fetch("/api/stories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: story.id,
-        authorId: currentUserId,
-        title: story.title,
-        logline: story.logline,
-        coverHue: story.coverHue,
-        posterUrl: validScenes.find((scene) => scene.previewImageUrl)?.previewImageUrl ?? null,
-      }),
-    }).catch(() => undefined);
+    try {
+      const storyResponse = await fetch("/api/stories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: story.id,
+          title: story.title,
+          logline: story.logline,
+          format,
+          durationSeconds,
+          coverHue: story.coverHue,
+          posterUrl: validScenes.find((scene) => scene.previewImageUrl)?.previewImageUrl ?? null,
+        }),
+      });
+      const storyResult = await storyResponse.json().catch(() => null) as { error?: string } | null;
+      if (!storyResponse.ok) {
+        throw new Error(storyResult?.error ?? "The production could not be started.");
+      }
+      window.dispatchEvent(new Event("chaplin:credits-updated"));
+    } catch (productionError) {
+      removeStory(story.id);
+      setStartingProduction(false);
+      setProductionBusy(false);
+      setError(productionError instanceof Error ? productionError.message : "The production could not be started.");
+      return;
+    }
 
     if (draftId) {
       void fetch(`/api/drafts?id=${encodeURIComponent(draftId)}`, { method: "DELETE" });
