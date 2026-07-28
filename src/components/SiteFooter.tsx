@@ -7,7 +7,7 @@ import { CHAPLIN_VERSION_LABEL } from "@/lib/version";
 export default function SiteFooter() {
   const pathname = usePathname();
   // The home gallery is a locked 100dvh app screen — no footer below it.
-  if (pathname === "/") return null;
+  if (pathname === "/" || pathname === "/super-admin") return null;
 
   return (
     <footer className="border-t border-line relative z-10 pb-24">

@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       /*
         Fail closed. These used to fall back to a hardcoded
         chaplin@chaplin.in / "chaplin", which the login page also pre-filled —
-        so anyone who opened /admin/login and pressed the button was handed
+        so anyone who opened the old admin login and pressed the button was handed
         full Super Admin, and ensureSuperAdminUser below then created that
         account for real. No credential is better than a published one: with
         the env vars unset, admin login is simply unavailable.

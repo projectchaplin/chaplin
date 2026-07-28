@@ -15,7 +15,7 @@ export default async function CharacterSystemPage({
   const { id } = await params;
   const identity = await getServerAuthIdentity();
   if (identity?.role !== "admin") {
-    redirect(`/admin/login?next=${encodeURIComponent(`/characters/${id}/system`)}`);
+    redirect(`/super-admin?next=${encodeURIComponent(`/characters/${id}/system`)}`);
   }
 
   const characters = await listCharacters();

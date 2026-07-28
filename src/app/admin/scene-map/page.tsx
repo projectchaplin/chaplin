@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminSceneMapPage() {
   const identity = await getServerAuthIdentity();
-  if (identity?.role !== "admin") redirect("/admin/login?next=/admin/scene-map");
+  if (identity?.role !== "admin") redirect("/super-admin?next=/admin/scene-map");
   const [characters, config] = await Promise.all([listCharacters(), getPipelineConfig()]);
 
   return (

@@ -223,3 +223,4 @@ Chaplin by one version ordinal. Patch and minor counters roll after 99.
 | v0.2.15 | `72db047` | 2026-07-27T22:12:13+05:30 | Close the Super Admin default credential |
 | v0.2.16 | `514e733` | 2026-07-27T22:15:22+05:30 | Let a viewer step back to the actor that just passed |
 | v0.2.17 | `03740df` | 2026-07-28T19:52:29+05:30 | Gate creation and grant welcome credits |
+| v0.2.18 | `0952e99` | 2026-07-28T19:57:05+05:30 | Redesign character profile hero stage |

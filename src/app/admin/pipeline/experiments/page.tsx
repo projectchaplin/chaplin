@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PipelineExperimentsPage() {
   const identity = await getServerAuthIdentity();
-  if (identity?.role !== "admin") redirect("/admin/login?next=/admin/pipeline/experiments");
+  if (identity?.role !== "admin") redirect("/super-admin?next=/admin/pipeline/experiments");
 
   const [experiments, dashboard] = await Promise.all([
     listPipelineExperiments(),

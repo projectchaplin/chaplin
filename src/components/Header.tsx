@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useChaplinStore } from "@/lib/store";
 import Avatar from "@/components/Avatar";
@@ -14,9 +15,9 @@ import {
 } from "@/lib/client-auth";
 
 export default function Header() {
+  const pathname = usePathname();
   const users = useChaplinStore((state) => state.users);
   const currentUserId = useChaplinStore((state) => state.currentUserId);
-  const activeRole = useChaplinStore((state) => state.activeRole);
   const syncAuthenticatedUser = useChaplinStore((state) => state.syncAuthenticatedUser);
   const [open, setOpen] = useState(false);
   const [compact, setCompact] = useState(false);
@@ -64,13 +65,13 @@ export default function Header() {
   const currentUser = users.find((user) => user.id === currentUserId) ?? users[0];
   const headerName = authIdentity?.name ?? (authReady ? "Preview mode" : currentUser?.name);
   const headerStatus = authIdentity
-    ? authIdentity.role === "admin" ? "Super Admin" : "Creator"
+    ? authIdentity.role === "creator" ? "Creator" : "Signed in"
     : authReady
       ? "Not signed in"
       : "Checking account";
-  const contextLink = activeRole === "admin"
-    ? { href: authIdentity?.role === "admin" ? "/admin" : "/admin/login", label: "Admin" }
-    : { href: "/feed", label: "Creator feed" };
+  const contextLink = { href: "/feed", label: "Creator feed" };
+
+  if (pathname === "/super-admin") return null;
 
   return (
     <>
@@ -156,7 +157,7 @@ export default function Header() {
                 <div className="flex items-start justify-between gap-3 px-1 mb-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{authIdentity ? "Signed-in account" : "Chaplin account"}</p>
-                    <p className="text-xs text-grey mt-1">{authIdentity ? `${authIdentity.email} · ${authIdentity.role === "admin" ? "super admin" : "creator"}` : "Sign in once and start creating."}</p>
+                    <p className="text-xs text-grey mt-1">{authIdentity ? authIdentity.email : "Sign in once and start creating."}</p>
                     {authIdentity?.role === "creator" && (
                       <p className="mt-2 inline-flex rounded-full border border-accent/35 bg-accent/10 px-2.5 py-1 font-mono text-[10px] font-semibold text-accent">
                         {authIdentity.creditBalance ?? 0} credits
@@ -166,12 +167,7 @@ export default function Header() {
                   <button onClick={() => setOpen(false)} className="text-grey hover:text-ink text-lg leading-none" aria-label="Close account menu">×</button>
                 </div>
 
-                {authIdentity?.role === "admin" ? (
-                  <Link href="/admin" onClick={() => setOpen(false)} className="block rounded-md border border-accent bg-accent/10 p-3">
-                    <span className="block text-xs font-semibold">Open Super Admin</span>
-                    <span className="mt-1 block text-[10px] leading-snug text-grey">Inspect providers, prompts, jobs, assets, spend, and failures.</span>
-                  </Link>
-                ) : authIdentity ? (
+                {authIdentity?.role === "creator" ? (
                   <div className="grid grid-cols-2 gap-2">
                     <Link href="/studio" onClick={() => setOpen(false)} className="rounded-md border border-line p-3 hover:border-accent/60">
                       <span className="block text-xs font-semibold">My Studio</span>
@@ -182,15 +178,15 @@ export default function Header() {
                       <span className="mt-1 block text-[10px] leading-snug text-grey">Create an actor, scene, reel, or micro drama.</span>
                     </Link>
                   </div>
+                ) : authIdentity ? (
+                  <p className="rounded-md border border-line p-3 text-xs text-grey">
+                    This account is signed in. Open the private operations URL directly to manage the platform.
+                  </p>
                 ) : (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2">
                     <Link href="/auth?next=/create" onClick={() => setOpen(false)} className="rounded-md border border-accent bg-accent/10 p-3">
                       <span className="block text-xs font-semibold">Sign up or sign in</span>
                       <span className="mt-1 block text-[10px] leading-snug text-grey">New creators get 100 credits on the house.</span>
-                    </Link>
-                    <Link href="/admin/login" onClick={() => setOpen(false)} className="rounded-md border border-line p-3 hover:border-accent/60">
-                      <span className="block text-xs font-semibold">Super Admin</span>
-                      <span className="mt-1 block text-[10px] leading-snug text-grey">Open platform operations.</span>
                     </Link>
                   </div>
                 )}
@@ -200,11 +196,6 @@ export default function Header() {
                   {authIdentity?.role === "creator" && (
                     <Link href="/characters/new" onClick={() => setOpen(false)} className="text-xs text-accent hover:underline whitespace-nowrap">
                       + New actor
-                    </Link>
-                  )}
-                  {authIdentity?.role === "admin" && (
-                    <Link href={authIdentity?.role === "admin" ? "/admin" : "/admin/login"} onClick={() => setOpen(false)} className="text-xs text-accent hover:underline whitespace-nowrap">
-                      Open admin →
                     </Link>
                   )}
                 </div>

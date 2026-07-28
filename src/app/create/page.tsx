@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useChaplinStore } from "@/lib/store";
 import { CHARACTER_CREATION_CREDITS, PUNCH_15S_CREDITS } from "@/lib/credits";
 
 const rolePaths = {
@@ -12,32 +11,23 @@ const rolePaths = {
     { href: "/studio/write?format=punch", runtime: `${PUNCH_15S_CREDITS} CR`, title: "Create a 15-second Punch", copy: "Three approved shots: hook, pressure, and a memorable personality choice." },
     { href: "/studio/write?format=episode", runtime: "60 SEC", title: "Create an Episode", copy: "Twelve approved shots ending on a situation-changing cliffhanger." },
   ],
-  admin: [
-    { href: "/studio/pipelines", runtime: "SYSTEM", title: "Inspect output pipelines", copy: "See every provider handoff, retry, approval, and publication gate." },
-    { href: "/admin", runtime: "OPS", title: "Open production operations", copy: "Inspect jobs, provider readiness, failures, assets, and spend." },
-    { href: "/admin/logs", runtime: "LEDGER", title: "Audit generation history", copy: "Trace every request, model, asset, cost, and outcome." },
-  ],
 };
 
 export default function CreatePage() {
-  const activeRole = useChaplinStore((state) => state.activeRole);
-  const role = activeRole === "admin" ? "admin" : "creator";
-  const paths = rolePaths[role];
+  const paths = rolePaths.creator;
 
   return (
     <main className="app-width px-6 py-12">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-accent">{role} create desk</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-accent">creator create desk</p>
       <h1 className="marquee-title mt-3 text-5xl sm:text-7xl">
-        {role === "creator" ? "BUILD A PERFORMER. MAKE THE PROOF." : "OPERATE THE PRODUCTION SYSTEM."}
+        BUILD A PERFORMER. MAKE THE PROOF.
       </h1>
       <p className="mt-4 max-w-2xl text-grey">
         The output is chosen before the prompt. Runtime, shot count, approvals, destination, and who can publish are fixed from the start.
       </p>
-      {role === "creator" && (
-        <p className="mt-3 max-w-2xl text-sm text-accent">
-          Your 100 welcome credits cover one actor and one 15-second Punch.
-        </p>
-      )}
+      <p className="mt-3 max-w-2xl text-sm text-accent">
+        Your 100 welcome credits cover one actor and one 15-second Punch.
+      </p>
       <div className="mt-10 border-t border-line">
         {paths.map((item, index) => (
           <Link key={item.href} href={item.href} className="group grid gap-3 border-b border-line py-6 transition-colors hover:border-accent sm:grid-cols-[90px_1fr_1fr] sm:items-center">

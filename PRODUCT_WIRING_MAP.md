@@ -97,7 +97,7 @@ flowchart TB
 | Admin landing | `/admin` | Operational overview |
 | Pipeline Lab | `/admin/pipeline` | Version and activate creative-stage provider/model settings |
 | Generation logs | `/admin/logs` | Review jobs, usage, cost, outputs, and failures |
-| Admin login | `/admin/login` | Separate Super Admin access gate |
+| Admin login | `/super-admin` | Private, direct-only Super Admin access gate |
 
 ### Mobile boundary
 

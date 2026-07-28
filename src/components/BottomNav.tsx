@@ -10,10 +10,8 @@ import ConciergeOrb, {
   type ConciergeQuickOption,
 } from "@/components/ConciergeOrb";
 import { IconActors, IconFeed, IconFilm } from "@/components/Icons";
-import { useChaplinStore } from "@/lib/store";
 
-const CREATE_OPTIONS: Record<"creator" | "admin", ConciergeQuickOption[]> = {
-  creator: [
+const CREATE_OPTIONS: ConciergeQuickOption[] = [
     {
       kind: "actor",
       href: "/characters/new",
@@ -26,22 +24,7 @@ const CREATE_OPTIONS: Record<"creator" | "admin", ConciergeQuickOption[]> = {
       title: "Make a scene",
       copy: "Start with an idea, then shape it as a Spark, Punch, or Episode.",
     },
-  ],
-  admin: [
-    {
-      kind: "pipeline",
-      href: "/studio/pipelines",
-      title: "Pipeline map",
-      copy: "Inspect every output contract and approval gate.",
-    },
-    {
-      kind: "operations",
-      href: "/admin",
-      title: "Production operations",
-      copy: "Inspect provider readiness, jobs, failures, and spend.",
-    },
-  ],
-};
+];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -59,7 +42,6 @@ function isCreationWorkspace(pathname: string) {
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const activeRole = useChaplinStore((state) => state.activeRole);
   const [createOpenAt, setCreateOpenAt] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<ConciergeOrbState>("idle");
   const conciergeRef = useRef<ConciergeOrbHandle | null>(null);
@@ -70,7 +52,7 @@ export default function BottomNav() {
   const suppressClickRef = useRef(false);
   const createOpen = createOpenAt === pathname;
   const assistantMode = isCreationWorkspace(pathname);
-  const createOptions = activeRole === "admin" ? CREATE_OPTIONS.admin : CREATE_OPTIONS.creator;
+  const createOptions = CREATE_OPTIONS;
   const navItemClass =
     "group relative flex min-w-0 flex-1 flex-col items-center justify-end gap-1.5 pb-2 pt-3 text-[10px] font-semibold tracking-[0.04em] transition-colors sm:text-[11px]";
 
@@ -128,6 +110,8 @@ export default function BottomNav() {
     else if (orbState === "idle") conciergeRef.current?.startPushToTalk();
   }
 
+  if (pathname === "/super-admin") return null;
+
   return (
     <nav
       aria-label="Primary navigation"
@@ -138,7 +122,7 @@ export default function BottomNav() {
         <div className="pointer-events-auto">
           <ConciergeOrb
             ref={connectConcierge}
-            role={activeRole}
+            role="maker"
             quickOptions={createOptions}
             assistantOnly={assistantMode}
             onStateChange={setOrbState}

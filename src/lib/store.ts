@@ -109,7 +109,9 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
   hydrated: false,
 
   syncAuthenticatedUser: (profile) => {
-    const activeRole: AppRole = profile.role === "admin" ? "admin" : "maker";
+    // The public product never switches into an admin mode. Admin authority is
+    // server-checked inside /admin after entering through /super-admin.
+    const activeRole: AppRole = "maker";
     const roleBadges: AppRole[] = profile.role === "admin" ? ["admin"] : ["maker"];
     set((state) => {
       const existing = state.users.find((user) => user.id === profile.id);
@@ -387,10 +389,8 @@ export const useChaplinStore = create<ChaplinState>((set, get) => ({
           ];
           const requestedUserId = saved.currentUserId ?? get().currentUserId;
           const requestedUser = mergedUsers.find((user) => user.id === requestedUserId);
-          const savedRole: AppRole | null = saved.activeRole === "admin" ? "admin" : "maker";
-          const activeRole = savedRole && requestedUser?.roleBadges.includes(savedRole)
-            ? savedRole
-            : requestedUser?.roleBadges[0] ?? get().activeRole;
+          // Do not revive the old front-end Super Admin role from localStorage.
+          const activeRole: AppRole = "maker";
           set({
             users: mergedUsers,
             characters: mergedCharacters.map((character) => ({

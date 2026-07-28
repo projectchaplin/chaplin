@@ -3,6 +3,18 @@
 This changelog records user-facing product changes, production-pipeline changes,
 provider integrations, and the validation boundary for each major Chaplin update.
 
+## v0.2.19 - 2026-07-28 - Private Super Admin entry
+
+- Removed Super Admin links, role switching, and operations shortcuts from the
+  public header, account menu, Create desk, and bottom creation assistant.
+- Moved the credential form to the direct-only `/super-admin` route. The route
+  hides the public header, footer, and bottom navigation so only the login gate
+  is visible.
+- The legacy `/admin/login` URL and every protected operations page now redirect
+  to `/super-admin`, preserving a safe internal destination after login.
+- Public client state no longer revives or exposes an admin mode. Authorization
+  inside `/admin` and its APIs remains server-enforced and unchanged.
+
 ## v0.2.17 - 2026-07-28 - Creator sign-in gate and 100 welcome credits
 
 - Browsing remains open, while actor, video, story, series, and general creation
