@@ -1087,6 +1087,96 @@ button:hover .frost-chip,
   color: #fff;
 }
 
+/*
+ * Intelligence actions share one quiet visual signature: a dark control with
+ * a hairline spectrum at its edge. Color moves only while the action is
+ * hovered, focused, or running, so a screen full of tools never becomes noisy.
+ */
+@keyframes magic-edge-drift {
+  from {
+    background-position: 0 0, 0% 50%;
+  }
+  to {
+    background-position: 0 0, 200% 50%;
+  }
+}
+
+.magic-action {
+  --magic-surface: rgba(8, 12, 10, 0.96);
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(var(--magic-surface), var(--magic-surface)) padding-box,
+    linear-gradient(
+      105deg,
+      #07d2be 0%,
+      #80e6b3 18%,
+      #5d9cff 38%,
+      #a56bff 58%,
+      #f24e70 78%,
+      #07d2be 100%
+    ) border-box !important;
+  background-size: 100% 100%, 200% 100% !important;
+  color: #fff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(7, 210, 190, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.2);
+  transition:
+    box-shadow 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease;
+}
+
+.magic-action:hover:not(:disabled),
+.magic-action:focus-visible,
+.magic-action[aria-busy="true"] {
+  animation: magic-edge-drift 2.4s linear infinite;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(91, 173, 255, 0.08),
+    0 0 20px rgba(100, 114, 255, 0.12),
+    0 10px 28px rgba(0, 0, 0, 0.25);
+  filter: brightness(1.08);
+}
+
+.magic-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.magic-action:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 3px;
+}
+
+.magic-action:disabled,
+.magic-action[aria-disabled="true"] {
+  animation: none;
+  filter: grayscale(0.45);
+  opacity: 0.45;
+}
+
+.magic-surface {
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(rgba(8, 12, 10, 0.94), rgba(8, 12, 10, 0.94)) padding-box,
+    linear-gradient(115deg, rgba(7, 210, 190, 0.72), rgba(93, 156, 255, 0.64), rgba(165, 107, 255, 0.64), rgba(242, 78, 112, 0.72)) border-box !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 38px rgba(0, 0, 0, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic-action:hover:not(:disabled),
+  .magic-action:focus-visible,
+  .magic-action[aria-busy="true"] {
+    animation: none;
+  }
+
+  .magic-action:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
 .scrollbar-thin,
 .chaplin-scrollbar {
   scrollbar-width: thin;

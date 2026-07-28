@@ -207,7 +207,8 @@ export default function CharacterConversationPanel({
             <button
               type="button"
               onClick={enterRoom}
-              className="mt-4 flex w-full items-center justify-between rounded-xl border border-accent-secondary/40 bg-accent-secondary/[0.08] px-4 py-3 text-left transition hover:border-accent-secondary hover:bg-accent-secondary/[0.12]"
+              className="magic-action mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3 text-left"
+              data-intelligence-action
             >
               <span>
                 <span className="block text-xs font-bold text-ink">Enter the room</span>
@@ -237,7 +238,9 @@ export default function CharacterConversationPanel({
                 type="button"
                 onClick={() => void send()}
                 disabled={sending || !message.trim()}
-                className="rounded-xl bg-accent px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
+                className="magic-action rounded-xl px-4 py-2.5 text-xs font-bold disabled:opacity-40"
+                data-intelligence-action
+                aria-busy={sending}
               >
                 {sending ? "…" : "Send"}
               </button>
@@ -250,7 +253,9 @@ export default function CharacterConversationPanel({
                     type="button"
                     onClick={() => void send(starter)}
                     disabled={sending}
-                    className="shrink-0 rounded-full border border-white/12 px-3 py-1.5 text-[9px] font-semibold text-white/65 hover:border-accent hover:text-accent"
+                    className="magic-action shrink-0 rounded-full px-3 py-1.5 text-[9px] font-semibold disabled:opacity-40"
+                    data-intelligence-action
+                    aria-busy={sending}
                   >
                     {starter}
                   </button>
@@ -279,7 +284,8 @@ export default function CharacterConversationPanel({
             <button
               type="button"
               onClick={enterRoom}
-              className="mt-2.5 inline-flex items-center gap-2 rounded-full border border-accent-secondary/55 px-3.5 py-1.5 text-[10px] font-semibold text-accent-secondary transition-colors hover:bg-accent-secondary/10"
+              className="magic-action mt-2.5 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[10px] font-semibold"
+              data-intelligence-action
             >
               ▶ Enter the room{themeUrl ? " · with theme" : ""}
             </button>
@@ -306,7 +312,7 @@ export default function CharacterConversationPanel({
         </div>
         <div className="flex flex-wrap gap-2" aria-label={`Conversation starters for ${character.name}`}>
           {STARTERS.map((starter) => (
-            <button key={starter} type="button" onClick={() => void send(starter)} disabled={sending} className="rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-semibold text-white/72 transition-colors hover:border-accent hover:text-accent disabled:opacity-40">
+            <button key={starter} type="button" onClick={() => void send(starter)} disabled={sending} className="magic-action rounded-full px-3 py-1.5 text-[10px] font-semibold disabled:opacity-40" data-intelligence-action aria-busy={sending}>
               {starter}
             </button>
           ))}
@@ -332,7 +338,7 @@ export default function CharacterConversationPanel({
             className="min-w-0 flex-1 rounded-sm border border-white/14 bg-black/25 px-3 py-3 text-sm text-ink outline-none transition-colors placeholder:text-grey focus:border-accent"
             aria-label={`Message ${character.name}`}
           />
-          <button type="button" onClick={() => void send()} disabled={sending || !message.trim()} className="rounded-sm bg-accent px-5 py-3 text-sm font-semibold text-paper transition-colors hover:bg-accent-light disabled:opacity-40">
+          <button type="button" onClick={() => void send()} disabled={sending || !message.trim()} className="magic-action rounded-sm px-5 py-3 text-sm font-semibold disabled:opacity-40" data-intelligence-action aria-busy={sending}>
             {sending ? "Thinking…" : "Send"}
           </button>
           {lastReply && canSpeak && (

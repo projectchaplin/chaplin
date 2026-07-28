@@ -254,7 +254,9 @@ function SuggestButton({
       onClick={onClick}
       disabled={Boolean(activeTarget)}
       data-suggest-character={target}
-      className="rounded-full border border-accent/50 px-2.5 py-1 text-[10px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40"
+      data-intelligence-action
+      aria-busy={activeTarget === target}
+      className="magic-action rounded-full px-2.5 py-1 text-[10px] font-semibold disabled:opacity-40"
     >
       {activeTarget === target ? "Writing..." : target === "all" ? "✦ Magic Write actor" : "✦ Magic Write"}
     </button>
@@ -1066,7 +1068,7 @@ export default function NewCharacterPage() {
 
               <section
                 data-magic-character-assist
-                className="mt-4 rounded-xl border border-accent/45 bg-[linear-gradient(135deg,rgba(242,78,112,0.14),rgba(21,92,83,0.18))] p-4 shadow-[0_16px_42px_rgba(0,0,0,0.24)]"
+                className="magic-surface mt-4 rounded-xl p-4"
                 aria-labelledby="desktop-magic-write-title"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -1104,7 +1106,9 @@ export default function NewCharacterPage() {
                     type="button"
                     onClick={() => void suggestCharacter("all")}
                     disabled={Boolean(suggestingTarget)}
-                    className="min-w-36 rounded-full bg-accent px-5 py-2.5 text-[11px] font-semibold text-white hover:bg-accent-light disabled:opacity-45"
+                    data-intelligence-action
+                    aria-busy={suggestingTarget === "all"}
+                    className="magic-action min-w-36 rounded-full px-5 py-2.5 text-[11px] font-semibold disabled:opacity-45"
                   >
                     {suggestingTarget === "all"
                       ? `Writing everything · ${progress}%`
@@ -1419,7 +1423,7 @@ export default function NewCharacterPage() {
           </div>
         </label>
 
-        <details open className="overflow-hidden rounded-md border border-accent/50 bg-accent/5" data-magic-character-assist>
+        <details open className="magic-surface overflow-hidden rounded-md" data-magic-character-assist>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-accent/[0.05]">
             <span>
               <span className="block text-sm font-semibold">✦ Magic Write</span>

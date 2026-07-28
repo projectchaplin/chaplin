@@ -395,7 +395,7 @@ export default function PipelineExperimentGround({
                       {compiledVariantId === variant.id && (
                         <pre className="branded-scroll max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-black/25 p-3 text-[10px] leading-4 text-grey">{compiled}</pre>
                       )}
-                      <button type="button" onClick={() => runVariant(variant.id)} disabled={Boolean(busy)} className="accent-btn w-full rounded-full px-4 py-2.5 text-xs font-semibold disabled:opacity-50">
+                      <button type="button" onClick={() => runVariant(variant.id)} disabled={Boolean(busy)} className="magic-action w-full rounded-full px-4 py-2.5 text-xs font-semibold disabled:opacity-50" data-intelligence-action aria-busy={busy === `run-${variant.id}`}>
                         {busy === `run-${variant.id}` ? "Running real test..." : "Run isolated test"}
                       </button>
 

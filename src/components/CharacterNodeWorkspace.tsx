@@ -574,7 +574,7 @@ export default function CharacterNodeWorkspace({ character }: { character: Chara
               <button type="button" onClick={copyPrompt} className="flex-1 rounded-full bg-accent px-3 py-2 text-[10px] font-bold text-[#090b08]">
                 {copied ? "Copied" : "Copy provider prompt"}
               </button>
-              <button type="button" onClick={() => void generateSheetImage()} disabled={sheetBusy} className="rounded-full border border-[#07d2be]/50 bg-[#07d2be]/10 px-3 py-2 text-[10px] font-bold text-[#36e0cd] disabled:opacity-50">
+              <button type="button" onClick={() => void generateSheetImage()} disabled={sheetBusy} className="magic-action rounded-full px-3 py-2 text-[10px] font-bold disabled:opacity-50" data-intelligence-action aria-busy={sheetBusy}>
                 {sheetBusy ? "Creating…" : "Create image"}
               </button>
             </div>

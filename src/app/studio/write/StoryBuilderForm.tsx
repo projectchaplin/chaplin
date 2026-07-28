@@ -1215,8 +1215,9 @@ export default function StoryBuilderForm() {
               <button
                 type="button"
                 onClick={() => chooseSparkStart("magic")}
-                className="group rounded-[20px] border border-accent/55 bg-accent/[0.09] p-4 text-left transition-all hover:-translate-y-0.5 hover:bg-accent/[0.14]"
+                className="magic-action group rounded-[20px] p-4 text-left"
                 data-spark-path="magic"
+                data-intelligence-action
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-lg text-white shadow-[0_0_24px_rgba(242,78,112,0.28)]">✦</span>
                 <span className="mt-4 block text-base font-semibold">Use Magic Assist</span>
@@ -1556,8 +1557,10 @@ export default function StoryBuilderForm() {
               type="button"
               onClick={() => createMagicDraft()}
               disabled={magicBusy || world.characters.length === 0}
-              className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-paper shadow-[0_0_24px_rgba(244,70,112,0.25)] hover:bg-accent-light disabled:opacity-50"
+              className="magic-action rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
               data-action="magic-script"
+              data-intelligence-action
+              aria-busy={magicBusy}
             >
               {magicBusy ? "Writing the draft..." : "✦ Magic: write everything"}
             </button>
@@ -1565,7 +1568,9 @@ export default function StoryBuilderForm() {
               type="button"
               onClick={() => void generateAllScenePreviews()}
               disabled={scenePreviewBusy !== null || castCharacters.length === 0 || !scenes.some((scene) => scene.setting || scene.action)}
-              className="shrink-0 rounded-full border border-accent-secondary/55 px-4 py-2 text-xs font-semibold text-accent-secondary hover:bg-accent-secondary/10 disabled:cursor-not-allowed disabled:opacity-40"
+              className="magic-action shrink-0 rounded-full px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              data-intelligence-action
+              aria-busy={scenePreviewBusy !== null}
             >
               {scenePreviewBusy !== null ? `Framing scene ${scenePreviewBusy + 1}…` : "Generate all thumbnails"}
             </button>
@@ -1601,7 +1606,7 @@ export default function StoryBuilderForm() {
 
       {step === 1 && (
         <div className="poster-card rounded-md p-6 flex flex-col gap-4">
-          <div className="concept-magic rounded-xl border border-accent/45 p-3.5 sm:p-4" data-concept-magic>
+          <div className="magic-surface rounded-xl p-3.5 sm:p-4" data-concept-magic>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-ink">✦ Magic</p>
@@ -1640,8 +1645,10 @@ export default function StoryBuilderForm() {
               type="button"
               onClick={() => createMagicDraft()}
               disabled={magicBusy || world.characters.length === 0}
-              className="mt-3 flex w-full items-center justify-between rounded-lg bg-accent px-4 py-2.5 text-left text-sm font-semibold text-paper shadow-[0_10px_26px_rgba(242,78,112,0.18)] hover:bg-accent-light disabled:opacity-50"
+              className="magic-action mt-3 flex w-full items-center justify-between rounded-lg px-4 py-2.5 text-left text-sm font-semibold disabled:opacity-50"
               data-action="magic-script"
+              data-intelligence-action
+              aria-busy={magicBusy}
             >
               <span>{magicBusy ? "Writing everything..." : "✦ Magic: write everything"}</span>
               <span className="text-[10px] font-medium opacity-70">{formatDefinition.label} · {durationSeconds}s</span>
@@ -1898,8 +1905,10 @@ export default function StoryBuilderForm() {
               type="button"
               onClick={() => void createMagicDraft()}
               disabled={magicBusy || castCharacters.length === 0}
-              className="shrink-0 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-paper hover:bg-accent-light disabled:cursor-not-allowed disabled:opacity-45"
+              className="magic-action shrink-0 rounded-full px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-45"
               data-action="generate-scenes"
+              data-intelligence-action
+              aria-busy={magicBusy}
             >
               {magicBusy ? "Building scenes…" : scenes.some((scene) => scene.setting || scene.objective || scene.action) ? "Regenerate all scenes" : "✦ Generate scenes"}
             </button>
@@ -2003,8 +2012,10 @@ export default function StoryBuilderForm() {
                   type="button"
                   onClick={() => assistScene(si)}
                   disabled={sceneAssistBusy !== null || castCharacters.length === 0}
-                  className="shrink-0 rounded-full border border-accent/55 bg-accent/10 px-3 py-1.5 text-[10px] font-semibold text-accent hover:bg-accent/15 disabled:opacity-40"
+                  className="magic-action shrink-0 rounded-full px-3 py-1.5 text-[10px] font-semibold disabled:opacity-40"
                   data-action="magic-scene"
+                  data-intelligence-action
+                  aria-busy={sceneAssistBusy === si}
                   data-scene-index={si}
                 >
                   {sceneAssistBusy === si ? "Shaping…" : "✦ Magic scene"}
@@ -2069,7 +2080,9 @@ export default function StoryBuilderForm() {
                     type="button"
                     onClick={() => void generateScenePreview(scene, si)}
                     disabled={scenePreviewBusy !== null || castCharacters.length === 0}
-                    className="shrink-0 rounded-full border border-accent/55 px-3 py-1.5 text-[9px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40"
+                    className="magic-action shrink-0 rounded-full px-3 py-1.5 text-[9px] font-semibold disabled:opacity-40"
+                    data-intelligence-action
+                    aria-busy={scenePreviewBusy === si}
                   >
                     {scenePreviewBusy === si ? "Generating…" : scene.previewImageUrl ? "Regenerate frame" : "Generate frame"}
                   </button>

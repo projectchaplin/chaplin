@@ -3,6 +3,16 @@
 This changelog records user-facing product changes, production-pipeline changes,
 provider integrations, and the validation boundary for each major Chaplin update.
 
+## v0.2.21 - 2026-07-28 - Magic action visual language
+
+- Added a restrained cyan-to-violet-to-pink edge as the shared visual signature
+  for controls that ask Chaplin or a media model to create something.
+- Applied the treatment across Magic Write, scene shaping, actor production,
+  production renders, in-character replies, and isolated provider tests while
+  leaving navigation, uploads, saving, and approval controls unchanged.
+- Gave the main Magic panels the same quiet spectrum edge and limited motion to
+  hover, keyboard focus, and active generation, with reduced-motion support.
+
 ## v0.2.20 - 2026-07-28 - Public-launch security hardening
 
 - Removed the user-metadata Super Admin escalation path and made the private

@@ -1332,7 +1332,9 @@ export function ProductionWorkspace({ storyId }: { storyId: string }) {
             type="button"
             onClick={() => void generateReferenceFrame()}
             disabled={busy}
-            className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-white disabled:opacity-40"
+            className="magic-action rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40"
+            data-intelligence-action
+            aria-busy={busy}
           >
             {busy ? "Creating..." : "Create first frame"}
           </button>
@@ -1579,7 +1581,9 @@ export function ProductionWorkspace({ storyId }: { storyId: string }) {
                     type="button"
                     onClick={() => void renderPunchOutput()}
                     disabled={busy}
-                    className="shrink-0 rounded-full bg-accent px-5 py-3 text-xs font-bold text-white shadow-[0_12px_34px_rgba(244,63,105,0.35)] disabled:opacity-40"
+                    className="magic-action shrink-0 rounded-full px-5 py-3 text-xs font-bold disabled:opacity-40"
+                    data-intelligence-action
+                    aria-busy={busy}
                   >
                     {busy ? renderProgress || "Rendering…" : reviewHasNoMedia ? "Generate missing preview →" : "Generate preview →"}
                   </button>
@@ -1617,7 +1621,8 @@ export function ProductionWorkspace({ storyId }: { storyId: string }) {
               <button
                 type="button"
                 onClick={() => void renderPunchOutput()}
-                className="shrink-0 rounded-full border border-accent px-4 py-2 text-[10px] font-bold text-accent hover:bg-accent hover:text-white"
+                className="magic-action shrink-0 rounded-full px-4 py-2 text-[10px] font-bold"
+                data-intelligence-action
               >
                 {error ? "Retry preview" : "Generate preview"}
               </button>
@@ -1635,7 +1640,8 @@ export function ProductionWorkspace({ storyId }: { storyId: string }) {
               <button
                 type="button"
                 onClick={() => void generateReferenceFrame()}
-                className="shrink-0 rounded-full border border-accent px-4 py-2 text-[10px] font-bold text-accent hover:bg-accent hover:text-white"
+                className="magic-action shrink-0 rounded-full px-4 py-2 text-[10px] font-bold"
+                data-intelligence-action
               >
                 Create first frame
               </button>
@@ -1846,7 +1852,9 @@ export function ProductionWorkspace({ storyId }: { storyId: string }) {
                   type="button"
                   onClick={() => void generateReferenceFrame()}
                   disabled={busy}
-                  className="rounded-full bg-accent px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"
+                  className="magic-action rounded-full px-5 py-2.5 text-xs font-semibold disabled:opacity-40"
+                  data-intelligence-action
+                  aria-busy={busy}
                 >
                   {busy ? "Creating first frame..." : "Create first frame"}
                 </button>
@@ -2055,7 +2063,9 @@ export function ProductionWorkspace({ storyId }: { storyId: string }) {
                             type="button"
                             onClick={() => void renderPunchOutput()}
                             disabled={busy || contract.format !== "punch"}
-                            className="rounded-full bg-accent px-4 py-2 text-[10px] font-bold text-white disabled:opacity-40"
+                            className="magic-action rounded-full px-4 py-2 text-[10px] font-bold disabled:opacity-40"
+                            data-intelligence-action
+                            aria-busy={busy}
                           >
                             {busy ? renderProgress || "Generating review cut…" : "Generate 4 scene clips →"}
                           </button>
@@ -2074,7 +2084,9 @@ export function ProductionWorkspace({ storyId }: { storyId: string }) {
                               type="button"
                               onClick={() => void renderPunchOutput()}
                               disabled={busy || contract.format !== "punch"}
-                              className="rounded-full border border-amber-300/60 px-4 py-2 text-[10px] font-semibold text-amber-100 disabled:opacity-40"
+                              className="magic-action rounded-full px-4 py-2 text-[10px] font-semibold disabled:opacity-40"
+                              data-intelligence-action
+                              aria-busy={busy}
                             >
                               Regenerate mismatched shots
                             </button>

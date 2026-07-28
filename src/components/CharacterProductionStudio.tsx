@@ -354,7 +354,9 @@ function QuickWriteButton({
       onClick={onClick}
       disabled={busy}
       data-quick-write={field}
-      className="shrink-0 rounded-full border border-accent/50 px-2.5 py-1 text-[10px] font-semibold text-accent hover:bg-accent/10 disabled:opacity-40"
+      data-intelligence-action
+      aria-busy={writing}
+      className="magic-action shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold disabled:opacity-40"
     >
       {writing ? "Writing..." : `✦ ${label}`}
     </button>
@@ -2003,7 +2005,9 @@ export default function CharacterProductionStudio({
             onClick={applyMagicScene}
             disabled={Boolean(busy)}
             data-action="magic-scene"
-            className="shrink-0 rounded-md bg-accent px-3.5 py-2 text-[10px] font-semibold text-paper hover:bg-accent-light disabled:opacity-40"
+            data-intelligence-action
+            aria-busy={busy === "magic-scene"}
+            className="magic-action shrink-0 rounded-md px-3.5 py-2 text-[10px] font-semibold disabled:opacity-40"
           >
             {busy === "magic-scene" && generationRun?.key === "magic-scene"
               ? `Directing ${estimatedGenerationProgress(generationRun)}%`
@@ -2367,7 +2371,9 @@ export default function CharacterProductionStudio({
                   type="button"
                   onClick={buildVoice}
                   disabled={!elevenReady || Boolean(busy)}
-                  className="mt-5 flex w-full items-center justify-between rounded-md bg-accent px-4 py-3 text-left text-paper shadow-[0_12px_28px_rgba(244,72,112,0.2)] transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-40"
+                  className="magic-action mt-5 flex w-full items-center justify-between rounded-md px-4 py-3 text-left disabled:translate-y-0 disabled:opacity-40"
+                  data-intelligence-action
+                  aria-busy={busy === "voice"}
                 >
                   <span className="block text-sm font-semibold">✦ Generate three voice takes</span>
                   <span className="text-lg" aria-hidden="true">→</span>
@@ -2440,7 +2446,9 @@ export default function CharacterProductionStudio({
                     type="button"
                     onClick={buildVoice}
                     disabled={!elevenReady || Boolean(busy)}
-                    className="rounded-sm border border-accent px-3 py-2 text-xs font-semibold text-accent disabled:opacity-40"
+                    className="magic-action rounded-sm px-3 py-2 text-xs font-semibold disabled:opacity-40"
+                    data-intelligence-action
+                    aria-busy={busy === "voice"}
                   >
                     Rebuild all three takes
                   </button>
@@ -2488,7 +2496,7 @@ export default function CharacterProductionStudio({
               />
             </div>
             <textarea aria-label={`${character.name} spoken dialogue`} data-scene-field="dialogue" value={speechText} onChange={(event) => setSpeechText(event.target.value)} rows={5} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
-            <button onClick={generateSpeech} disabled={Boolean(dialogueUnavailableReason) || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+            <button onClick={generateSpeech} disabled={Boolean(dialogueUnavailableReason) || Boolean(busy)} className="magic-action rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40" data-intelligence-action aria-busy={busy === "speech"}>
               {busy === "speech" ? "Performing line..." : "Generate dialogue"}
             </button>
             {dialogueUnavailableReason && (
@@ -2523,7 +2531,7 @@ export default function CharacterProductionStudio({
           </div>
           <input data-scene-field="sfx" value={sfxPrompt} onChange={(event) => setSfxPrompt(event.target.value)} className="bg-paper border border-line rounded-sm p-3 text-xs focus:outline-none focus:border-accent" />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <button onClick={generateSfx} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+            <button onClick={generateSfx} disabled={!elevenReady || Boolean(busy)} className="magic-action rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40" data-intelligence-action aria-busy={busy === "sfx"}>
               {busy === "sfx"
                 ? `Building ${signatureSfxEventCount}-layer signature...`
                 : `Build polished ${signatureSfxEventCount}-layer signature`}
@@ -2606,7 +2614,7 @@ export default function CharacterProductionStudio({
                 </select>
               </label>
             )}
-            <button onClick={() => generateTheme()} disabled={!elevenReady || Boolean(busy)} className="border border-accent text-accent rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+            <button onClick={() => generateTheme()} disabled={!elevenReady || Boolean(busy)} className="magic-action rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40" data-intelligence-action aria-busy={busy === "theme"}>
               {busy === "theme"
                 ? "Composing theme..."
                 : themePlanEnabled
@@ -2677,7 +2685,7 @@ export default function CharacterProductionStudio({
               </div>
             )}
             <textarea data-scene-field="image" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
-            <button onClick={() => generateImage()} disabled={!imageGenerationReady || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+            <button onClick={() => generateImage()} disabled={!imageGenerationReady || Boolean(busy)} className="magic-action rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40" data-intelligence-action aria-busy={busy === "image"}>
               {busy === "image"
                 ? `Generating ${readyImageProviderLabels.length === 1 ? "image" : `${readyImageProviderLabels.length} images`}...`
                 : imagePurpose === "identity"
@@ -2823,7 +2831,7 @@ export default function CharacterProductionStudio({
               </div>
             )}
             <textarea data-scene-field="video" value={scenePrompt} onChange={(event) => setScenePrompt(event.target.value)} rows={7} className="bg-paper border border-line rounded-sm p-3 text-xs resize-none focus:outline-none focus:border-accent" />
-            <button onClick={generateVideo} disabled={!seedModelsReady || !videoReferenceImage || Boolean(busy)} className="bg-accent text-paper rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40">
+            <button onClick={generateVideo} disabled={!seedModelsReady || !videoReferenceImage || Boolean(busy)} className="magic-action rounded-sm px-4 py-2 text-sm font-semibold disabled:opacity-40" data-intelligence-action aria-busy={busy === "video"}>
               {seedanceAccountPaused ? "Seedance paused by BytePlus" : busy === "video" ? "Seedance is rendering..." : "Generate 5-second video"}
             </button>
             {videoUnavailableReason && (
