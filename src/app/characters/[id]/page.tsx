@@ -13,6 +13,7 @@ import CharacterGallery from "@/components/CharacterGallery";
 import CharacterConversationPanel from "@/components/CharacterConversationPanel";
 import DeveloperAccessCard from "@/components/DeveloperAccessCard";
 import CharacterBroll from "@/components/CharacterBroll";
+import CharacterProfileHero from "@/components/CharacterProfileHero";
 import { IconArrowLeft } from "@/components/Icons";
 import {
   ARCHETYPE_HUE,
@@ -133,6 +134,7 @@ export default function CharacterProfilePage() {
   const ledger = ledgerForCharacter(world, character.id);
   const canProduce = world.activeRole === "admin" || world.activeRole === "maker";
   const canCast = canProduce;
+  const legacyHeroEnabled: boolean = false;
 
   function openProductionStudio() {
     router.push(`/characters/${characterId}/studio`);
@@ -156,7 +158,7 @@ export default function CharacterProfilePage() {
           Master prompt
         </Link>
       )}
-      {canProduce && (
+      {legacyHeroEnabled && canProduce && (
         <button
           type="button"
           onClick={openProductionStudio}
@@ -166,13 +168,21 @@ export default function CharacterProfilePage() {
         </button>
       )}
 
+      <CharacterProfileHero
+        character={character}
+        makerName={maker?.name}
+        canProduce={canProduce}
+        canCast={canCast}
+        onOpenProduction={openProductionStudio}
+      />
+
       {/* Every actor gets the same casting stage, so profile cards never change
           size by media. 16:9 is the shape, but height is capped against the
           viewport: at full page width the ratio alone made this frame ~970px
           tall, which pushed the name, tagline and every stat below the fold —
           the actor's own page opened on nothing but a playing clip. The media
           is object-cover inside, so the cap crops rather than distorts. */}
-      <div className="poster-card overflow-hidden rounded-xl" data-character-profile-hero>
+      {legacyHeroEnabled && <div className="poster-card overflow-hidden rounded-xl" data-character-profile-hero>
         <div
           className="relative w-full overflow-hidden"
           style={{ aspectRatio: "16 / 9", maxHeight: "62vh" }}
@@ -227,11 +237,11 @@ export default function CharacterProfilePage() {
             <p className="text-[8px] uppercase tracking-wide text-grey sm:text-[11px]">Lifetime earnings</p>
           </div>
         </div>
-      </div>
+      </div>}
 
-      <div className="mt-6">
+      {legacyHeroEnabled && <div className="mt-6">
         <CharacterConversationPanel character={character} />
-      </div>
+      </div>}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         {/* Left: personality, voice, license terms */}

@@ -15,7 +15,13 @@ const STARTERS = [
 const THEME_BED_VOLUME = 0.16;
 const THEME_DUCKED_VOLUME = 0.05;
 
-export default function CharacterConversationPanel({ character }: { character: Character }) {
+export default function CharacterConversationPanel({
+  character,
+  variant = "full",
+}: {
+  character: Character;
+  variant?: "full" | "hero";
+}) {
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [sending, setSending] = useState(false);
@@ -169,6 +175,94 @@ export default function CharacterConversationPanel({ character }: { character: C
   }
 
   const lastReply = [...turns].reverse().find((turn) => turn.role === "character");
+
+  if (variant === "hero") {
+    return (
+      <section className="character-hero-room" data-character-conversation data-conversation-variant="hero">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-accent-secondary">
+              <span className={`h-1.5 w-1.5 rounded-full ${roomLive ? "animate-pulse bg-accent-secondary" : "bg-white/35"}`} />
+              {roomLive ? speaking ? "Speaking now" : "Room is live" : "Live character room"}
+            </p>
+            <h2 className="reel-title mt-1 text-2xl sm:text-3xl">Talk to {character.name.split(" ")[0]}</h2>
+          </div>
+          {roomLive && themeUrl && (
+            <button
+              type="button"
+              onClick={toggleThemeBed}
+              aria-pressed={themePlaying}
+              className="shrink-0 rounded-full border border-white/15 px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-white/65 hover:border-accent-secondary hover:text-accent-secondary"
+            >
+              {themePlaying ? "Theme on" : "Theme off"}
+            </button>
+          )}
+        </div>
+
+        {!roomLive ? (
+          <>
+            <p className="mt-2 max-w-md text-xs leading-5 text-grey">
+              Ask anything. {canSpeak ? `${character.name.split(" ")[0]} answers in their locked voice and remembers the conversation.` : "The reply stays in character."}
+            </p>
+            <button
+              type="button"
+              onClick={enterRoom}
+              className="mt-4 flex w-full items-center justify-between rounded-xl border border-accent-secondary/40 bg-accent-secondary/[0.08] px-4 py-3 text-left transition hover:border-accent-secondary hover:bg-accent-secondary/[0.12]"
+            >
+              <span>
+                <span className="block text-xs font-bold text-ink">Enter the room</span>
+                <span className="mt-0.5 block text-[10px] text-grey">{themeUrl ? "Voice and character theme are ready" : "Start a live in-character conversation"}</span>
+              </span>
+              <span className="text-lg text-accent-secondary" aria-hidden="true">→</span>
+            </button>
+          </>
+        ) : (
+          <>
+            {lastReply && (
+              <div className="mt-3 max-h-28 overflow-y-auto rounded-xl border border-white/10 bg-black/20 px-3 py-2.5" aria-live="polite">
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-accent-secondary">{character.name}</p>
+                <p className="mt-1 text-xs leading-5 text-white/82">{lastReply.text}</p>
+              </div>
+            )}
+            <div className="mt-3 flex gap-2">
+              <input
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") void send(); }}
+                placeholder={`Say something to ${character.name.split(" ")[0]}…`}
+                className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/25 px-3 py-2.5 text-xs text-ink outline-none placeholder:text-grey focus:border-accent"
+                aria-label={`Message ${character.name}`}
+              />
+              <button
+                type="button"
+                onClick={() => void send()}
+                disabled={sending || !message.trim()}
+                className="rounded-xl bg-accent px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
+              >
+                {sending ? "…" : "Send"}
+              </button>
+            </div>
+            {!lastReply && (
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar" aria-label={`Conversation starters for ${character.name}`}>
+                {STARTERS.slice(0, 2).map((starter) => (
+                  <button
+                    key={starter}
+                    type="button"
+                    onClick={() => void send(starter)}
+                    disabled={sending}
+                    className="shrink-0 rounded-full border border-white/12 px-3 py-1.5 text-[9px] font-semibold text-white/65 hover:border-accent hover:text-accent"
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            )}
+            {error && <p role="status" className="mt-2 text-[10px] text-amber-300">{error}</p>}
+          </>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="overflow-hidden rounded-[22px] border border-accent/35 bg-[radial-gradient(circle_at_top_right,rgba(7,210,190,0.15),transparent_35%),linear-gradient(135deg,rgba(244,72,112,0.1),transparent_55%),#11190d]" data-character-conversation>
